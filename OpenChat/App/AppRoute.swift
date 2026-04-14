@@ -4,11 +4,17 @@ enum AppRoute: Hashable, Identifiable {
     case conversation(String)
     case characterCard(String)
     case worldBook(String)
+    case characters
+    case worldBooks
 
     var id: String {
         switch self {
         case .conversation(let id), .characterCard(let id), .worldBook(let id):
             id
+        case .characters:
+            "characters"
+        case .worldBooks:
+            "worldBooks"
         }
     }
 }

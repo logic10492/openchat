@@ -1,19 +1,21 @@
 import Foundation
 import Observation
+import SwiftUI
 
 @Observable
 final class AppState {
-    enum Tab: Hashable {
-        case chats
+    enum SidebarDestination: Hashable {
+        case conversations
         case characters
         case worldBooks
-        case settings
     }
 
-    var selectedTab: Tab = .chats
+    var sidebarDestination: SidebarDestination = .conversations
+    var columnVisibility: NavigationSplitViewVisibility = .automatic
     var selectedConversationID: String?
     var selectedCharacterCardID: String?
     var selectedWorldBookID: String?
+    var isShowingSettings = false
     var isShowingError = false
     var lastErrorMessage: String?
 

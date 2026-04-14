@@ -10,75 +10,85 @@ struct WorldBookListView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.worldBooks.isEmpty {
-                    EmptyStateView(
-                        title: String(localized: "No World Books"),
-                        message: String(localized: "Add a world book to inject setting knowledge into prompts."),
-                        systemImage: "books.vertical"
-                    )
-                } else {
-                    List {
-                        ForEach(viewModel.worldBooks) { worldBook in
-                            Button {
-                                editingWorldBook = worldBook
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(worldBook.name)
-                                        Text(worldBook.description ?? "")
+        Group {
+            if viewModel.worldBooks.isEmpty {
+                EmptyStateView(
+                    title: String(localized: "No World Books"),
+                    message: String(localized: "Add a world book to inject setting knowledge into prompts."),
+                    systemImage: "books.vertical"
+                )
+            } else {
+                List {
+                    ForEach(viewModel.worldBooks) { worldBook in
+                        Button {
+                            editingWorldBook = worldBook
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "book.closed")
+                                    .font(.title3)
+                                    .foregroundStyle(worldBook.isEnabled ? Color.accentColor : Color(.systemGray3))
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(worldBook.name)
+                                        .font(.subheadline.weight(.medium))
+                                    if let desc = worldBook.description?.nilIfBlank {
+                                        Text(desc)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
+                                            .lineLimit(1)
                                     }
-                                    Spacer()
-                                    Toggle("", isOn: Binding(
-                                        get: { worldBook.isEnabled },
-                                        set: { _ in
-                                            Task { await viewModel.toggleEnabled(worldBook) }
-                                        }
-                                    ))
-                                    .labelsHidden()
                                 }
+
+                                Spacer()
+
+                                Toggle("", isOn: Binding(
+                                    get: { worldBook.isEnabled },
+                                    set: { _ in
+                                        Task { await viewModel.toggleEnabled(worldBook) }
+                                    }
+                                ))
+                                .labelsHidden()
                             }
-                            .buttonStyle(.plain)
-                            .swipeActions {
-                                Button(String(localized: "Delete"), role: .destructive) {
-                                    Task { await viewModel.deleteWorldBook(worldBook) }
-                                }
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions {
+                            Button(String(localized: "Delete"), role: .destructive) {
+                                Task { await viewModel.deleteWorldBook(worldBook) }
                             }
                         }
                     }
                 }
+                .listStyle(.plain)
             }
-            .navigationTitle(String(localized: "World Books"))
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editingWorldBook = WorldBookRecord(
-                            id: "",
-                            name: "",
-                            description: nil,
-                            isEnabled: true,
-                            createdAt: .now,
-                            updatedAt: .now
-                        )
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        }
+        .navigationTitle(String(localized: "World Books"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    editingWorldBook = WorldBookRecord(
+                        id: "",
+                        name: "",
+                        description: nil,
+                        isEnabled: true,
+                        createdAt: .now,
+                        updatedAt: .now
+                    )
+                } label: {
+                    Image(systemName: "plus")
                 }
             }
-            .task {
-                await viewModel.loadWorldBooks()
-            }
-            .sheet(item: $editingWorldBook, onDismiss: reload) { worldBook in
-                WorldBookEditorView(
-                    viewModel: WorldBookEditorViewModel(
-                        databaseManager: container.databaseManager,
-                        editingWorldBook: worldBook.id.isEmpty ? nil : worldBook
-                    )
+        }
+        .task {
+            await viewModel.loadWorldBooks()
+        }
+        .sheet(item: $editingWorldBook, onDismiss: reload) { worldBook in
+            WorldBookEditorView(
+                viewModel: WorldBookEditorViewModel(
+                    databaseManager: container.databaseManager,
+                    editingWorldBook: worldBook.id.isEmpty ? nil : worldBook
                 )
-            }
+            )
         }
     }
 
@@ -87,4 +97,16 @@ struct WorldBookListView: View {
             await viewModel.loadWorldBooks()
         }
     }
+}
+
+#Preview {
+    NavigationStack {
+        WorldBookListView(
+            viewModel: WorldBookListViewModel(
+                databaseManager: DependencyContainer.preview().databaseManager,
+                appState: AppState()
+            )
+        )
+    }
+    .environment(DependencyContainer.preview())
 }
