@@ -20,7 +20,12 @@ final class APIEndpointEditorViewModel {
     var maxContextTokens = AppConstants.defaultMaxContextTokens
     var isDefault = false
     private(set) var testResult: TestResult?
+    private(set) var availableModels: [String] = []
+    private(set) var isFetchingModels = false
+    private(set) var modelFetchError: String?
+    var isCustomModelInput = false
     let editingEndpoint: APIEndpointRecord?
+    private var fetchModelsTask: Task<Void, Never>?
 
     init(
         databaseManager: DatabaseManager,
@@ -88,5 +93,40 @@ final class APIEndpointEditorViewModel {
         } catch {
             testResult = .failure(error.localizedDescription)
         }
+    }
+
+    func scheduleFetchModels() {
+        fetchModelsTask?.cancel()
+        fetchModelsTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await fetchAvailableModels()
+        }
+    }
+
+    func fetchAvailableModels() async {
+        guard let url = URL(string: baseURL), !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            availableModels = []
+            modelFetchError = nil
+            return
+        }
+
+        isFetchingModels = true
+        modelFetchError = nil
+
+        do {
+            let models = try await apiClient.fetchModels(baseURL: url, apiKey: apiKey.nilIfBlank)
+            availableModels = models.map(\.id)
+            if !availableModels.isEmpty && modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                modelName = availableModels[0]
+            }
+            isCustomModelInput = false
+        } catch {
+            guard !Task.isCancelled else { return }
+            availableModels = []
+            modelFetchError = error.localizedDescription
+        }
+
+        isFetchingModels = false
     }
 }

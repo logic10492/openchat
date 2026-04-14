@@ -752,11 +752,12 @@
 			};
 			buildConfigurationList = 05D0F25B8FAE4A7AB2AAD084 /* Build configuration list for PBXProject "OpenChat" */;
 			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = 48880873F4A42AC324738D17;
 			packageReferences = (
