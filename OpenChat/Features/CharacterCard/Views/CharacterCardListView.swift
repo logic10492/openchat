@@ -19,8 +19,6 @@ struct CharacterCardListView: View {
                     message: String(localized: "Create a character card to guide conversations."),
                     systemImage: "person.text.rectangle"
                 )
-            } else if viewModel.displayMode == .grid {
-                gridContent
             } else {
                 listContent
             }
@@ -29,12 +27,6 @@ struct CharacterCardListView: View {
         .searchable(text: searchBinding)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Picker(String(localized: "Display"), selection: displayBinding) {
-                    Image(systemName: "square.grid.2x2").tag(CharacterCardListViewModel.DisplayMode.grid)
-                    Image(systemName: "list.bullet").tag(CharacterCardListViewModel.DisplayMode.list)
-                }
-                .pickerStyle(.segmented)
-
                 Button {
                     editingCard = CharacterCardRecord(
                         id: "",
@@ -77,59 +69,6 @@ struct CharacterCardListView: View {
                     editingCard = card
                 }
             )
-        }
-    }
-
-    // MARK: - Grid Content
-
-    private var gridContent: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 16)], spacing: 16) {
-                ForEach(viewModel.filteredCards) { card in
-                    Button {
-                        selectedCard = card
-                    } label: {
-                        VStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.accentColor.opacity(0.12))
-                                .frame(width: 56, height: 56)
-                                .overlay {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundStyle(Color.accentColor)
-                                }
-
-                            VStack(spacing: 4) {
-                                Text(card.name)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-
-                                if !card.decodedTags.isEmpty {
-                                    Text(card.decodedTags.joined(separator: " · "))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 150)
-                        .padding(12)
-                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(String(localized: "Duplicate")) {
-                            Task { await viewModel.duplicateCard(card) }
-                        }
-                        Button(String(localized: "Delete"), role: .destructive) {
-                            Task { await viewModel.deleteCard(card) }
-                        }
-                    }
-                }
-            }
-            .padding()
         }
     }
 
@@ -178,11 +117,6 @@ struct CharacterCardListView: View {
     private var searchBinding: Binding<String> {
         @Bindable var viewModel = viewModel
         return $viewModel.searchText
-    }
-
-    private var displayBinding: Binding<CharacterCardListViewModel.DisplayMode> {
-        @Bindable var viewModel = viewModel
-        return $viewModel.displayMode
     }
 
     private func reloadCards() {

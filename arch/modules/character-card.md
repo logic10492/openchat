@@ -15,7 +15,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `CharacterCardListView.swift` | 角色卡列表（支持 Grid/List 切换，搜索，标签筛选） |
+| `CharacterCardListView.swift` | 角色卡列表（支持 List 切换，搜索，标签筛选） |
 | `CharacterCardEditorView.swift` | 角色卡编辑器（多 section 表单） |
 | `CharacterCardDetailView.swift` | 角色卡只读详情预览 |
 | `CharacterCardListViewModel.swift` | 列表数据加载、搜索、排序、删除 |
@@ -72,25 +72,26 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│ 角色卡                        [+] [⊞/≡] │  ← 导航栏：标题 + 新建按钮 + 视图切换
+│ 角色卡                             [+]  │  ← 导航栏：标题 + 新建按钮
 │─────────────────────────────────────────│
 │ [🔍 搜索角色卡...]                       │  ← 搜索栏
 │ [全部] [奇幻] [科幻] [日常] ...          │  ← 标签筛选（横向滚动）
 │─────────────────────────────────────────│
-│ ┌─────┐ ┌─────┐ ┌─────┐               │
-│ │ 头像 │ │ 头像 │ │ 头像 │               │  ← Grid 模式
-│ │ 名称 │ │ 名称 │ │ 名称 │               │
-│ └─────┘ └─────┘ └─────┘               │
-│ ┌─────┐ ┌─────┐                        │
-│ │     │ │     │                        │
-│ └─────┘ └─────┘                        │
+│ ┌──────┬─────────────────────────┐      │
+│ │ 头像 │ 名称                     │      │  ← List 模式
+│ │      │ 标签 · 标签              │      │
+│ ├──────┼─────────────────────────┤      │
+│ │ 头像 │ 名称                     │      │
+│ │      │ 标签                     │      │
+│ └──────┴─────────────────────────┘      │
 └─────────────────────────────────────────┘
 ```
 
-- Grid 模式：卡片式显示头像+名称，2-3 列
-- List 模式：行显示头像+名称+标签+简短描述
+- 列表模式：行显示头像+名称+标签
 - 长按/左滑：删除、复制
 - 点击：进入详情预览
+
+> **实现证据**: `CharacterCardListView.swift` — 仅保留 List 模式，已移除 Grid 模式及视图切换 Picker
 
 ### 4.2 CharacterCardEditorView
 
@@ -144,7 +145,6 @@ final class CharacterCardListViewModel {
     private(set) var cards: [CharacterCardRecord] = []
     var searchText: String = ""
     var selectedTag: String? = nil
-    var displayMode: DisplayMode = .grid  // .grid | .list
 
     // 计算属性
     var filteredCards: [CharacterCardRecord]  // 根据 searchText + selectedTag 过滤

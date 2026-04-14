@@ -4,20 +4,12 @@ import Observation
 @MainActor
 @Observable
 final class CharacterCardListViewModel {
-    enum DisplayMode: String, CaseIterable, Identifiable {
-        case grid
-        case list
-
-        var id: String { rawValue }
-    }
-
     private let databaseManager: DatabaseManager
     private let appState: AppState
 
     private(set) var cards: [CharacterCardRecord] = []
     var searchText = ""
     var selectedTag: String?
-    var displayMode: DisplayMode = .grid
 
     init(
         databaseManager: DatabaseManager,
