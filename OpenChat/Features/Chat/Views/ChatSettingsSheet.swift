@@ -31,7 +31,7 @@ struct ChatSettingsSheet: View {
 
                     Picker(String(localized: "Context Strategy"), selection: strategyBinding) {
                         ForEach(ContextStrategy.allCases, id: \.rawValue) { strategy in
-                            Text(strategy.rawValue.capitalized).tag(strategy)
+                            Text(LocalizedStringKey(strategy.rawValue.capitalized)).tag(strategy)
                         }
                     }
 
