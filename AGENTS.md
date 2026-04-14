@@ -66,7 +66,7 @@ OpenChat/
 | Prompt 拼装 | `arch/modules/prompt-assembly.md` |
 | 上下文管理 | `arch/modules/context-manager.md` |
 | 聊天 | `arch/modules/chat.md` |
-| 设置 | `arch/modules/settings.md` |
+| 设置 | `arch/modules/settings/index.md`（索引指向子文档） |
 
 ## 落地阶段
 
