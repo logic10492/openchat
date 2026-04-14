@@ -35,6 +35,33 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
+    func fetchModels(baseURL: URL, apiKey: String?) async throws -> [ModelObject] {
+        let url = baseURL.appendingPathComponent("models")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let apiKey, !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response: response, body: data)
+            do {
+                let result = try decoder.decode(ModelsListResponse.self, from: data)
+                return result.data.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
+            } catch {
+                throw APIError.decodingError(underlying: error)
+            }
+        } catch is CancellationError {
+            throw APIError.cancelled
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(underlying: error)
+        }
+    }
+
     func streamMessage(
         messages: [ChatMessage],
         endpoint: APIEndpointConfig,

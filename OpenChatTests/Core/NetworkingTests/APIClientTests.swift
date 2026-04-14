@@ -56,4 +56,77 @@ struct APIClientTests {
         #expect(deltas.map(\.content) == ["Hel", "lo"])
         #expect(deltas.last?.finishReason == "stop")
     }
+
+    // MARK: - fetchModels
+
+    @Test func test_fetchModels_decodes_response() async throws {
+        let responseBody = #"{"object":"list","data":[{"id":"gpt-4o","object":"model","owned_by":"openai"},{"id":"llama-3","object":"model","owned_by":"meta"}]}"#
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.absoluteString == "http://localhost:8080/v1/models")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let client = APIClient(session: session)
+
+        let models = try await client.fetchModels(
+            baseURL: URL(string: "http://localhost:8080/v1")!,
+            apiKey: nil
+        )
+
+        #expect(models.count == 2)
+        // Sorted alphabetically by id
+        #expect(models[0].id == "gpt-4o")
+        #expect(models[1].id == "llama-3")
+    }
+
+    @Test func test_fetchModels_sends_auth_header() async throws {
+        let responseBody = #"{"object":"list","data":[]}"#
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let client = APIClient(session: session)
+
+        let models = try await client.fetchModels(
+            baseURL: URL(string: "http://localhost:8080/v1")!,
+            apiKey: "sk-test"
+        )
+
+        #expect(models.isEmpty)
+    }
+
+    @Test func test_fetchModels_no_auth_when_nil() async throws {
+        let responseBody = #"{"object":"list","data":[]}"#
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let client = APIClient(session: session)
+
+        _ = try await client.fetchModels(
+            baseURL: URL(string: "http://localhost:8080/v1")!,
+            apiKey: nil
+        )
+    }
+
+    @Test func test_fetchModels_handles_http_error() async throws {
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"error":{"message":"Unauthorized"}}"#.utf8))
+        }
+        let client = APIClient(session: session)
+
+        await #expect(throws: APIError.self) {
+            _ = try await client.fetchModels(
+                baseURL: URL(string: "http://localhost:8080/v1")!,
+                apiKey: nil
+            )
+        }
+    }
 }

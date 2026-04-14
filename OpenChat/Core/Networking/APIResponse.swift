@@ -62,3 +62,20 @@ struct APIErrorEnvelope: Codable, Sendable {
 struct APIErrorMessage: Codable, Sendable {
     let message: String?
 }
+
+// MARK: - Models List
+
+struct ModelsListResponse: Codable, Sendable {
+    let data: [ModelObject]
+}
+
+struct ModelObject: Codable, Sendable, Identifiable {
+    let id: String
+    let object: String?
+    let ownedBy: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, object
+        case ownedBy = "owned_by"
+    }
+}
