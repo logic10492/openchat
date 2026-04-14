@@ -1,0 +1,78 @@
+import Foundation
+import GRDB
+
+extension DatabaseManager {
+    func fetchConversations() async throws -> [ConversationRecord] {
+        try await read { db in
+            try ConversationRecord
+                .order(Column("isPinned").desc, Column("updatedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    func fetchConversation(id: String?) async throws -> ConversationRecord? {
+        guard let id else { return nil }
+        return try await read { db in
+            try ConversationRecord.fetchOne(db, key: id)
+        }
+    }
+
+    func saveConversation(_ conversation: ConversationRecord) async throws {
+        try await write { db in
+            try conversation.save(db)
+        }
+    }
+
+    func deleteConversation(id: String) async throws {
+        try await write { db in
+            _ = try ConversationRecord.deleteOne(db, key: id)
+        }
+    }
+
+    func fetchMessages(conversationId: String) async throws -> [MessageRecord] {
+        try await read { db in
+            try MessageRecord
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("sortOrder").asc)
+                .fetchAll(db)
+        }
+    }
+
+    func saveMessage(_ message: MessageRecord) async throws {
+        try await write { db in
+            try message.save(db)
+            try ConversationRecord
+                .filter(Column("id") == message.conversationId)
+                .updateAll(db, Column("updatedAt").set(to: message.createdAt))
+        }
+    }
+
+    func deleteMessage(id: String) async throws {
+        try await write { db in
+            _ = try MessageRecord.deleteOne(db, key: id)
+        }
+    }
+
+    func deleteMessages(
+        conversationId: String,
+        afterSortOrder: Int
+    ) async throws {
+        try await write { db in
+            try MessageRecord
+                .filter(Column("conversationId") == conversationId && Column("sortOrder") > afterSortOrder)
+                .deleteAll(db)
+        }
+    }
+
+    func nextSortOrder(conversationId: String) async throws -> Int {
+        try await read { db in
+            let maxOrder = try Int.fetchOne(
+                db,
+                MessageRecord
+                    .select(max(Column("sortOrder")))
+                    .filter(Column("conversationId") == conversationId)
+            )
+            return (maxOrder ?? 0) + 1
+        }
+    }
+}
