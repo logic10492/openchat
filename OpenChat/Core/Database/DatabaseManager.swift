@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import SqliteVec
 
 final class DatabaseManager: @unchecked Sendable {
     let dbQueue: DatabaseQueue
@@ -12,6 +13,12 @@ final class DatabaseManager: @unchecked Sendable {
 
     init(dbQueue: DatabaseQueue) throws {
         self.dbQueue = dbQueue
+        try dbQueue.write { db in
+            try db.execute(sql: "PRAGMA foreign_keys = ON")
+            if let connection = db.sqliteConnection {
+                registerSqliteVec(connection)
+            }
+        }
         try Migrations.makeMigrator().migrate(dbQueue)
     }
 
@@ -48,6 +55,11 @@ final class DatabaseManager: @unchecked Sendable {
     private static func makeConfiguration() -> Configuration {
         var configuration = Configuration()
         configuration.foreignKeysEnabled = true
+        configuration.prepareDatabase { db in
+            if let connection = db.sqliteConnection {
+                registerSqliteVec(connection)
+            }
+        }
         return configuration
     }
 
