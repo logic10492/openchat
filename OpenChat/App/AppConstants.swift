@@ -4,7 +4,7 @@ enum AppConstants {
     static let defaultBundleIdentifier = "com.openchat.app"
     static let databaseFileName = "database.sqlite"
     static let defaultModelName = "gpt-4o-mini"
-    static let defaultMaxContextTokens = 8_192
+    static let defaultMaxContextTokens = 131_072
     static let contextRatio = 0.4
     static let defaultTemperature = 0.8
     static let defaultTopP = 0.95

@@ -25,7 +25,7 @@ struct APIEndpointEditorView: View {
                 }
 
                 Section {
-                    Stepper(value: bind(\.maxContextTokens), in: 512...128_000, step: 512) {
+                    Stepper(value: bind(\.maxContextTokens), in: 512...2_000_000, step: 512) {
                         Text("\(String(localized: "Max Context Tokens")): \(viewModel.maxContextTokens)")
                     }
                     Toggle(String(localized: "Default Endpoint"), isOn: bind(\.isDefault))

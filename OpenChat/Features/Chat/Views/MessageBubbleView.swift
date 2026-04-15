@@ -3,17 +3,31 @@ import SwiftUI
 struct MessageBubbleView: View {
     let item: MessageDisplayItem
     var isStreaming = false
+    var characterName: String?
     let onDelete: () -> Void
     let onRegenerate: () -> Void
     @State private var isHovering = false
 
+    private var isUser: Bool { item.role == "user" }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            avatarView
-            VStack(alignment: .leading, spacing: 6) {
-                roleLabel
-                contentView
-                actionBar
+            if isUser {
+                Spacer(minLength: 48)
+                VStack(alignment: .trailing, spacing: 6) {
+                    roleLabel
+                    contentView
+                    actionBar
+                }
+                avatarView
+            } else {
+                avatarView
+                VStack(alignment: .leading, spacing: 6) {
+                    roleLabel
+                    contentView
+                    actionBar
+                }
+                Spacer(minLength: 48)
             }
         }
         .padding(.vertical, 4)
@@ -67,7 +81,7 @@ struct MessageBubbleView: View {
     private var roleName: String {
         switch item.role {
         case "user": String(localized: "You")
-        case "assistant": String(localized: "Assistant")
+        case "assistant": characterName ?? String(localized: "Assistant")
         default: String(localized: "System")
         }
     }

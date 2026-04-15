@@ -15,7 +15,7 @@ struct ModelParametersView: View {
             }
             Slider(value: bind(\.defaultTopP), in: 0...1, step: 0.05)
 
-            Stepper(value: maxTokensBinding, in: 128...16_384, step: 128) {
+            Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
                 Text("\(String(localized: "Max Tokens")): \(viewModel.defaultMaxTokens ?? 0)")
             }
 
