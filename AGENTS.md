@@ -68,6 +68,12 @@ OpenChat/
 | 聊天 | `arch/modules/chat.md` |
 | 设置 | `arch/modules/settings/index.md`（索引指向子文档） |
 
+## 签名与项目配置
+
+- **禁止修改签名配置**：`PRODUCT_BUNDLE_IDENTIFIER`（`fukujusou.openchat.com`）、`DEVELOPMENT_TEAM`（`GZAC7644XS`）、`CODE_SIGN_STYLE`（`Automatic`）等签名相关设置不得随意更改
+- 这些值定义在 `scripts/generate_xcodeproj.rb` 中，修改前必须征得用户确认
+- 运行 `ruby scripts/generate_xcodeproj.rb` 会全量重新生成 `OpenChat.xcodeproj`，签名配置由脚本决定，不要在 Xcode GUI 里手动改签名（会被下次生成覆盖）
+
 ## 落地阶段
 
 按 `arch/roadmap.md` 的 6 阶段推进。每个阶段完成后必须满足该阶段的验证标准 checklist。

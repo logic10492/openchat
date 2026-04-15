@@ -12,6 +12,7 @@ IOS_DEPLOYMENT_TARGET = '17.0'
 TOOLS_VERSION = '26.4'
 GRDB_REVISION = '36e30a6f1ef10e4194f6af0cff90888526f0c115'
 GRDB_URL = 'https://github.com/groue/GRDB.swift.git'
+SQLITE_VEC_LOCAL_PATH = 'Packages/SqliteVec'
 
 RESOURCE_EXTENSIONS = %w[
   .xcassets
@@ -98,6 +99,20 @@ test_framework_build_file = project.new(Xcodeproj::Project::Object::PBXBuildFile
 test_framework_build_file.product_ref = grdb_dependency
 test_target.frameworks_build_phase.files << test_framework_build_file
 
+# --- Local SqliteVec Package ---
+local_package_ref = project.new(Xcodeproj::Project::Object::XCLocalSwiftPackageReference)
+local_package_ref.relative_path = SQLITE_VEC_LOCAL_PATH
+project.root_object.package_references << local_package_ref
+
+sqlitevec_dependency = project.new(Xcodeproj::Project::Object::XCSwiftPackageProductDependency)
+sqlitevec_dependency.package = local_package_ref
+sqlitevec_dependency.product_name = 'SqliteVec'
+app_target.package_product_dependencies << sqlitevec_dependency
+
+sqlitevec_build_file = project.new(Xcodeproj::Project::Object::PBXBuildFile)
+sqlitevec_build_file.product_ref = sqlitevec_dependency
+app_target.frameworks_build_phase.files << sqlitevec_build_file
+
 app_group = project.main_group.new_group(PROJECT_NAME, APP_DIR.to_s)
 tests_group = project.main_group.new_group("#{PROJECT_NAME}Tests", TEST_DIR.to_s)
 
@@ -127,7 +142,9 @@ add_directory(
 end
 
 app_target.build_configurations.each do |config|
-  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.openchat.app'
+  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'fukujusou.openchat.com'
+  config.build_settings['DEVELOPMENT_TEAM'] = 'GZAC7644XS'
+  config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
   config.build_settings['CURRENT_PROJECT_VERSION'] = '1'
   config.build_settings['MARKETING_VERSION'] = '1.0.0'
   config.build_settings['INFOPLIST_KEY_UIApplicationSceneManifest_Generation'] = 'YES'
