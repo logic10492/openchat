@@ -275,6 +275,8 @@ Phase 1 (基础骨架)
     │       │               └── Phase 5 (上下文管理)
     │       │                       │
     │       │                       └── Phase 6 (打磨与优化)
+    │       │                               │
+    │       │                               └── Phase 7 (跨对话记忆系统)
     │       │
     │       └─────────────────────────┘
     │
@@ -282,6 +284,50 @@ Phase 1 (基础骨架)
 ```
 
 每个 Phase 完成后应可独立运行和测试。
+
+---
+
+## Phase 7: 跨对话记忆系统
+
+**目标**：实现同一角色跨对话的记忆存储与语义检索，重构世界→角色层级关系。
+
+### 前置重构
+
+1. 数据库迁移 v2：`character_card` 表新增 `worldBookId` 外键（角色卡归属世界书）
+2. 数据库迁移 v3：`conversation` 表移除 `worldBookId` 列（世界书通过角色卡间接关联）
+3. 更新导航流程：世界书详情页包含归属角色列表，支持跨世界导入角色
+
+### 记忆系统
+
+4. 集成 sqlite-vec SPM 包
+5. 数据库迁移 v4：创建 `memory_entry` 表 + `memory_embedding` sqlite-vec 虚拟表
+6. 解压并编译 MultilingualE5Small CoreML 模型，加入 App Bundle
+7. 实现 `EmbeddingService`：CoreML 推理 + XLMRobertaTokenizer 分词，输出 384 维归一化向量
+8. 实现 `VectorStore`：sqlite-vec 向量 CRUD 封装（插入 / KNN 检索 / 删除）
+9. 实现 `MemoryManager`：记忆提取（调用 API 提取结构化事件）+ 语义检索编排
+10. 更新 `PromptSegment` + `PromptAssembler`：新增 `.timeContext` 和 `.memoryEntry` 段，记忆 token 预算上限 10%
+11. 更新 `ChatViewModel`：发送消息时检索记忆、离开对话时触发记忆提取
+12. 实现 `MemoryListView` + `MemoryListViewModel`：按角色查看/删除记忆
+13. 更新 `DependencyContainer`：注入 `MemoryManager`、`EmbeddingService`、`VectorStore`
+
+### 产出
+
+- 角色卡归属世界书的层级导航
+- 对话结束后自动提取记忆
+- 新对话和每次发送时语义检索记忆注入 prompt
+- 记忆管理界面
+
+### 验证标准
+
+- [ ] sqlite-vec 向量插入和 KNN 检索结果正确
+- [ ] CoreML 模型输出 384 维归一化向量
+- [ ] 对话结束后记忆被自动提取并存储
+- [ ] 新对话中相关记忆被检索并注入 prompt
+- [ ] 导航流正确：世界列表 → 角色列表 → 对话
+- [ ] 记忆列表可查看/搜索/删除
+- [ ] 数据库迁移 v2/v3/v4 后数据完整性保持
+- [ ] 时间上下文始终注入 prompt（ISO 8601 格式）
+- [ ] 所有现有测试仍通过
 
 ---
 

@@ -35,6 +35,7 @@
 | avatar | ImagePicker | 否 | 点击设置头像，支持从相册选择或拍照 |
 | tags | TagEditor | 否 | 标签列表，用于列表筛选 |
 | creatorNotes | TextEditor | 否 | 创作者备注，仅供管理用，不进入 prompt |
+| worldBookId | Picker | 否 | 所属世界书（可选，从已有世界书列表中选择） |
 
 **Section 2: 角色描述**
 | 字段 | UI 控件 | 必填 | 说明 |
@@ -132,8 +133,8 @@
 - 顶部大头像 + 名称
 - 各 section 折叠/展开
 - 底部操作栏：编辑、复制、导出、删除
-- 右上角"开始对话"快捷按钮 → 创建新会话并绑定此角色卡
-
+- 右上角"开始对话"快捷按钮 → 创建新会话并绑定此角色卡- **所属世界**：显示角色卡归属的世界书名称（若有）
+- **记忆** section：显示该角色的记忆条目总数，点击进入 `MemoryListView`
 ## 5. ViewModel 设计
 
 ### 5.1 CharacterCardListViewModel
@@ -230,6 +231,8 @@ final class CharacterCardEditorViewModel {
 
 | 交互对象 | 交互方式 |
 |---|---|
-| `Conversation` | 创建会话时选择角色卡 → `conversation.characterCardId` |
+| `Conversation` | 创建会话时选择角色卡 → `conversation.characterCardId`（世界书通过角色卡间接关联） |
+| `WorldBook` | 角色卡通过 `worldBookId` 归属于世界书，世界书详情页可查看归属角色 |
 | `PromptEngine` | 拼装时读取角色卡字段注入 system prompt、角色描述、场景、示例对话 |
 | `Chat` | ChatView 顶部显示当前角色卡头像+名称，点击可查看/切换 |
+| `Memory` | 角色卡关联的跨对话记忆条目，角色详情页提供记忆列表入口 |

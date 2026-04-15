@@ -31,19 +31,19 @@ WorldBook (世界书)
 ├── name: "中土世界"
 ├── description: "托尔金笔下的奇幻世界设定"
 ├── isEnabled: true
-└── entries: [
-    ├── WorldBookEntry
-    │   ├── title: "精灵族"
-    │   ├── keywords: ["精灵", "elf", "瑞文戴尔"]
-    │   ├── content: "精灵是中土世界最古老的种族..."
-    │   ├── priority: 80
-    │   └── position: "after_system"
-    ├── WorldBookEntry
-    │   ├── title: "霍比特人"
-    │   ├── keywords: ["霍比特", "hobbit", "夏尔"]
-    │   ├── content: "霍比特人身材矮小..."
-    │   ├── priority: 70
-    │   └── position: "before_history"
+├── entries: [
+│   ├── WorldBookEntry
+│   │   ├── title: "精灵族"
+│   │   ├── keywords: ["精灵", "elf", "瑞文戴尔"]
+│   │   ├── content: "精灵是中土世界最古老的种族..."
+│   │   ├── priority: 80
+│   │   └── position: "after_system"
+│   └── ...
+│
+└── characters: [                      ← 归属角色卡（通过 character_card.worldBookId 关联）
+    ├── CharacterCard
+    │   ├── name: "艾拉"
+    │   └── worldBookId: "中土世界.id"
     └── ...
 ]
 ```
@@ -127,6 +127,15 @@ struct KeywordMatcher {
 │   名称: [中土世界___________]           │
 │   简介: [托尔金笔下的奇幻世界设定]      │
 │                                         │
+│ Section: 角色 (3)                        │
+│   ┌─ 🎭 艾拉 ─────────────────────────┐│
+│   │  标签: 奇幻 · 精灵                 ││
+│   └────────────────────────────────────┘│
+│   ┌─ 🎭 甘道夫 ───────────────────────┐│
+│   │  标签: 奇幻 · 巫师                 ││
+│   └────────────────────────────────────┘│
+│   [+ 新建角色] [↓ 从其他世界导入]       │
+│                                         │
 │ Section: 条目 (12)                       │
 │   [🔍 搜索条目...]                      │
 │   ┌─ 精灵族 ───── 优先级:80 ── [开关] ┐│
@@ -140,6 +149,10 @@ struct KeywordMatcher {
 ```
 
 - 上方编辑世界书基本信息
+- **角色 section**：展示归属该世界的角色卡列表
+  - 点击角色 → 进入角色卡详情
+  - "新建角色"→ 创建角色卡并自动设置 worldBookId 为当前世界
+  - "从其他世界导入"→ 选择已有角色卡复制到当前世界（生成新 ID，设置新 worldBookId）
 - 下方管理条目列表
 - 条目行显示：标题 + 关键词摘要 + 优先级 + 启用开关
 - 点击条目 → 进入条目编辑器
@@ -309,8 +322,9 @@ final class WorldBookEditorViewModel {
 
 | 交互对象 | 交互方式 |
 |---|---|
-| `Conversation` | 创建/编辑会话时选择绑定世界书 → `conversation.worldBookId` |
-| `PromptEngine` | 拼装时查询绑定世界书的已启用条目 → KeywordMatcher 匹配 → 按 priority 注入 |
+| `CharacterCard` | 角色卡通过 `worldBookId` 归属于世界书，世界书详情页展示归属角色列表，支持跨世界导入角色 |
+| `Conversation` | 对话不再直接关联世界书，世界书通过角色卡间接关联到对话 |
+| `PromptEngine` | 拼装时通过角色卡的 worldBookId 查询已启用条目 → KeywordMatcher 匹配 → 按 priority 注入 |
 | `Chat` | ChatView 中可查看当前绑定的世界书和触发的条目（调试用） |
 
 ## 9. ChatGPT 辅助生成世界书的推荐 prompt

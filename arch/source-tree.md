@@ -58,6 +58,12 @@ OpenChat/
 │   │   └── ViewModels/
 │   │       └── ConversationListViewModel.swift
 │   │
+│   ├── Memory/
+│   │   ├── Views/
+│   │   │   └── MemoryListView.swift            # 角色记忆列表界面
+│   │   └── ViewModels/
+│   │       └── MemoryListViewModel.swift       # 记忆列表状态管理
+│   │
 │   └── Settings/
 │       ├── Views/
 │       │   ├── SettingsView.swift              # 设置主界面
@@ -79,7 +85,7 @@ OpenChat/
 │   │
 │   ├── PromptEngine/
 │   │   ├── PromptAssembler.swift           # Prompt 拼装主逻辑
-│   │   ├── PromptSegment.swift             # 拼装段定义（角色描述/场景/世界书/历史等）
+│   │   ├── PromptSegment.swift             # 拼装段定义（角色描述/场景/世界书/历史/记忆等）
 │   │   ├── TokenCounter.swift              # Token 计数器（基于字符近似或 tiktoken）
 │   │   └── TokenBudget.swift               # 各段 token 预算分配策略
 │   │
@@ -88,6 +94,12 @@ OpenChat/
 │   │   ├── ContextStrategy.swift           # 策略协议 + 枚举（剔除 / 压缩）
 │   │   ├── TruncationStrategy.swift        # 对话剔除：FIFO 删除最早消息
 │   │   └── CompressionStrategy.swift       # 对话压缩：调用外部 API 压缩
+│   │
+│   ├── Memory/
+│   │   ├── EmbeddingService.swift          # CoreML MultilingualE5Small 嵌入模型推理
+│   │   ├── VectorStore.swift               # sqlite-vec 向量存储封装（插入/KNN检索/删除）
+│   │   ├── MemoryManager.swift             # 记忆提取与检索编排
+│   │   └── MemoryError.swift               # 记忆模块统一错误类型
 │   │
 │   └── Database/
 │       ├── DatabaseManager.swift           # GRDB DatabaseQueue 初始化与迁移
@@ -98,6 +110,7 @@ OpenChat/
 │           ├── WorldBookEntryRecord.swift  # GRDB Record：世界书条目
 │           ├── ConversationRecord.swift    # GRDB Record：会话
 │           ├── MessageRecord.swift         # GRDB Record：消息
+│           ├── MemoryEntryRecord.swift     # GRDB Record：记忆条目
 │           └── APIEndpointRecord.swift     # GRDB Record：API 端点配置
 │
 ├── Shared/
@@ -139,6 +152,7 @@ OpenChat/
 | 库 | 用途 | 引入层 |
 |---|---|---|
 | **GRDB.swift** | SQLite ORM + 迁移 | Core/Database |
+| **sqlite-vec** | 向量相似度搜索 | Core/Memory |
 | *(可选) swift-markdown-ui* | Markdown 渲染 | Shared/Components |
 
 > 项目倾向于最小化第三方依赖，网络层和 SSE 解析均使用系统原生 API。

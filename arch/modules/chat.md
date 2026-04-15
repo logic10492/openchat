@@ -103,7 +103,7 @@ struct InputBarView: View {
 │─────────────────────────────────────────│
 │ Section: 角色与世界                      │
 │   角色卡: [艾拉 ▸]          [更换/移除] │
-│   世界书: [中土世界 ▸]      [更换/移除] │
+│   世界: 中土世界（通过角色卡关联）       │
 │   场景覆盖: [可选文本输入]              │
 │                                         │
 │ Section: 上下文管理                      │
@@ -130,6 +130,7 @@ final class ChatViewModel {
     private let db: DatabaseManager
     private let apiClient: APIClient
     private let contextManager: ContextManager
+    private let memoryManager: MemoryManager
 
     // 会话状态
     let conversation: ConversationRecord
@@ -185,9 +186,13 @@ sendMessage():
 
     6. // 加载上下文
        characterCard = 从 DB 加载 conversation.characterCardId
-       worldBook = 从 DB 加载 conversation.worldBookId
+       worldBook = 从 DB 通过 characterCard.worldBookId 加载世界书
        worldBookEntries = 从 DB 加载世界书的已启用条目
        endpoint = 从 DB 加载 conversation.apiEndpointId
+
+    6.5 // 检索记忆
+       memories = await memoryManager.retrieveMemories(
+           for: characterCard.id, query: inputText)
 
     7. // 阶段1：计算固定段 token
        fixedTokens = PromptAssembler.calculateFixedTokens(
@@ -200,7 +205,7 @@ sendMessage():
     9. // 阶段3：拼装 prompt
        result = PromptAssembler.assemble(
            conversation, characterCard, worldBook, worldBookEntries,
-           processedHistory, inputText, endpoint)
+           memories, processedHistory, inputText, endpoint)
        tokenUsage = result.tokenUsage
 
     10. // 创建空的 assistantMessage 占位
@@ -264,6 +269,24 @@ editMessage(messageId, newContent):
     3. 删除 idx 之后的所有消息（DB + messages 列表）
     4. 执行重新生成流程
 ```
+
+### 4.6 记忆提取触发
+
+当用户离开当前对话时（导航到其他页面、切换对话），自动触发记忆提取：
+
+```swift
+func triggerMemoryExtraction() {
+    guard let characterCardId = conversation.characterCardId else { return }
+    Task.detached(priority: .background) { [memoryManager, conversation] in
+        try? await memoryManager.extractMemories(from: conversation)
+    }
+}
+```
+
+- **触发时机**：`ChatView.onDisappear` 或 `ChatViewModel.deinit`
+- **后台执行**：使用 `Task.detached(priority: .background)`，不阻塞 UI
+- **静默降级**：提取失败仅记录日志，不向用户展示错误
+- **去重保护**：MemoryManager 内部检查该对话是否已提取过
 
 ## 5. MessageDisplayItem
 

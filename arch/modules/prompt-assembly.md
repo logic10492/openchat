@@ -38,9 +38,15 @@
 │  [3] system: 场景设定                            │  ← 固定段
 │      (会话 customScenario ?? 角色卡 scenario)    │
 ├─────────────────────────────────────────────────┤
-│  [4] system: 世界书条目 (position=before_history)│  ← 动态段
+│  [4] system: 时间上下文                          │  ← 固定段（始终注入）
+│      [Time] ISO 8601 当前时间含时区 [/Time]      │
 ├─────────────────────────────────────────────────┤
-│  [5..N-2] 示例对话                               │  ← 可选段
+│  [5] system: 世界书条目 (position=before_history)│  ← 动态段
+├─────────────────────────────────────────────────┤
+│  [6] system: 跨对话记忆                          │  ← 动态段
+│      (经语义检索匹配的记忆条目，按相关度排序)  │
+├─────────────────────────────────────────────────┤
+│  [7..N-2] 示例对话                               │  ← 可选段
 │      (user/assistant 交替)                       │
 ├─────────────────────────────────────────────────┤
 │  [N-1..M-1] 会话历史                             │  ← 动态段
@@ -101,6 +107,7 @@ struct TokenBudget {
     // 可选段：有预算上限
     var exampleDialogsMaxTokens: Int  // 上限 = totalBudget * 15%
     var worldBookMaxTokens: Int       // 上限 = totalBudget * 20%
+    var memoryMaxTokens: Int          // 上限 = totalBudget * 10%
 
     // 动态段：弹性填充剩余空间
     var historyMaxTokens: Int         // = totalBudget - 所有固定段 - 可选段实际占用
@@ -118,12 +125,13 @@ struct TokenBudget {
 ### 4.3 预算分配流程
 
 ```
-1. 计算固定段总 token：systemPrompt + charDesc + scenario + currentInput
+1. 计算固定段总 token：systemPrompt + charDesc + scenario + timeContext + currentInput
 2. 剩余预算 = totalBudget - 固定段总 token
 3. 分配示例对话预算 = min(剩余 * 0.25, 示例对话实际 token)
 4. 分配世界书预算 = min(剩余 * 0.35, 触发条目总 token)
-5. 历史预算 = 剩余 - 示例对话实际占用 - 世界书实际占用
-6. 若历史预算 < 某阈值（如 200 token），压缩/丢弃示例对话以腾出空间
+5. 分配记忆预算 = min(剩余 * 0.15, 记忆条目总 token)
+6. 历史预算 = 剩余 - 示例对话实际占用 - 世界书实际占用 - 记忆实际占用
+7. 若历史预算 < 某阈值（如 200 token），压缩/丢弃示例对话以腾出空间
 ```
 
 ## 5. 核心接口
@@ -145,6 +153,7 @@ struct PromptAssembler {
         characterCard: CharacterCardRecord?,
         worldBook: WorldBookRecord?,
         worldBookEntries: [WorldBookEntryRecord],
+        memories: [MemoryEntryRecord],
         recentMessages: [MessageRecord],
         currentInput: String,
         endpoint: APIEndpointConfig
@@ -162,7 +171,9 @@ struct TokenUsageReport {
     let systemPrompt: Int
     let characterDescription: Int
     let scenario: Int
+    let timeContext: Int
     let worldBookEntries: Int
+    let memories: Int
     let exampleDialogs: Int
     let history: Int
     let currentInput: Int
@@ -178,7 +189,9 @@ enum PromptSegment {
     case systemPrompt(String)
     case characterDescription(String)
     case scenario(String)
+    case timeContext(String)                    // ISO 8601 时间上下文（始终注入）
     case worldBookEntry(WorldBookEntryRecord)
+    case memoryEntry(MemoryEntryRecord)         // 跨对话记忆
     case exampleDialog(ChatMessage)
     case historyMessage(MessageRecord)
     case currentInput(String)
@@ -189,6 +202,21 @@ enum PromptSegment {
     var priority: Int          // 用于预算紧张时的裁剪优先级
     var isRequired: Bool       // 是否不可省略
 }
+```
+
+**各 case 属性**：
+
+| case | role | priority | isRequired | 说明 |
+|---|---|---|---|---|
+| `systemPrompt` | system | .max | true | |
+| `characterDescription` | system | .max | false | |
+| `scenario` | system | .max | false | |
+| `timeContext` | system | .max | true | 由 PromptAssembler 内部 `Date()` → ISO 8601 生成，格式 `[Time] ... [/Time]`，~15 tokens |
+| `worldBookEntry` | system | entry.priority | false | |
+| `memoryEntry` | system | 85 | false | 高于 exampleDialog(75)，低于世界书条目最大值 |
+| `exampleDialog` | user/assistant | 75 | false | |
+| `historyMessage` | user/assistant | 50 | false | |
+| `currentInput` | user | .max | true | |
 ```
 
 ### 5.3 TokenCounter
@@ -219,7 +247,7 @@ struct TokenCounter {
 ## 6. 拼装流程伪代码
 
 ```
-function assemble(conversation, characterCard, worldBook, entries, history, input, endpoint):
+function assemble(conversation, characterCard, worldBook, entries, memories, history, input, endpoint):
     totalBudget = endpoint.maxContextTokens * 0.40
     segments = []
 
@@ -247,7 +275,11 @@ function assemble(conversation, characterCard, worldBook, entries, history, inpu
     if let s = scenario, !s.isEmpty:
         segments.append(.scenario(s))
 
-    // 5. 世界书条目 (before_history)
+    // 5. 时间上下文（始终注入）
+    timeString = ISO8601DateFormatter().string(from: Date())
+    segments.append(.timeContext("[Time] \(timeString) [/Time]"))
+
+    // 6. 世界书条目 (before_history)
     triggeredBeforeHistory = entries
         .filter { $0.isEnabled && $0.position == "before_history" }
         .filter { KeywordMatcher.isTriggered($0, contextText) }
@@ -255,15 +287,19 @@ function assemble(conversation, characterCard, worldBook, entries, history, inpu
     for entry in triggeredBeforeHistory:
         segments.append(.worldBookEntry(entry))
 
-    // 6. 示例对话
+    // 7. 跨对话记忆
+    for memory in memories:
+        segments.append(.memoryEntry(memory))
+
+    // 8. 示例对话
     if let examples = characterCard?.exampleDialogs:
         for msg in parseExampleDialogs(examples):
             segments.append(.exampleDialog(msg))
 
-    // 7. 计算 token 预算
+    // 9. 计算 token 预算
     budget = TokenBudget.calculate(totalBudget, segments, ...)
 
-    // 8. 历史消息（从最近到最远，直到预算耗尽）
+    // 10. 历史消息（从最近到最远，直到预算耗尽）
     remainingTokens = budget.historyMaxTokens
     for msg in history.reversed():
         tokens = TokenCounter.count(msg)
@@ -271,13 +307,13 @@ function assemble(conversation, characterCard, worldBook, entries, history, inpu
         segments.insert(.historyMessage(msg), atCorrectPosition)
         remainingTokens -= tokens
 
-    // 9. 当前用户输入
+    // 11. 当前用户输入
     segments.append(.currentInput(input))
 
-    // 10. 裁剪超预算的世界书/示例对话
+    // 12. 裁剪超预算的世界书/记忆/示例对话
     trimOverBudgetSegments(segments, budget)
 
-    // 11. 转换为 [ChatMessage]
+    // 13. 转换为 [ChatMessage]
     return segments.map { $0.toChatMessage() }
 ```
 
@@ -285,8 +321,9 @@ function assemble(conversation, characterCard, worldBook, entries, history, inpu
 
 | 交互对象 | 交互方式 |
 |---|---|
-| `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、ConversationRecord |
+| `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、MemoryEntryRecord、ConversationRecord |
 | `Core/ContextManager` | ContextManager 先处理历史消息（剔除/压缩），再传入 PromptAssembler |
+| `Core/Memory` | MemoryManager 检索记忆后传入 PromptAssembler |
 | `Features/Chat` | ChatViewModel 在发送消息时调用 PromptAssembler.assemble() |
 | `Shared/Extensions` | 使用 String+Token 扩展的 token 计数方法 |
 

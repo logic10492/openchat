@@ -16,6 +16,8 @@
 | 持久化 | SQLite via GRDB.swift |
 | 网络 | 原生 URLSession + AsyncBytes |
 | SSE 解析 | 自实现（无第三方依赖） |
+| 向量存储 | sqlite-vec |
+| 嵌入模型 | MultilingualE5Small (CoreML) |
 | 最低版本 | iOS 17+ |
 
 ## 当前实现状态
@@ -32,6 +34,7 @@
 ### 1. 角色扮演系统
 - **角色卡**：定义角色的性格、外貌、身材、语调、背景故事、示例对话
 - **世界书**：定义世界设定，条目通过关键词触发动态注入 prompt
+- **世界→角色层级**：角色卡归属于世界书，先选择世界再选择角色，支持跨世界导入角色
 - **编辑器**：分 section 的表单化编辑，支持导入/导出
 - **结构化导入**：世界书支持 Markdown 格式粘贴导入（方便从 ChatGPT 等工具生成后导入）
 
@@ -47,10 +50,24 @@
 2. 世界书条目（position=after_system）
 3. 角色描述（personality / appearance / physique / speechStyle / backstory）
 4. 场景设定（scenario）
-5. 世界书条目（position=before_history）
-6. 示例对话（example dialogs）
-7. 最近会话历史（经上下文管理处理）
-8. 当前用户输入
+5. 时间上下文（ISO 8601 当前时间，始终注入）
+6. 世界书条目（position=before_history）
+7. 跨对话记忆（经语义检索匹配的记忆条目）
+8. 示例对话（example dialogs）
+9. 最近会话历史（经上下文管理处理）
+10. 当前用户输入
+
+### 4. 跨对话记忆
+- **记忆提取**：对话结束后自动调用 API 提取关键事件、事实、关系变化和摘要
+- **向量存储**：使用本地 CoreML 嵌入模型（MultilingualE5Small）将记忆向量化，存储在 sqlite-vec 中
+- **记忆检索**：新对话开始时拉取近期摘要，每次发送消息时语义检索相关记忆并注入 prompt
+- **角色绑定**：记忆以角色卡为单位存储，同一角色的不同对话共享记忆
+
+### 5. 时间感知
+- 每次 prompt 拼装时自动注入当前时间（ISO 8601 含时区）
+- 格式：`[Time] 2026-04-15T14:30:00+08:00 [/Time]`
+- 始终启用，不可关闭
+- 帮助 LLM 感知时间流逝，提升角色扮演沉浸感
 
 ## 架构全景
 
@@ -63,9 +80,11 @@
 ┌──────────────────────▼───────────────────────────────┐
 │                   Features Layer                      │
 │  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
-│  │  Chat   │ │Character │ │WorldBook │ │Settings  │ │
+│  │  Chat   │ │Character │ │WorldBook │ │ Memory   │ │
 │  │         │ │  Card    │ │          │ │          │ │
 │  └────┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ │
+│  │Settings│                                           │
+│  └────┬───┘                                           │
 └───────┼───────────┼────────────┼────────────┼────────┘
         │           │            │            │
 ┌───────▼───────────▼────────────▼────────────▼────────┐
@@ -75,10 +94,12 @@
 │  │APIClient  │ │Assembler   │ │Truncation/Compress│  │
 │  │SSEParser  │ │TokenCounter│ │                   │  │
 │  └───────────┘ └────────────┘ └──────────────────┘   │
-│  ┌──────────────────────────────────────────────┐    │
-│  │                 Database                      │    │
-│  │  DatabaseManager · Migrations · Records       │    │
-│  └──────────────────────────────────────────────┘    │
+│  ┌──────────────────────────┐ ┌──────────────────┐   │
+│  │       Memory              │ │    Database       │   │
+│  │ EmbeddingService          │ │ DatabaseManager   │   │
+│  │ VectorStore               │ │ Migrations        │   │
+│  │ MemoryManager             │ │ Records           │   │
+│  └──────────────────────────┘ └──────────────────┘   │
 └──────────────────────────────────────────────────────┘
         │
 ┌───────▼──────────────────────────────────────────────┐
@@ -97,7 +118,9 @@
    ▼
 ChatViewModel
    │
-   ├─→ PromptAssembler: 计算固定段 token
+   ├─→ MemoryManager: 检索相关记忆（向量化当前输入 → KNN 检索）
+   │
+   ├─→ PromptAssembler: 计算固定段 token（含记忆段 + 时间上下文）
    │
    ├─→ ContextManager: 用剩余预算处理历史消息
    │       │
@@ -109,6 +132,14 @@ ChatViewModel
    └─→ APIClient.streamMessage()
            │
            └─→ SSEStreamParser → StreamDelta → UI 更新
+
+对话结束时：
+ChatViewModel
+   └─→ MemoryManager.extractMemories()
+           │
+           ├─→ APIClient: 调用 LLM 提取关键事件/摘要
+           ├─→ EmbeddingService: 向量化记忆条目
+           └─→ VectorStore: 存储向量嵌入
 ```
 
 ## 文档导航
@@ -123,5 +154,6 @@ ChatViewModel
 | [modules/prompt-assembly.md](modules/prompt-assembly.md) | Prompt 拼装引擎（顺序 / token 预算 / 接口） |
 | [modules/context-manager.md](modules/context-manager.md) | 上下文管理（40%策略 / 剔除 / 压缩） |
 | [modules/chat.md](modules/chat.md) | 聊天模块（消息展示 / 流式输出 / 交互） |
+| [modules/memory/index.md](modules/memory/index.md) | 跨对话记忆系统（向量存储 / 嵌入模型 / 记忆提取检索） |
 | [modules/settings.md](modules/settings.md) | 设置模块（API 配置 / 参数 / 数据管理） |
 | [roadmap.md](roadmap.md) | 6 阶段落地路线图 |

@@ -59,8 +59,11 @@ struct APIEndpointRecord: Codable, FetchableRecord, PersistableRecord {
 | exampleDialogs | TEXT | | 示例对话（JSON 数组格式） |
 | creatorNotes | TEXT | | 创建者备注（不进入 prompt） |
 | tags | TEXT | | 标签（JSON 数组，用于筛选） |
+| worldBookId | TEXT | FK → world_book.id, ON DELETE SET NULL | 所属世界书（可选） |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 |
+
+**外键**：`worldBookId` → `world_book(id)` ON DELETE SET NULL
 
 **Swift Record**:
 ```swift
@@ -79,8 +82,11 @@ struct CharacterCardRecord: Codable, FetchableRecord, PersistableRecord {
     var exampleDialogs: String?      // JSON: [{"role":"user","content":"..."},...]
     var creatorNotes: String?
     var tags: String?                // JSON: ["fantasy","sci-fi"]
+    var worldBookId: String?         // 所属世界书
     var createdAt: Date
     var updatedAt: Date
+
+    static let worldBook = belongsTo(WorldBookRecord.self)
 }
 ```
 
@@ -156,8 +162,7 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
 |---|---|---|---|
 | id | TEXT | PK, NOT NULL | UUID 字符串 |
 | title | TEXT | NOT NULL | 会话标题（可自动生成或用户编辑） |
-| characterCardId | TEXT | FK → character_card.id | 绑定的角色卡（可选） |
-| worldBookId | TEXT | FK → world_book.id | 绑定的世界书（可选） |
+| characterCardId | TEXT | FK → character_card.id | 绑定的角色卡（可选，世界书通过角色卡间接关联） |
 | apiEndpointId | TEXT | FK → api_endpoint.id | 使用的 API 端点 |
 | contextStrategy | TEXT | NOT NULL, DEFAULT 'truncation' | 上下文策略：`truncation` / `compression` |
 | customScenario | TEXT | | 会话专属场景覆盖（优先于角色卡场景） |
@@ -173,7 +178,6 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var title: String
     var characterCardId: String?
-    var worldBookId: String?
     var apiEndpointId: String?
     var contextStrategy: String      // "truncation" | "compression"
     var customScenario: String?
@@ -183,7 +187,6 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     var updatedAt: Date
 
     static let characterCard = belongsTo(CharacterCardRecord.self)
-    static let worldBook = belongsTo(WorldBookRecord.self)
     static let apiEndpoint = belongsTo(APIEndpointRecord.self)
     static let messages = hasMany(MessageRecord.self)
 }
@@ -227,23 +230,72 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord {
 
 ---
 
+### 7. memory_entry — 记忆条目
+
+存储角色跨对话的记忆（摘要/事件/事实/关系），用于语义检索后注入 prompt。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| characterCardId | TEXT | NOT NULL, FK → character_card.id | 所属角色卡 |
+| sourceConversationId | TEXT | FK → conversation.id | 来源对话（可选，对话删除后置 NULL） |
+| content | TEXT | NOT NULL | 记忆原文（摘要 / 事件描述） |
+| memoryType | TEXT | NOT NULL | `event` / `fact` / `relationship` / `summary` |
+| importance | INTEGER | NOT NULL, DEFAULT 50 | 重要性评分（0-100） |
+| createdAt | TEXT | NOT NULL | ISO 8601 |
+| updatedAt | TEXT | NOT NULL | ISO 8601 |
+
+**外键**：
+- `characterCardId` → `character_card(id)` ON DELETE CASCADE
+- `sourceConversationId` → `conversation(id)` ON DELETE SET NULL
+
+**Swift Record**:
+```swift
+struct MemoryEntryRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "memory_entry"
+    var id: String
+    var characterCardId: String
+    var sourceConversationId: String?
+    var content: String
+    var memoryType: String           // "event" | "fact" | "relationship" | "summary"
+    var importance: Int
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let characterCard = belongsTo(CharacterCardRecord.self)
+    static let sourceConversation = belongsTo(ConversationRecord.self)
+}
+```
+
+**向量嵌入**：记忆条目的向量存储在 sqlite-vec 虚拟表 `memory_embedding` 中（见迁移 v4）。
+
+---
+
 ## 实体关系图（文字 ER）
 
 ```
 api_endpoint 1 ──── 0..* conversation
 character_card 1 ──── 0..* conversation
-world_book 1 ──── 0..* conversation
+world_book 1 ──── 0..* character_card
 world_book 1 ──── 0..* world_book_entry
+character_card 1 ──── 0..* memory_entry
+conversation 1 ──── 0..* memory_entry
 conversation 1 ──── 0..* message
 ```
 
 关系说明：
-- 一个 `conversation` 可选绑定一个 `character_card`、一个 `world_book`、一个 `api_endpoint`
+- 一个 `conversation` 可选绑定一个 `character_card`、一个 `api_endpoint`
+- 一个 `character_card` 可选归属于一个 `world_book`（世界书通过角色卡间接关联到对话）
 - 一个 `world_book` 包含多个 `world_book_entry`
+- 一个 `character_card` 关联多条 `memory_entry`（跨对话记忆）
 - 一个 `conversation` 包含多条 `message`
+- 一个 `conversation` 可关联多条 `memory_entry`（记忆来源）
 - 删除 `conversation` 时级联删除其所有 `message`
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
-- 删除 `character_card` / `world_book` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
+- 删除 `character_card` 时级联删除其所有 `memory_entry`
+- 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
+- 删除 `world_book` 时，关联 `character_card` 的 `worldBookId` 置 NULL
+- 删除 `conversation` 时，关联 `memory_entry` 的 `sourceConversationId` 置 NULL
 
 ---
 
@@ -316,8 +368,6 @@ migrator.registerMigration("v1_initial") { db in
         t.column("title", .text).notNull()
         t.column("characterCardId", .text)
             .references("character_card", onDelete: .setNull)
-        t.column("worldBookId", .text)
-            .references("world_book", onDelete: .setNull)
         t.column("apiEndpointId", .text)
             .references("api_endpoint", onDelete: .setNull)
         t.column("contextStrategy", .text).notNull().defaults(to: "truncation")
@@ -352,6 +402,79 @@ try db.create(index: "idx_message_sortOrder", on: "message", columns: ["conversa
 try db.create(index: "idx_world_book_entry_worldBookId", on: "world_book_entry", columns: ["worldBookId"])
 try db.create(index: "idx_conversation_characterCardId", on: "conversation", columns: ["characterCardId"])
 try db.create(index: "idx_conversation_updatedAt", on: "conversation", columns: ["updatedAt"])
+```
+
+### v2_world_book_character_card
+
+角色卡归属世界书：为 `character_card` 表添加 `worldBookId` 外键。
+
+```swift
+migrator.registerMigration("v2_world_book_character_card") { db in
+    try db.alter(table: "character_card") { t in
+        t.add(column: "worldBookId", .text)
+            .references("world_book", onDelete: .setNull)
+    }
+    try db.create(index: "idx_character_card_worldBookId",
+                  on: "character_card", columns: ["worldBookId"])
+}
+```
+
+### v3_remove_world_book_from_conversation
+
+对话不再直接关联世界书，世界书通过角色卡间接关联。
+
+```swift
+migrator.registerMigration("v3_remove_world_book_from_conversation") { db in
+    // 数据迁移：将 conversation.worldBookId 写入对应 character_card.worldBookId
+    try db.execute(sql: """
+        UPDATE character_card SET worldBookId = (
+            SELECT c.worldBookId FROM conversation c
+            WHERE c.characterCardId = character_card.id
+            AND c.worldBookId IS NOT NULL
+            LIMIT 1
+        )
+        WHERE worldBookId IS NULL
+    """)
+
+    // iOS 17+ SQLite 原生支持 ALTER TABLE DROP COLUMN
+    try db.alter(table: "conversation") { t in
+        t.drop(column: "worldBookId")
+    }
+}
+```
+
+### v4_create_memory_tables
+
+创建记忆条目表和 sqlite-vec 向量嵌入虚拟表。
+
+```swift
+migrator.registerMigration("v4_create_memory_tables") { db in
+    try db.create(table: "memory_entry") { t in
+        t.column("id", .text).notNull().primaryKey()
+        t.column("characterCardId", .text).notNull()
+            .references("character_card", onDelete: .cascade)
+        t.column("sourceConversationId", .text)
+            .references("conversation", onDelete: .setNull)
+        t.column("content", .text).notNull()
+        t.column("memoryType", .text).notNull()
+        t.column("importance", .integer).notNull().defaults(to: 50)
+        t.column("createdAt", .datetime).notNull()
+        t.column("updatedAt", .datetime).notNull()
+    }
+
+    try db.create(index: "idx_memory_entry_characterCardId",
+                  on: "memory_entry", columns: ["characterCardId"])
+    try db.create(index: "idx_memory_entry_sourceConversationId",
+                  on: "memory_entry", columns: ["sourceConversationId"])
+
+    // sqlite-vec 虚拟表：存储 384 维嵌入向量
+    try db.execute(sql: """
+        CREATE VIRTUAL TABLE memory_embedding USING vec0(
+            entry_id TEXT PRIMARY KEY,
+            embedding float[384]
+        )
+    """)
+}
 ```
 
 ### 后续版本迁移原则
