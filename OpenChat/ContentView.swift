@@ -82,6 +82,7 @@ private struct ChatDetailContainer: View {
                         databaseManager: container.databaseManager,
                         apiClient: container.apiClient,
                         contextManager: container.contextManager,
+                        memoryManager: container.memoryManager,
                         appState: appState
                     )
                 )

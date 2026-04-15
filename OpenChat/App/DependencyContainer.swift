@@ -6,6 +6,7 @@ final class DependencyContainer {
     let databaseManager: DatabaseManager
     let apiClient: APIClient
     let contextManager: ContextManager
+    let memoryManager: MemoryManager
 
     init(
         databaseManager: DatabaseManager,
@@ -16,6 +17,12 @@ final class DependencyContainer {
         self.apiClient = resolvedClient
         self.contextManager = ContextManager(
             databaseManager: databaseManager,
+            apiClient: resolvedClient
+        )
+        self.memoryManager = MemoryManager(
+            databaseManager: databaseManager,
+            embeddingService: EmbeddingService(),
+            vectorStore: VectorStore(databaseManager: databaseManager),
             apiClient: resolvedClient
         )
     }

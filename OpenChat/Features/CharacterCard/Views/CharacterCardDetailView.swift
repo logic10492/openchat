@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct CharacterCardDetailView: View {
+    @Environment(DependencyContainer.self) private var container
     let card: CharacterCardRecord
     let onEdit: () -> Void
+    @State private var memoryCount: Int = 0
 
     var body: some View {
         NavigationStack {
@@ -10,6 +12,7 @@ struct CharacterCardDetailView: View {
                 VStack(spacing: 20) {
                     headerSection
                     detailSections
+                    memorySection
                 }
                 .padding()
             }
@@ -20,6 +23,7 @@ struct CharacterCardDetailView: View {
                     Button(String(localized: "Edit"), action: onEdit)
                 }
             }
+            .task { await loadMemoryCount() }
         }
     }
 
@@ -81,6 +85,34 @@ struct CharacterCardDetailView: View {
             }
             .padding(.vertical, 8)
         }
+    }
+
+    // MARK: - Memory
+
+    private var memorySection: some View {
+        NavigationLink {
+            MemoryListView(
+                viewModel: MemoryListViewModel(
+                    databaseManager: container.databaseManager,
+                    memoryManager: container.memoryManager,
+                    characterCardId: card.id
+                )
+            )
+        } label: {
+            HStack {
+                Label(String(localized: "Memories"), systemImage: "brain")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(memoryCount)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func loadMemoryCount() async {
+        memoryCount = (try? await container.databaseManager.fetchMemoryCount(characterCardId: card.id)) ?? 0
     }
 }
 

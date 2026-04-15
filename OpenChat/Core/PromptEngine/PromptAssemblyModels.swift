@@ -19,7 +19,9 @@ struct TokenUsageReport: Sendable {
     let systemPrompt: Int
     let characterDescription: Int
     let scenario: Int
+    let timeContext: Int
     let worldBookEntries: Int
+    let memories: Int
     let exampleDialogs: Int
     let history: Int
     let currentInput: Int
