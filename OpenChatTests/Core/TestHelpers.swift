@@ -31,7 +31,6 @@ enum TestHelpers {
             id: id,
             title: title,
             characterCardId: nil,
-            worldBookId: nil,
             apiEndpointId: nil,
             contextStrategy: contextStrategy.rawValue,
             customScenario: nil,
@@ -124,6 +123,26 @@ enum TestHelpers {
             priority: priority,
             isEnabled: true,
             position: position.rawValue,
+            createdAt: TestDateFactory.now(),
+            updatedAt: TestDateFactory.now()
+        )
+    }
+
+    static func makeMemoryEntry(
+        id: String = UUID().uuidString,
+        characterCardId: String,
+        sourceConversationId: String? = nil,
+        content: String = "The hero saved the village.",
+        memoryType: MemoryType = .event,
+        importance: Int = 5
+    ) -> MemoryEntryRecord {
+        MemoryEntryRecord(
+            id: id,
+            characterCardId: characterCardId,
+            sourceConversationId: sourceConversationId,
+            content: content,
+            memoryType: memoryType.rawValue,
+            importance: importance,
             createdAt: TestDateFactory.now(),
             updatedAt: TestDateFactory.now()
         )
