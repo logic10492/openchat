@@ -7,7 +7,6 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     var id: String
     var title: String
     var characterCardId: String?
-    var worldBookId: String?
     var apiEndpointId: String?
     var contextStrategy: String
     var customScenario: String?
@@ -17,7 +16,6 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     var updatedAt: Date
 
     static let characterCard = belongsTo(CharacterCardRecord.self)
-    static let worldBook = belongsTo(WorldBookRecord.self)
     static let apiEndpoint = belongsTo(APIEndpointRecord.self)
     static let messages = hasMany(MessageRecord.self)
 

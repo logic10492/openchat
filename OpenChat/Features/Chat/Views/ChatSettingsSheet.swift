@@ -22,10 +22,10 @@ struct ChatSettingsSheet: View {
                         }
                     }
 
-                    Picker(String(localized: "World Book"), selection: worldBookBinding) {
-                        Text(String(localized: "None")).tag(Optional<String>.none)
-                        ForEach(viewModel.availableWorldBooks) { worldBook in
-                            Text(worldBook.name).tag(Optional(worldBook.id))
+                    if let worldBookName = viewModel.selectedCharacterWorldBookName {
+                        LabeledContent(String(localized: "World Book")) {
+                            Text(worldBookName)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -49,7 +49,7 @@ struct ChatSettingsSheet: View {
                     }
                     Slider(value: topPBinding, in: 0...1, step: 0.05)
 
-                    Stepper(value: maxTokensBinding, in: 128...16_384, step: 128) {
+                    Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
                         Text("\(String(localized: "Max Tokens")): \(viewModel.modelMaxTokens)")
                     }
                 }
@@ -76,11 +76,6 @@ struct ChatSettingsSheet: View {
     private var characterBinding: Binding<String?> {
         @Bindable var viewModel = viewModel
         return $viewModel.selectedCharacterCardID
-    }
-
-    private var worldBookBinding: Binding<String?> {
-        @Bindable var viewModel = viewModel
-        return $viewModel.selectedWorldBookID
     }
 
     private var strategyBinding: Binding<ContextStrategy> {

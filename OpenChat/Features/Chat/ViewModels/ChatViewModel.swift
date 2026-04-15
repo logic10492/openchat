@@ -7,6 +7,7 @@ final class ChatViewModel {
     let databaseManager: DatabaseManager
     let apiClient: APIClient
     let contextManager: ContextManager
+    let memoryManager: MemoryManager
     let appState: AppState
 
     var conversation: ConversationRecord
@@ -20,12 +21,23 @@ final class ChatViewModel {
     var inputText = ""
     var selectedEndpointID: String?
     var selectedCharacterCardID: String?
-    var selectedWorldBookID: String?
     var selectedContextStrategy: ContextStrategy
     var customScenario = ""
     var modelTemperature = AppConstants.defaultTemperature
     var modelTopP = AppConstants.defaultTopP
     var modelMaxTokens = 1024
+
+    var selectedCharacterName: String? {
+        guard let id = selectedCharacterCardID else { return nil }
+        return availableCharacterCards.first(where: { $0.id == id })?.name
+    }
+
+    var selectedCharacterWorldBookName: String? {
+        guard let id = selectedCharacterCardID,
+              let card = availableCharacterCards.first(where: { $0.id == id }),
+              let worldBookId = card.worldBookId else { return nil }
+        return availableWorldBooks.first(where: { $0.id == worldBookId })?.name
+    }
 
     @ObservationIgnored
     var streamTask: Task<Void, Never>?
@@ -35,16 +47,17 @@ final class ChatViewModel {
         databaseManager: DatabaseManager,
         apiClient: APIClient,
         contextManager: ContextManager,
+        memoryManager: MemoryManager,
         appState: AppState
     ) {
         self.conversation = conversation
         self.databaseManager = databaseManager
         self.apiClient = apiClient
         self.contextManager = contextManager
+        self.memoryManager = memoryManager
         self.appState = appState
         selectedEndpointID = conversation.apiEndpointId
         selectedCharacterCardID = conversation.characterCardId
-        selectedWorldBookID = conversation.worldBookId
         selectedContextStrategy = ContextStrategy(rawValue: conversation.contextStrategy) ?? .truncation
         customScenario = conversation.customScenario ?? ""
 
@@ -137,7 +150,6 @@ final class ChatViewModel {
     func saveConversationSettings() async {
         conversation.apiEndpointId = selectedEndpointID
         conversation.characterCardId = selectedCharacterCardID
-        conversation.worldBookId = selectedWorldBookID
         conversation.contextStrategy = selectedContextStrategy.rawValue
         conversation.customScenario = customScenario.nilIfBlank
         conversation.modelParameters = RecordCoders.encode(currentParameters)

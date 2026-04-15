@@ -8,6 +8,65 @@ enum Migrations {
             try createTables(db)
             try createIndexes(db)
         }
+        migrator.registerMigration("v2_world_book_character_card") { db in
+            try db.alter(table: "character_card") { t in
+                t.add(column: "worldBookId", .text)
+                    .references("world_book", onDelete: .setNull)
+            }
+            try db.create(
+                index: "idx_character_card_worldBookId",
+                on: "character_card",
+                columns: ["worldBookId"]
+            )
+        }
+        migrator.registerMigration("v3_remove_world_book_from_conversation") { db in
+            // Migrate worldBookId from conversation to character_card
+            try db.execute(sql: """
+                UPDATE character_card SET worldBookId = (
+                    SELECT c.worldBookId FROM conversation c
+                    WHERE c.characterCardId = character_card.id
+                    AND c.worldBookId IS NOT NULL
+                    LIMIT 1
+                )
+                WHERE worldBookId IS NULL
+                """)
+
+            try db.alter(table: "conversation") { t in
+                t.drop(column: "worldBookId")
+            }
+        }
+        migrator.registerMigration("v4_create_memory_tables") { db in
+            try db.create(table: "memory_entry") { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("characterCardId", .text).notNull()
+                    .references("character_card", onDelete: .cascade)
+                t.column("sourceConversationId", .text)
+                    .references("conversation", onDelete: .setNull)
+                t.column("content", .text).notNull()
+                t.column("memoryType", .text).notNull()
+                t.column("importance", .integer).notNull().defaults(to: 50)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(
+                index: "idx_memory_entry_characterCardId",
+                on: "memory_entry",
+                columns: ["characterCardId"]
+            )
+            try db.create(
+                index: "idx_memory_entry_sourceConversationId",
+                on: "memory_entry",
+                columns: ["sourceConversationId"]
+            )
+
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE memory_embedding USING vec0(
+                    entry_id TEXT PRIMARY KEY,
+                    embedding float[384]
+                )
+                """)
+        }
         return migrator
     }
 

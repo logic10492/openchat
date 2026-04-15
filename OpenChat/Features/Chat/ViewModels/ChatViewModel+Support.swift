@@ -38,15 +38,25 @@ extension ChatViewModel {
         }
 
         let characterCard = try await databaseManager.fetchCharacterCard(id: selectedCharacterCardID ?? conversation.characterCardId)
-        let worldBook = try await databaseManager.fetchWorldBook(id: selectedWorldBookID ?? conversation.worldBookId)
+        let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
         let currentMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+
+        var memories: [MemoryEntryRecord] = []
+        if let characterCardId = characterCard?.id {
+            memories = (try? await memoryManager.retrieveMemories(
+                for: characterCardId,
+                query: prompt,
+                limit: 10
+            )) ?? []
+        }
 
         let preview = PromptAssembler.preview(
             conversation: conversation,
             characterCard: characterCard,
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
+            memories: memories,
             recentMessages: currentMessages,
             currentInput: prompt,
             endpoint: endpoint
@@ -63,6 +73,7 @@ extension ChatViewModel {
             characterCard: characterCard,
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
+            memories: memories,
             recentMessages: currentMessages,
             processedHistory: history,
             currentInput: prompt,
@@ -137,5 +148,11 @@ extension ChatViewModel {
 
     private func removeAssistantPlaceholder(id: String) {
         messages.removeAll { $0.id == id && $0.content.isEmpty }
+    }
+
+    func triggerMemoryExtraction() {
+        Task {
+            try? await memoryManager.extractMemories(from: conversation)
+        }
     }
 }

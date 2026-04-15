@@ -43,6 +43,9 @@ struct ChatView: View {
             await viewModel.loadMessages()
             await viewModel.loadSettingsOptions()
         }
+        .onDisappear {
+            viewModel.triggerMemoryExtraction()
+        }
         .sheet(isPresented: $isShowingSettings) {
             ChatSettingsSheet(viewModel: viewModel)
                 .presentationDetents([.medium, .large])
@@ -62,6 +65,7 @@ struct ChatView: View {
                             MessageBubbleView(
                                 item: item,
                                 isStreaming: isStreamingMessage(item),
+                                characterName: viewModel.selectedCharacterName,
                                 onDelete: {
                                     Task { await viewModel.deleteMessage(item.id) }
                                 },
@@ -127,7 +131,6 @@ struct ChatView: View {
                     id: "preview",
                     title: "Preview Chat",
                     characterCardId: nil,
-                    worldBookId: nil,
                     apiEndpointId: nil,
                     contextStrategy: "truncation",
                     customScenario: nil,
@@ -139,6 +142,7 @@ struct ChatView: View {
                 databaseManager: DependencyContainer.preview().databaseManager,
                 apiClient: DependencyContainer.preview().apiClient,
                 contextManager: DependencyContainer.preview().contextManager,
+                memoryManager: DependencyContainer.preview().memoryManager,
                 appState: AppState()
             )
         )

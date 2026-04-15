@@ -17,8 +17,11 @@ struct CharacterCardRecord: Codable, FetchableRecord, PersistableRecord, Identif
     var exampleDialogs: String?
     var creatorNotes: String?
     var tags: String?
+    var worldBookId: String?
     var createdAt: Date
     var updatedAt: Date
+
+    static let worldBook = belongsTo(WorldBookRecord.self)
 
     func exampleDialogMessages() throws -> [ChatMessage] {
         guard let exampleDialogs, !exampleDialogs.isEmpty else {

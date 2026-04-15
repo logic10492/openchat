@@ -29,6 +29,15 @@ extension DatabaseManager {
         }
     }
 
+    func fetchCharacterCards(worldBookId: String) async throws -> [CharacterCardRecord] {
+        try await read { db in
+            try CharacterCardRecord
+                .filter(Column("worldBookId") == worldBookId)
+                .order(Column("updatedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
     func fetchWorldBooks() async throws -> [WorldBookRecord] {
         try await read { db in
             try WorldBookRecord

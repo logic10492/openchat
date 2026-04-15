@@ -36,7 +36,6 @@ final class ConversationListViewModel {
             id: UUID().uuidString,
             title: String(localized: "New Chat"),
             characterCardId: nil,
-            worldBookId: nil,
             apiEndpointId: endpoint?.id,
             contextStrategy: AppConstants.defaultContextStrategy.rawValue,
             customScenario: nil,
