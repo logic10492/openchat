@@ -129,4 +129,49 @@ struct APIClientTests {
             )
         }
     }
+
+    // MARK: - ModelObject contextLength decoding
+
+    @Test func test_modelObject_decodes_without_contextLength() throws {
+        let json = #"{"id":"gpt-4o","object":"model","owned_by":"openai"}"#
+        let model = try JSONDecoder().decode(ModelObject.self, from: Data(json.utf8))
+        #expect(model.id == "gpt-4o")
+        #expect(model.contextLength == nil)
+    }
+
+    @Test func test_modelObject_decodes_context_length() throws {
+        let json = #"{"id":"llama-3","object":"model","owned_by":"meta","context_length":131072}"#
+        let model = try JSONDecoder().decode(ModelObject.self, from: Data(json.utf8))
+        #expect(model.id == "llama-3")
+        #expect(model.contextLength == 131_072)
+    }
+
+    @Test func test_modelObject_decodes_max_model_len() throws {
+        let json = #"{"id":"qwen-72b","object":"model","owned_by":"vllm","max_model_len":32768}"#
+        let model = try JSONDecoder().decode(ModelObject.self, from: Data(json.utf8))
+        #expect(model.id == "qwen-72b")
+        #expect(model.contextLength == 32_768)
+    }
+
+    @Test func test_modelObject_prefers_context_length_over_max_model_len() throws {
+        let json = #"{"id":"m","object":"model","context_length":8192,"max_model_len":4096}"#
+        let model = try JSONDecoder().decode(ModelObject.self, from: Data(json.utf8))
+        #expect(model.contextLength == 8192)
+    }
+
+    @Test func test_fetchModels_carries_contextLength() async throws {
+        let responseBody = #"{"object":"list","data":[{"id":"llama","object":"model","owned_by":"meta","context_length":65536}]}"#
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let client = APIClient(session: session)
+
+        let models = try await client.fetchModels(
+            baseURL: URL(string: "http://localhost:8080/v1")!,
+            apiKey: nil
+        )
+
+        #expect(models.first?.contextLength == 65_536)
+    }
 }

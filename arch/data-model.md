@@ -21,6 +21,7 @@
 | modelName | TEXT | NOT NULL | 默认模型标识符，如 `gpt-3.5-turbo` |
 | maxContextTokens | INTEGER | NOT NULL, DEFAULT 4096 | 该端点支持的最大上下文 token 数 |
 | isDefault | INTEGER | NOT NULL, DEFAULT 0 | 是否为默认端点（布尔值） |
+| apiMode | TEXT | NOT NULL, DEFAULT 'chatCompletions' | API 模式：`chatCompletions` / `responses` |
 | createdAt | TEXT | NOT NULL | ISO 8601 时间戳 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 时间戳 |
 
@@ -35,6 +36,7 @@ struct APIEndpointRecord: Codable, FetchableRecord, PersistableRecord {
     var modelName: String
     var maxContextTokens: Int
     var isDefault: Bool
+    var apiMode: String          // "chatCompletions" | "responses"
     var createdAt: Date
     var updatedAt: Date
 }
@@ -483,6 +485,18 @@ migrator.registerMigration("v4_create_memory_tables") { db in
 - 只追加迁移，不修改已有迁移
 - 迁移中使用 `ALTER TABLE` 添加列而非重建表
 - 迁移代码中不引用 Record 类型，使用原始 SQL 或 GRDB DDL API
+
+### v5_addApiMode
+
+为 `api_endpoint` 表添加 `apiMode` 列，支持 Chat Completions 和 Responses API 两种模式切换。
+
+```swift
+migrator.registerMigration("v5_addApiMode") { db in
+    try db.alter(table: "api_endpoint") { t in
+        t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+    }
+}
+```
 
 ---
 

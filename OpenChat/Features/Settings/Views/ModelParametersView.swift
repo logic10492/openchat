@@ -15,8 +15,13 @@ struct ModelParametersView: View {
             }
             Slider(value: bind(\.defaultTopP), in: 0...1, step: 0.05)
 
-            Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
-                Text("\(String(localized: "Max Tokens")): \(viewModel.defaultMaxTokens ?? 0)")
+            HStack {
+                Text(String(localized: "Max Tokens"))
+                Spacer()
+                TextField("", text: maxTokensStringBinding)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
             }
 
             Picker(String(localized: "Context Strategy"), selection: contextBinding) {
@@ -41,6 +46,19 @@ struct ModelParametersView: View {
             set: {
                 viewModel[keyPath: keyPath] = $0
                 viewModel.persistDefaults()
+            }
+        )
+    }
+
+    private var maxTokensStringBinding: Binding<String> {
+        Binding(
+            get: { String(viewModel.defaultMaxTokens ?? 1024) },
+            set: { newValue in
+                let filtered = newValue.filter(\.isWholeNumber)
+                if let value = Int(filtered) {
+                    viewModel.defaultMaxTokens = min(max(value, 1), 131_072)
+                    viewModel.persistDefaults()
+                }
             }
         )
     }

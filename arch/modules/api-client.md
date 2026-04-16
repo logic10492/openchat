@@ -6,6 +6,8 @@
 ## 1. 功能范围
 
 - 封装 OpenAI-compatible Chat Completion API（`/v1/chat/completions`）
+- 封装 OpenAI Responses API（`/v1/responses`）
+- 通过端点级 `APIMode` 配置在两种 API 模式间切换
 - 支持普通请求和 SSE 流式响应（`stream: true`）
 - 多 API 端点配置切换
 - 统一错误处理与基础重试
@@ -15,11 +17,14 @@
 
 | 文件 | 职责 |
 |---|---|
-| `APIClient.swift` | 主客户端，暴露 `sendMessage()` 和 `streamMessage()` 两个核心方法 |
-| `SSEStreamParser.swift` | 将 `URLSession.AsyncBytes` 逐行解析为 SSE 事件流 |
-| `APIEndpointConfig.swift` | 端点配置值对象（从 `APIEndpointRecord` 转换） |
+| `APIClient.swift` | 主客户端，暴露 `sendMessage()` 和 `streamMessage()`，根据 `endpoint.apiMode` 分发到 Chat Completions 或 Responses 实现 |
+| `SSEStreamParser.swift` | 将 `URLSession.AsyncBytes` 逐行解析为 SSE 事件流，支持 `event:` 类型行 |
+| `APIMode.swift` | API 模式枚举：`chatCompletions` / `responses` |
+| `APIEndpointConfig.swift` | 端点配置值对象（含 `apiMode`，从 `APIEndpointRecord` 转换） |
 | `APIRequest.swift` | Chat Completion 请求体构建 |
-| `APIResponse.swift` | 响应模型：完整响应 + 流式 Delta |
+| `APIResponse.swift` | Chat Completion 响应模型：完整响应 + 流式 Delta |
+| `ResponsesAPIRequest.swift` | Responses API 请求体构建（自动提取 system → `instructions`） |
+| `ResponsesAPIResponse.swift` | Responses API 响应模型 + 到 `ChatCompletionResponse` 的转换 |
 | `APIError.swift` | 统一错误枚举 |
 
 ## 3. 核心接口定义
@@ -60,11 +65,27 @@ struct SSEStreamParser {
 }
 
 struct SSEEvent {
-    let data: String    // JSON 字符串，一般为 ChatCompletionChunk
+    let eventType: String?  // Responses API 使用 typed events (如 "response.output_text.delta")
+    let data: String        // JSON 字符串
 }
 ```
 
-### 3.3 请求/响应模型
+### 3.3 API 模式
+
+```swift
+enum APIMode: String, Codable, Sendable, CaseIterable {
+    case chatCompletions    // POST /v1/chat/completions（默认）
+    case responses          // POST /v1/responses
+}
+```
+
+APIClient 根据 `endpoint.apiMode` 在内部分发：
+- `chatCompletions`：现有 Chat Completions 逻辑
+- `responses`：Responses API 适配器（自动从 messages 提取 system → instructions，不支持的参数静默忽略）
+
+上层代码（ChatViewModel、ContextManager）完全不感知 API 模式差异。
+
+### 3.4 请求/响应模型
 
 ```swift
 // --- 请求 ---
@@ -156,7 +177,7 @@ struct StreamDelta {
 }
 ```
 
-### 3.4 APIEndpointConfig
+### 3.5 APIEndpointConfig
 
 ```swift
 struct APIEndpointConfig {
@@ -164,6 +185,7 @@ struct APIEndpointConfig {
     let apiKey: String?
     let modelName: String
     let maxContextTokens: Int
+    let apiMode: APIMode           // 默认 .chatCompletions
 
     init(from record: APIEndpointRecord) throws
 }
@@ -272,16 +294,20 @@ Accept: text/event-stream           // 仅流式请求
 | `Core/Database` | `APIEndpointRecord`（用于 `APIEndpointConfig` 初始化） |
 | 被依赖方 | `Features/Chat/ChatViewModel`、`Core/ContextManager/CompressionStrategy` |
 
-## 实现证据（2026-04-14）
+## 实现证据（2026-04-16）
 
 - 代码位置：
-  - `OpenChat/Core/Networking/APIClient.swift`
-  - `OpenChat/Core/Networking/SSEStreamParser.swift`
-  - `OpenChat/Core/Networking/APIRequest.swift`
-  - `OpenChat/Core/Networking/APIResponse.swift`
-  - `OpenChat/Core/Networking/APIEndpointConfig.swift`
+  - `OpenChat/Core/Networking/APIClient.swift` — 根据 apiMode 分发到 Chat Completions / Responses 实现
+  - `OpenChat/Core/Networking/SSEStreamParser.swift` — 支持 `event:` 类型行
+  - `OpenChat/Core/Networking/APIMode.swift` — API 模式枚举
+  - `OpenChat/Core/Networking/APIRequest.swift` — Chat Completions 请求体
+  - `OpenChat/Core/Networking/APIResponse.swift` — Chat Completions 响应体
+  - `OpenChat/Core/Networking/ResponsesAPIRequest.swift` — Responses API 请求体（system → instructions 提取）
+  - `OpenChat/Core/Networking/ResponsesAPIResponse.swift` — Responses API 响应体 + 转换
+  - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 apiMode 属性
   - `OpenChat/Core/Networking/APIError.swift`
 - 已验证测试：
-  - `OpenChatTests/Core/NetworkingTests/APIClientTests.swift`
-  - `OpenChatTests/Core/NetworkingTests/SSEStreamParserTests.swift`
-- 当前工程已补齐 test target 对 app target 的依赖与 `TEST_HOST/BUNDLE_LOADER` 配置，`APIClient` 与 `SSE` 流式链路可在 `xcodebuild test` 中稳定通过
+  - `OpenChatTests/Core/NetworkingTests/APIClientTests.swift` — Chat Completions 模式测试
+  - `OpenChatTests/Core/NetworkingTests/SSEStreamParserTests.swift` — SSE 解析测试
+  - `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift` — Responses API 请求/响应/流式/参数过滤测试
+- 全量 60 个测试通过（2026-04-16）

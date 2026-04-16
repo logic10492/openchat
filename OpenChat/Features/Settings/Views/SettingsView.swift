@@ -59,6 +59,7 @@ struct SettingsView: View {
                         modelName: AppConstants.defaultModelName,
                         maxContextTokens: AppConstants.defaultMaxContextTokens,
                         isDefault: viewModel.endpoints.isEmpty,
+                        apiMode: APIMode.chatCompletions.rawValue,
                         createdAt: .now,
                         updatedAt: .now
                     )

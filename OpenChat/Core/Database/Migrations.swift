@@ -67,6 +67,11 @@ enum Migrations {
                 )
                 """)
         }
+        migrator.registerMigration("v5_addApiMode") { db in
+            try db.alter(table: "api_endpoint") { t in
+                t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+            }
+        }
         return migrator
     }
 

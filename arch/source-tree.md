@@ -76,11 +76,21 @@ OpenChat/
 │
 ├── Core/
 │   ├── Networking/
-│   │   ├── APIClient.swift                 # OpenAI-compatible HTTP 请求封装
-│   │   ├── SSEStreamParser.swift           # Server-Sent Events 流式解析器
-│   │   ├── APIEndpointConfig.swift         # 端点配置 VO（URL / key / model）
-│   │   ├── APIRequest.swift                # 通用请求构建（ChatCompletion 请求体）
-│   │   ├── APIResponse.swift               # 响应模型（ChatCompletion / StreamDelta）
+│   │   ├── APIClient.swift                 # OpenAI-compatible HTTP 请求封装（根据 apiMode 分发）
+│   │   ├── SSEStreamParser.swift           # Server-Sent Events 流式解析器（支持 typed events）
+│   │   ├── APIMode.swift                   # API 模式枚举（chatCompletions / responses）
+│   │   ├── APIEndpointConfig.swift         # 端点配置 VO（URL / key / model / apiMode）
+│   │   ├── APIRequest.swift                # Chat Completions 请求体构建
+│   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta）
+│   │   ├── ResponsesAPIRequest.swift       # Responses API 请求体构建（system → instructions 提取）
+│   │   ├── ResponsesAPIResponse.swift      # Responses API 响应模型 + 到统一类型的转换
+│   │   ├── ModelParameters.swift           # 模型采样参数（含 API 模式过滤）
+│   │   ├── ChatMessage.swift               # 消息结构体（role + content
+│   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta）
+│   │   ├── ResponsesAPIRequest.swift       # Responses API 请求体构建（system → instructions 提取）
+│   │   ├── ResponsesAPIResponse.swift      # Responses API 响应模型 + 到统一类型的转换
+│   │   ├── ModelParameters.swift           # 模型采样参数（含 API 模式过滤）
+│   │   ├── ChatMessage.swift               # 消息结构体（role + content）
 │   │   └── APIError.swift                  # 统一错误类型
 │   │
 │   ├── PromptEngine/

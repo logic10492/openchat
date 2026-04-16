@@ -7,7 +7,7 @@
 
 | 功能 | 设计文档 | 状态 |
 |---|---|---|
-| API 端点管理（CRUD、测试连接、设置默认） | [api-endpoint.md](api-endpoint.md) | 设计完成 |
+| API 端点管理（CRUD、测试连接、设置默认、API 模式选择、API 模式选择） | [api-endpoint.md](api-endpoint.md) | 设计完成 |
 | 模型参数全局默认值调节 | [model-parameters.md](model-parameters.md) | 设计完成 |
 | 上下文策略全局默认配置 | [context-strategy.md](context-strategy.md) | 设计完成 |
 | 数据管理（导出、导入、清除） | [data-management.md](data-management.md) | 设计完成 |

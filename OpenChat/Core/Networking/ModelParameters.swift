@@ -23,4 +23,20 @@ struct ModelParameters: Codable, Equatable, Sendable {
         self.presencePenalty = presencePenalty
         self.stop = stop
     }
+
+    func forAPIMode(_ mode: APIMode) -> ModelParameters {
+        switch mode {
+        case .chatCompletions:
+            return self
+        case .responses:
+            return ModelParameters(
+                temperature: temperature,
+                topP: topP,
+                maxTokens: maxTokens,
+                frequencyPenalty: 0.0,
+                presencePenalty: 0.0,
+                stop: nil
+            )
+        }
+    }
 }

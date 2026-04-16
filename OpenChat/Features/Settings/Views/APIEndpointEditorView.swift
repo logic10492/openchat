@@ -24,9 +24,32 @@ struct APIEndpointEditorView: View {
                     modelSelectionContent
                 }
 
+                Section(String(localized: "API Mode")) {
+                    Picker(String(localized: "API Mode"), selection: bind(\.apiMode)) {
+                        Text("Chat Completions").tag(APIMode.chatCompletions)
+                        Text("Responses").tag(APIMode.responses)
+                    }
+
+                    if viewModel.apiMode == .responses {
+                        Text(String(localized: "Responses mode ignores frequency penalty, presence penalty and stop sequences."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section {
-                    Stepper(value: bind(\.maxContextTokens), in: 512...2_000_000, step: 512) {
-                        Text("\(String(localized: "Max Context Tokens")): \(viewModel.maxContextTokens)")
+                    HStack {
+                        Text(String(localized: "Max Context Tokens"))
+                        Spacer()
+                        TextField("", text: maxContextTokensBinding)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 120)
+                    }
+                    if viewModel.contextLengthAutoDetected {
+                        Text(String(localized: "Auto-detected from API"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Toggle(String(localized: "Default Endpoint"), isOn: bind(\.isDefault))
                 }
@@ -68,6 +91,9 @@ struct APIEndpointEditorView: View {
             }
             .onChange(of: viewModel.apiKey) {
                 viewModel.scheduleFetchModels()
+            }
+            .onChange(of: viewModel.modelName) {
+                viewModel.applyContextLength(for: viewModel.modelName)
             }
             .task {
                 await viewModel.fetchAvailableModels()
@@ -122,6 +148,19 @@ struct APIEndpointEditorView: View {
                 .font(.footnote)
             }
         }
+    }
+
+    private var maxContextTokensBinding: Binding<String> {
+        Binding(
+            get: { String(viewModel.maxContextTokens) },
+            set: { newValue in
+                let filtered = newValue.filter(\.isWholeNumber)
+                if let value = Int(filtered) {
+                    viewModel.maxContextTokens = min(max(value, 1), 2_000_000)
+                    viewModel.contextLengthAutoDetected = false
+                }
+            }
+        )
     }
 
     private func bind<Value>(_ keyPath: ReferenceWritableKeyPath<APIEndpointEditorViewModel, Value>) -> Binding<Value> {

@@ -1,6 +1,7 @@
 import Foundation
 
 struct SSEEvent: Sendable, Equatable {
+    let eventType: String?
     let data: String
 }
 
@@ -40,6 +41,7 @@ private final class Pump<Iterator: AsyncIteratorProtocol>: @unchecked Sendable w
     private var iterator: Iterator
     private var currentLine: [UInt8] = []
     private var currentDataLines: [String] = []
+    private var currentEventType: String?
     private var isFinished = false
 
     init(iterator: Iterator) {
@@ -105,6 +107,12 @@ private final class Pump<Iterator: AsyncIteratorProtocol>: @unchecked Sendable w
             return .finish
         }
 
+        if line.hasPrefix("event:") {
+            let value = line.dropFirst("event:".count).trimmingCharacters(in: .whitespaces)
+            currentEventType = String(value)
+            return .none
+        }
+
         if line.hasPrefix("data:") {
             let value = line.dropFirst("data:".count).trimmingCharacters(in: .whitespaces)
             currentDataLines.append(String(value))
@@ -122,11 +130,14 @@ private final class Pump<Iterator: AsyncIteratorProtocol>: @unchecked Sendable w
 
     private func flushCurrentEvent() -> SSEEvent? {
         guard !currentDataLines.isEmpty else {
+            currentEventType = nil
             return nil
         }
+        let eventType = currentEventType
         defer {
             currentDataLines.removeAll(keepingCapacity: true)
+            currentEventType = nil
         }
-        return SSEEvent(data: currentDataLines.joined(separator: "\n"))
+        return SSEEvent(eventType: eventType, data: currentDataLines.joined(separator: "\n"))
     }
 }

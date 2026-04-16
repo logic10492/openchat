@@ -12,13 +12,15 @@ enum TestHelpers {
         baseURL: String = "http://localhost:8080/v1",
         apiKey: String? = "test-key",
         modelName: String = "gpt-4o-mini",
-        maxContextTokens: Int = 4096
+        maxContextTokens: Int = 4096,
+        apiMode: APIMode = .chatCompletions
     ) -> APIEndpointConfig {
         APIEndpointConfig(
             baseURL: URL(string: baseURL)!,
             apiKey: apiKey,
             modelName: modelName,
-            maxContextTokens: maxContextTokens
+            maxContextTokens: maxContextTokens,
+            apiMode: apiMode
         )
     }
 

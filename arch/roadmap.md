@@ -4,21 +4,29 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-04-14）
+## 当前落地状态（2026-04-16）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
-  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' build`
-  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' test`
-- 当前通过的核心测试：
+  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test`
+- 当前通过的核心测试（60 个）：
   - `MigrationTests`
-  - `SSEStreamParserTests`
-  - `APIClientTests`
+  - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
+  - `APIClientTests` + `APIClientResponsesModeTests`
+  - `ResponsesAPIRequestTests` + `ResponsesAPIResponseTests`
+  - `ModelParametersAPIModeTests`
   - `PromptAssemblerTests`
   - `KeywordMatcherTests`
   - `TokenCounterTests`
   - `TruncationStrategyTests`
   - `CompressionStrategyTests`
+  - `DatabaseManager+MemoryTests`
+  - `ModelObject
+  - `TruncationStrategyTests`
+  - `CompressionStrategyTests`
+  - `DatabaseManager+MemoryTests`
+  - `ModelObjectTests`
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
   - App 装配：`OpenChat/OpenChatApp.swift`、`OpenChat/App/DependencyContainer.swift`
@@ -40,11 +48,15 @@
 2. 引入 GRDB.swift（Swift Package Manager）
 3. 实现 `DatabaseManager`：初始化 + v1 迁移（全部 6 张表）
 4. 实现所有 GRDB Record 类型
-5. 实现 `APIClient`：
+   - `APIMode` 枚举：Chat Completions / Responses API 双模式支持
+   - 适配器模式：根据 `endpoint.apiMode` 分发请求，上层透明
+6. 实现 `APIEndpointConfig`、`APIRequest`、`APIResponse`、`ResponsesAPIRequest`、`Responses
    - `sendMessage()` 非流式请求
    - `streamMessage()` 流式请求
    - `SSEStreamParser` SSE 解析
-6. 实现 `APIEndpointConfig`、`APIRequest`、`APIResponse`、`APIError`
+   - `APIMode` 枚举：Chat Completions / Responses API 双模式支持
+   - 适配器模式：根据 `endpoint.apiMode` 分发请求，上层透明
+6. 实现 `APIEndpointConfig`、`APIRequest`、`APIResponse`、`ResponsesAPIRequest`、`ResponsesAPIResponse`、`APIError`
 7. 实现最简 `ChatView` + `ChatViewModel`：
    - 硬编码 API 端点
    - 消息列表展示

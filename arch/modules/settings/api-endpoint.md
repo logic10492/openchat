@@ -7,6 +7,8 @@
 - API 端点的增删改查
 - 自动拉取模型端点可用的模型 提供列表选项，若拉取失败则提示，并要求用户自己填入模型名称
 - 设置默认端点
+- 选择 API 模式（Chat Completions / Responses API）
+- 选择 API 模式（Chat Completions / Responses API）
 - 测试连接可用性
 
 ## 2. 视图设计
@@ -51,6 +53,18 @@ Section: API 端点
 │                                         │
 │  最大上下文 Token:                       │
 │  [4096_____]                            │
+│  Section: API 模式                       │
+│  ────────────────────────────────────   │
+│  API 模式: [Picker: Chat Completions ▼] │
+│  ℹ️ Responses 模式下 frequency_penalty、 │
+│     presence_penalty、stop 参数将被忽略  │
+│                                         │
+│                                         │
+│  Section: API 模式                       │
+│  ────────────────────────────────────   │
+│  API 模式: [Picker: Chat Completions ▼] │
+│  ℹ️ Responses 模式下 frequency_penalty、 │
+│     presence_penalty、stop 参数将被忽略  │
 │                                         │
 │  设为默认: [开关]                       │
 │                                         │
@@ -65,7 +79,8 @@ Section: API 端点
 
 ```swift
 @Observable
-final class APIEndpointEditorViewModel {
+final class APIEndpointEditorVi
+    var apiMode: APIMode = .chatCompletionsewModel {
     // 表单字段
     var name: String = ""
     var baseURL: String = ""
@@ -73,6 +88,7 @@ final class APIEndpointEditorViewModel {
     var modelName: String = ""
     var maxContextTokens: Int = 4096
     var isDefault: Bool = false
+    var apiMode: APIMode = .chatCompletions
 
     // 测试状态
     private(set) var testResult: TestResult? = nil
@@ -112,15 +128,7 @@ final class APIEndpointEditorViewModel {
 
 ```swift
 // APIClient 新增方法
-func fetchModels(baseURL: URL, apiKey: String?) async throws -> [ModelObject]
-// GET {baseURL}/models，返回按 id 字母排序的模型列表
-```
-
-> **实现证据**: `APIClient.fetchModels()`, `ModelsListResponse`, `ModelObject` in `APIResponse.swift`
-
-## 5. 连接测试
-
-测试连接时发送一个简单的 Chat Completion 请求：
+func fetchM请求（根据所选 API 模式自动发往 Chat Completions 或 Responses 端点）：
 
 ```swift
 func testConnection() async {
@@ -130,7 +138,17 @@ func testConnection() async {
             baseURL: URL(string: baseURL)!,
             apiKey: apiKey.isEmpty ? nil : apiKey,
             modelName: modelName,
-            maxContextTokens: maxContextTokens
+            maxContextTokens: maxContextTokens,
+            apiMode: apiMode
+func testConnection() async {
+    testResult = .testing
+    do {
+        let config = APIEndpointConfig(
+            baseURL: URL(string: baseURL)!,
+            apiKey: apiKey.isEmpty ? nil : apiKey,
+            modelName: modelName,
+            maxContextTokens: maxContextTokens,
+            apiMode: apiMode
         )
         let response = try await apiClient.sendMessage(
             messages: [ChatMessage(role: "user", content: "Hi")],
@@ -149,3 +167,10 @@ func testConnection() async {
 - API Key 存储在 SQLite 数据库的 `api_endpoint.apiKey` 字段
 - iOS App Sandbox 提供文件级保护
 - 未来可考虑迁移到 Keychain（当前版本暂不实现，因为本地模型场景下 API Key 通常为空或无需保密）
+
+## 实现证据（2026-04-16）
+
+- `APIEndpointEditorView.swift` — API Mode Picker（Chat Completions / Responses），Responses 模式下显示参数忽略提示
+- `APIEndpointEditorViewModel.swift` — `apiMode: APIMode` 属性，save 时持久化到 `APIEndpointRecord.apiMode`
+- `APIEndpointRecord.swift` — `apiMode: String` 字段 + `apiModeValue: APIMode` 计算属性
+- 数据库迁移 `v5_addApiMode` — 为 `api_endpoint` 表追加 `apiMode` 列（默认 `chatCompletions`）

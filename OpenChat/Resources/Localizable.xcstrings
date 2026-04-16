@@ -212,6 +212,9 @@
         }
       }
     },
+    "Chat Completions" : {
+
+    },
     "Chat Settings" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -871,6 +874,9 @@
           }
         }
       }
+    },
+    "Responses" : {
+
     },
     "Restore Defaults" : {
       "extractionState" : "stale",

@@ -19,10 +19,13 @@ final class APIEndpointEditorViewModel {
     var modelName = AppConstants.defaultModelName
     var maxContextTokens = AppConstants.defaultMaxContextTokens
     var isDefault = false
+    var apiMode: APIMode = .chatCompletions
     private(set) var testResult: TestResult?
-    private(set) var availableModels: [String] = []
+    var fetchedModels: [ModelObject] = []
+    var availableModels: [String] { fetchedModels.map(\.id) }
     private(set) var isFetchingModels = false
     private(set) var modelFetchError: String?
+    var contextLengthAutoDetected = false
     var isCustomModelInput = false
     let editingEndpoint: APIEndpointRecord?
     private var fetchModelsTask: Task<Void, Never>?
@@ -43,6 +46,7 @@ final class APIEndpointEditorViewModel {
             modelName = editingEndpoint.modelName
             maxContextTokens = editingEndpoint.maxContextTokens
             isDefault = editingEndpoint.isDefault
+            apiMode = editingEndpoint.apiModeValue
         }
     }
 
@@ -62,6 +66,7 @@ final class APIEndpointEditorViewModel {
             modelName: modelName.trimmingCharacters(in: .whitespacesAndNewlines),
             maxContextTokens: maxContextTokens,
             isDefault: isDefault,
+            apiMode: apiMode.rawValue,
             createdAt: editingEndpoint?.createdAt ?? now,
             updatedAt: now
         )
@@ -81,7 +86,8 @@ final class APIEndpointEditorViewModel {
                 baseURL: url,
                 apiKey: apiKey.nilIfBlank,
                 modelName: modelName,
-                maxContextTokens: maxContextTokens
+                maxContextTokens: maxContextTokens,
+                apiMode: apiMode
             )
 
             _ = try await apiClient.sendMessage(
@@ -104,9 +110,19 @@ final class APIEndpointEditorViewModel {
         }
     }
 
+    func applyContextLength(for modelID: String) {
+        guard let model = fetchedModels.first(where: { $0.id == modelID }),
+              let length = model.contextLength else {
+            contextLengthAutoDetected = false
+            return
+        }
+        maxContextTokens = length
+        contextLengthAutoDetected = true
+    }
+
     func fetchAvailableModels() async {
         guard let url = URL(string: baseURL), !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            availableModels = []
+            fetchedModels = []
             modelFetchError = nil
             return
         }
@@ -116,14 +132,15 @@ final class APIEndpointEditorViewModel {
 
         do {
             let models = try await apiClient.fetchModels(baseURL: url, apiKey: apiKey.nilIfBlank)
-            availableModels = models.map(\.id)
-            if !availableModels.isEmpty && modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                modelName = availableModels[0]
+            fetchedModels = models
+            if !fetchedModels.isEmpty && modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                modelName = fetchedModels[0].id
             }
+            applyContextLength(for: modelName)
             isCustomModelInput = false
         } catch {
             guard !Task.isCancelled else { return }
-            availableModels = []
+            fetchedModels = []
             modelFetchError = error.localizedDescription
         }
 
