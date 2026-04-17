@@ -149,6 +149,8 @@ app_target.build_configurations.each do |config|
   config.build_settings['MARKETING_VERSION'] = '1.0.0'
   config.build_settings['INFOPLIST_KEY_UIApplicationSceneManifest_Generation'] = 'YES'
   config.build_settings['INFOPLIST_KEY_UILaunchScreen_Generation'] = 'YES'
+  config.build_settings['INFOPLIST_KEY_UISupportedInterfaceOrientations'] = 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
+  config.build_settings['INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad'] = 'UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
   config.build_settings['INFOPLIST_KEY_CFBundleDisplayName'] = PROJECT_NAME
   config.build_settings['INFOPLIST_KEY_CFBundleDevelopmentRegion'] = 'en'
   config.build_settings['INFOPLIST_KEY_CFBundleLocalizations'] = 'en zh-Hans'

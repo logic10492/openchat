@@ -4,6 +4,16 @@
     "%@" : {
 
     },
+    "%@ tokens · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ tokens · %2$@"
+          }
+        }
+      }
+    },
     "%@: %@" : {
       "localizations" : {
         "zh-Hans" : {

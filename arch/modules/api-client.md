@@ -187,7 +187,8 @@ struct APIEndpointConfig {
     let maxContextTokens: Int
     let apiMode: APIMode           // 默认 .chatCompletions
 
-    init(from record: APIEndpointRecord) throws
+    init(baseURL: URL, apiKey: String?, modelName: String, maxContextTokens: Int, apiMode: APIMode = .chatCompletions)
+    init(from endpoint: APIEndpointRecord, model: EndpointModelRecord) throws
 }
 ```
 
@@ -294,7 +295,7 @@ Accept: text/event-stream           // 仅流式请求
 | `Core/Database` | `APIEndpointRecord`（用于 `APIEndpointConfig` 初始化） |
 | 被依赖方 | `Features/Chat/ChatViewModel`、`Core/ContextManager/CompressionStrategy` |
 
-## 实现证据（2026-04-16）
+## 实现证据（2026-04-18）
 
 - 代码位置：
   - `OpenChat/Core/Networking/APIClient.swift` — 根据 apiMode 分发到 Chat Completions / Responses 实现
@@ -304,10 +305,11 @@ Accept: text/event-stream           // 仅流式请求
   - `OpenChat/Core/Networking/APIResponse.swift` — Chat Completions 响应体
   - `OpenChat/Core/Networking/ResponsesAPIRequest.swift` — Responses API 请求体（system → instructions 提取）
   - `OpenChat/Core/Networking/ResponsesAPIResponse.swift` — Responses API 响应体 + 转换
-  - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 apiMode 属性
+  - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 `init(from:model:)` 从端点+模型记录构造
   - `OpenChat/Core/Networking/APIError.swift`
 - 已验证测试：
   - `OpenChatTests/Core/NetworkingTests/APIClientTests.swift` — Chat Completions 模式测试
   - `OpenChatTests/Core/NetworkingTests/SSEStreamParserTests.swift` — SSE 解析测试
   - `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift` — Responses API 请求/响应/流式/参数过滤测试
-- 全量 60 个测试通过（2026-04-16）
+  - `OpenChatTests/Core/NetworkingTests/ModelObjectTests.swift` — ModelObject 解码 + EndpointModelRecord 测试
+- 全量 114 个测试通过（2026-04-18）
