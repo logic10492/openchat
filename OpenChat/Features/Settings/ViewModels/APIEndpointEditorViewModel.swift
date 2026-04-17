@@ -13,22 +13,27 @@ final class APIEndpointEditorViewModel {
     private let databaseManager: DatabaseManager
     private let apiClient: APIClient
 
+    // MARK: - Endpoint fields
     var name = ""
     var baseURL = ""
     var apiKey = ""
-    var modelName = AppConstants.defaultModelName
-    var maxContextTokens = AppConstants.defaultMaxContextTokens
     var isDefault = false
-    var apiMode: APIMode = .chatCompletions
     private(set) var testResult: TestResult?
-    var fetchedModels: [ModelObject] = []
-    var availableModels: [String] { fetchedModels.map(\.id) }
+
+    let editingEndpoint: APIEndpointRecord?
+
+    // MARK: - Model list management
+    var models: [EndpointModelRecord] = []
+    var fetchedAPIModels: [ModelObject] = []
     private(set) var isFetchingModels = false
     private(set) var modelFetchError: String?
-    var contextLengthAutoDetected = false
-    var isCustomModelInput = false
-    let editingEndpoint: APIEndpointRecord?
     private var fetchModelsTask: Task<Void, Never>?
+
+    // MARK: - Add model sheet state
+    var isShowingAddModel = false
+    var newModelId = ""
+    var newModelMaxContext = AppConstants.defaultMaxContextTokens
+    var newModelApiMode: APIMode = .chatCompletions
 
     init(
         databaseManager: DatabaseManager,
@@ -43,18 +48,20 @@ final class APIEndpointEditorViewModel {
             name = editingEndpoint.name
             baseURL = editingEndpoint.baseURL
             apiKey = editingEndpoint.apiKey ?? ""
-            modelName = editingEndpoint.modelName
-            maxContextTokens = editingEndpoint.maxContextTokens
             isDefault = editingEndpoint.isDefault
-            apiMode = editingEndpoint.apiModeValue
         }
     }
 
     var isValid: Bool {
         name.nilIfBlank != nil &&
-            URL(string: baseURL) != nil &&
-            modelName.nilIfBlank != nil
+            URL(string: baseURL) != nil
     }
+
+    var isAddModelValid: Bool {
+        newModelId.nilIfBlank != nil
+    }
+
+    // MARK: - Endpoint persistence
 
     func save() async throws -> APIEndpointRecord {
         let now = Date()
@@ -63,16 +70,22 @@ final class APIEndpointEditorViewModel {
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             baseURL: baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
             apiKey: apiKey.nilIfBlank,
-            modelName: modelName.trimmingCharacters(in: .whitespacesAndNewlines),
-            maxContextTokens: maxContextTokens,
             isDefault: isDefault,
-            apiMode: apiMode.rawValue,
             createdAt: editingEndpoint?.createdAt ?? now,
             updatedAt: now
         )
         try await databaseManager.saveEndpoint(record)
+
+        // Ensure the endpoint has at least one model
+        if models.isEmpty {
+            try await databaseManager.ensureDefaultModel(endpointId: record.id)
+            models = try await databaseManager.fetchEndpointModels(endpointId: record.id)
+        }
+
         return record
     }
+
+    // MARK: - Connection test
 
     func testConnection() async {
         testResult = .testing
@@ -82,11 +95,17 @@ final class APIEndpointEditorViewModel {
                 return
             }
 
+            // Use default model for test, or a placeholder
+            let defaultModel = models.first(where: { $0.isDefault }) ?? models.first
+            let modelName = defaultModel?.modelId ?? "default"
+            let maxCtx = defaultModel?.maxContextTokens ?? AppConstants.defaultMaxContextTokens
+            let apiMode = defaultModel?.apiModeValue ?? .chatCompletions
+
             let config = APIEndpointConfig(
                 baseURL: url,
                 apiKey: apiKey.nilIfBlank,
                 modelName: modelName,
-                maxContextTokens: maxContextTokens,
+                maxContextTokens: maxCtx,
                 apiMode: apiMode
             )
 
@@ -101,28 +120,31 @@ final class APIEndpointEditorViewModel {
         }
     }
 
+    // MARK: - Model list loading
+
+    func loadModels() async {
+        guard let endpointId = editingEndpoint?.id else { return }
+        do {
+            models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+        } catch {
+            models = []
+        }
+    }
+
+    // MARK: - Fetch models from API
+
     func scheduleFetchModels() {
         fetchModelsTask?.cancel()
         fetchModelsTask = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            await fetchAvailableModels()
+            await fetchAndMergeModels()
         }
     }
 
-    func applyContextLength(for modelID: String) {
-        guard let model = fetchedModels.first(where: { $0.id == modelID }),
-              let length = model.contextLength else {
-            contextLengthAutoDetected = false
-            return
-        }
-        maxContextTokens = length
-        contextLengthAutoDetected = true
-    }
-
-    func fetchAvailableModels() async {
+    func fetchAndMergeModels() async {
         guard let url = URL(string: baseURL), !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            fetchedModels = []
+            fetchedAPIModels = []
             modelFetchError = nil
             return
         }
@@ -131,19 +153,87 @@ final class APIEndpointEditorViewModel {
         modelFetchError = nil
 
         do {
-            let models = try await apiClient.fetchModels(baseURL: url, apiKey: apiKey.nilIfBlank)
-            fetchedModels = models
-            if !fetchedModels.isEmpty && modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                modelName = fetchedModels[0].id
+            let fetched = try await apiClient.fetchModels(baseURL: url, apiKey: apiKey.nilIfBlank)
+            fetchedAPIModels = fetched
+
+            // If endpoint is already saved, persist models to DB
+            if let endpointId = editingEndpoint?.id {
+                try await databaseManager.upsertFetchedModels(endpointId: endpointId, models: fetched)
+                models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+
+                // If still empty after fetch, insert "default"
+                if models.isEmpty {
+                    try await databaseManager.ensureDefaultModel(endpointId: endpointId)
+                    models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+                }
             }
-            applyContextLength(for: modelName)
-            isCustomModelInput = false
         } catch {
             guard !Task.isCancelled else { return }
-            fetchedModels = []
+            fetchedAPIModels = []
             modelFetchError = error.localizedDescription
+
+            // On fetch failure, ensure there's at least a "default" model
+            if let endpointId = editingEndpoint?.id, models.isEmpty {
+                try? await databaseManager.ensureDefaultModel(endpointId: endpointId)
+                models = (try? await databaseManager.fetchEndpointModels(endpointId: endpointId)) ?? []
+            }
         }
 
         isFetchingModels = false
+    }
+
+    // MARK: - Model CRUD
+
+    func addManualModel() async {
+        guard let endpointId = editingEndpoint?.id, isAddModelValid else { return }
+
+        let record = EndpointModelRecord(
+            id: UUID().uuidString,
+            endpointId: endpointId,
+            modelId: newModelId.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxContextTokens: newModelMaxContext,
+            apiMode: newModelApiMode.rawValue,
+            isDefault: models.isEmpty,
+            isManual: true,
+            createdAt: Date()
+        )
+
+        do {
+            try await databaseManager.saveEndpointModel(record)
+            models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+        } catch {
+            // Duplicate model — silently ignore
+        }
+
+        // Reset add-model form
+        newModelId = ""
+        newModelMaxContext = AppConstants.defaultMaxContextTokens
+        newModelApiMode = .chatCompletions
+        isShowingAddModel = false
+    }
+
+    func deleteModel(_ id: String) async {
+        guard let endpointId = editingEndpoint?.id else { return }
+        do {
+            try await databaseManager.deleteEndpointModel(id: id)
+            models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+            // Ensure at least one model remains
+            if models.isEmpty {
+                try await databaseManager.ensureDefaultModel(endpointId: endpointId)
+                models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    func setDefaultModel(_ id: String) async {
+        guard let endpointId = editingEndpoint?.id else { return }
+        do {
+            try await databaseManager.setDefaultEndpointModel(id: id, endpointId: endpointId)
+            models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+        } catch {
+            // ignore
+        }
     }
 }

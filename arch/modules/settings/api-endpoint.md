@@ -4,11 +4,12 @@
 
 ## 1. 功能描述
 
-- API 端点的增删改查
-- 自动拉取模型端点可用的模型 提供列表选项，若拉取失败则提示，并要求用户自己填入模型名称
-- 设置默认端点
-- 选择 API 模式（Chat Completions / Responses API）
-- 选择 API 模式（Chat Completions / Responses API）
+- API 端点的增删改查（端点 = URL + API Key 组合）
+- 端点下模型列表管理：自动拉取 + 手动添加
+- 每个模型独立配置 maxContextTokens 和 API 模式
+- 拉取失败或列表为空时自动插入 "default" 占位模型
+- 设置默认端点和默认模型
+- 对话中动态选择模型
 - 测试连接可用性
 
 ## 2. 视图设计
@@ -168,9 +169,14 @@ func testConnection() async {
 - iOS App Sandbox 提供文件级保护
 - 未来可考虑迁移到 Keychain（当前版本暂不实现，因为本地模型场景下 API Key 通常为空或无需保密）
 
-## 实现证据（2026-04-16）
+## 实现证据（2026-04-18）
 
-- `APIEndpointEditorView.swift` — API Mode Picker（Chat Completions / Responses），Responses 模式下显示参数忽略提示
-- `APIEndpointEditorViewModel.swift` — `apiMode: APIMode` 属性，save 时持久化到 `APIEndpointRecord.apiMode`
-- `APIEndpointRecord.swift` — `apiMode: String` 字段 + `apiModeValue: APIMode` 计算属性
-- 数据库迁移 `v5_addApiMode` — 为 `api_endpoint` 表追加 `apiMode` 列（默认 `chatCompletions`）
+- `APIEndpointEditorView.swift` — 端点基本信息 + 可用模型列表 Section（刷新/手动添加/设为默认/滑动删除）
+- `APIEndpointEditorViewModel.swift` — 端点字段（name, baseURL, apiKey, isDefault）+ 模型列表管理（fetchAndMergeModels, addManualModel, deleteModel, setDefaultModel）
+- `APIEndpointRecord.swift` — 仅含 name/baseURL/apiKey/isDefault（已移除 modelName/maxContextTokens/apiMode）
+- `EndpointModelRecord.swift` — 端点模型记录（modelId, maxContextTokens, apiMode, isDefault, isManual）
+- `DatabaseManager+EndpointModels.swift` — 模型 CRUD + upsertFetchedModels + ensureDefaultModel
+- 数据库迁移 `v8_endpoint_model_decoupling` — 创建 endpoint_model 表，迁移数据，conversation 新增 modelName 列
+- `ChatSettingsSheet.swift` — 对话设置中新增 Model Picker（端点切换时刷新模型列表）
+- `ChatViewModel.swift` — selectedModelName 状态 + loadModelsForEndpoint + 保存 conversation.modelName
+- 全量 114 个测试通过（2026-04-18）

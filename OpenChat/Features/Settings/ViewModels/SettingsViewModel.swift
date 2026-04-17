@@ -17,6 +17,7 @@ final class SettingsViewModel {
     var defaultPresencePenalty = 0.0
     var defaultContextStrategy = ContextStrategy.truncation
     var compressionEndpointId: String?
+    var showDetailedStats = false
 
     init(
         databaseManager: DatabaseManager,
@@ -76,6 +77,7 @@ final class SettingsViewModel {
         defaults.set(defaultPresencePenalty, forKey: "default_presence_penalty")
         defaults.set(defaultContextStrategy.rawValue, forKey: "default_context_strategy")
         defaults.set(compressionEndpointId, forKey: "compression_endpoint_id")
+        defaults.set(showDetailedStats, forKey: "show_detailed_stats")
     }
 
     func exportAllData() async throws -> URL {
@@ -127,5 +129,6 @@ final class SettingsViewModel {
             defaultContextStrategy = strategy
         }
         compressionEndpointId = defaults.string(forKey: "compression_endpoint_id")
+        showDetailedStats = defaults.bool(forKey: "show_detailed_stats")
     }
 }

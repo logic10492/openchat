@@ -20,37 +20,7 @@ struct APIEndpointEditorView: View {
                     TextField(String(localized: "API Key"), text: bind(\.apiKey))
                 }
 
-                Section(String(localized: "Model")) {
-                    modelSelectionContent
-                }
-
-                Section(String(localized: "API Mode")) {
-                    Picker(String(localized: "API Mode"), selection: bind(\.apiMode)) {
-                        Text("Chat Completions").tag(APIMode.chatCompletions)
-                        Text("Responses").tag(APIMode.responses)
-                    }
-
-                    if viewModel.apiMode == .responses {
-                        Text(String(localized: "Responses mode ignores frequency penalty, presence penalty and stop sequences."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
                 Section {
-                    HStack {
-                        Text(String(localized: "Max Context Tokens"))
-                        Spacer()
-                        TextField("", text: maxContextTokensBinding)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 120)
-                    }
-                    if viewModel.contextLengthAutoDetected {
-                        Text(String(localized: "Auto-detected from API"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                     Toggle(String(localized: "Default Endpoint"), isOn: bind(\.isDefault))
                 }
 
@@ -70,6 +40,8 @@ struct APIEndpointEditorView: View {
                         }
                     }
                 }
+
+                modelsSection
             }
             .navigationTitle(viewModel.editingEndpoint == nil ? String(localized: "New Endpoint") : String(localized: "Edit Endpoint"))
             .toolbar {
@@ -79,7 +51,7 @@ struct APIEndpointEditorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
                         Task {
-                            try? await viewModel.save()
+                            _ = try? await viewModel.save()
                             dismiss()
                         }
                     }
@@ -92,39 +64,75 @@ struct APIEndpointEditorView: View {
             .onChange(of: viewModel.apiKey) {
                 viewModel.scheduleFetchModels()
             }
-            .onChange(of: viewModel.modelName) {
-                viewModel.applyContextLength(for: viewModel.modelName)
-            }
             .task {
-                await viewModel.fetchAvailableModels()
+                await viewModel.loadModels()
+                await viewModel.fetchAndMergeModels()
+            }
+            .sheet(isPresented: bind(\.isShowingAddModel)) {
+                addModelSheet
             }
         }
     }
 
+    // MARK: - Models Section
+
     @ViewBuilder
-    private var modelSelectionContent: some View {
-        if viewModel.isFetchingModels {
-            HStack {
-                Text(String(localized: "Loading models…"))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                ProgressView()
-            }
-        } else if !viewModel.availableModels.isEmpty && !viewModel.isCustomModelInput {
-            Picker(String(localized: "Model"), selection: bind(\.modelName)) {
-                ForEach(viewModel.availableModels, id: \.self) { model in
-                    Text(model).tag(model)
+    private var modelsSection: some View {
+        Section(String(localized: "Available Models")) {
+            if viewModel.isFetchingModels && viewModel.models.isEmpty {
+                HStack {
+                    Text(String(localized: "Loading models…"))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    ProgressView()
                 }
             }
 
-            Button(String(localized: "Enter custom model name")) {
-                viewModel.isCustomModelInput = true
+            ForEach(viewModel.models) { model in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(model.modelId)
+                                .font(.subheadline)
+                            if model.isDefault {
+                                Text(String(localized: "Default"))
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.blue.opacity(0.15), in: Capsule())
+                            }
+                            if model.isManual {
+                                Text(String(localized: "Manual"))
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.orange.opacity(0.15), in: Capsule())
+                            }
+                        }
+                        Text("\(model.maxContextTokens) tokens · \(model.apiModeValue == .responses ? "Responses" : "Chat Completions")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .contextMenu {
+                    if !model.isDefault {
+                        Button(String(localized: "Set Default")) {
+                            Task { await viewModel.setDefaultModel(model.id) }
+                        }
+                    }
+                    Button(String(localized: "Delete"), role: .destructive) {
+                        Task { await viewModel.deleteModel(model.id) }
+                    }
+                }
             }
-            .font(.footnote)
-        } else {
-            TextField(String(localized: "Model Name"), text: bind(\.modelName))
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+            .onDelete { indexSet in
+                Task {
+                    for index in indexSet {
+                        await viewModel.deleteModel(viewModel.models[index].id)
+                    }
+                }
+            }
 
             if let errorMessage = viewModel.modelFetchError {
                 Text(errorMessage)
@@ -133,31 +141,75 @@ struct APIEndpointEditorView: View {
             }
 
             HStack {
-                if !viewModel.availableModels.isEmpty {
-                    Button(String(localized: "Back to model list")) {
-                        viewModel.isCustomModelInput = false
-                    }
-                    .font(.footnote)
+                Button(String(localized: "Add Model")) {
+                    viewModel.isShowingAddModel = true
                 }
 
                 Spacer()
 
-                Button(String(localized: "Retry")) {
-                    Task { await viewModel.fetchAvailableModels() }
+                if viewModel.isFetchingModels {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button(String(localized: "Refresh")) {
+                        Task { await viewModel.fetchAndMergeModels() }
+                    }
+                    .font(.footnote)
                 }
-                .font(.footnote)
             }
         }
     }
 
-    private var maxContextTokensBinding: Binding<String> {
+    // MARK: - Add Model Sheet
+
+    private var addModelSheet: some View {
+        NavigationStack {
+            Form {
+                TextField(String(localized: "Model Name"), text: bind(\.newModelId))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+
+                HStack {
+                    Text(String(localized: "Max Context Tokens"))
+                    Spacer()
+                    TextField("", text: newModelMaxContextBinding)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 120)
+                }
+
+                Picker(String(localized: "API Mode"), selection: bind(\.newModelApiMode)) {
+                    Text("Chat Completions").tag(APIMode.chatCompletions)
+                    Text("Responses").tag(APIMode.responses)
+                }
+            }
+            .navigationTitle(String(localized: "Add Model"))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(String(localized: "Cancel")) {
+                        viewModel.isShowingAddModel = false
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(String(localized: "Add")) {
+                        Task { await viewModel.addManualModel() }
+                    }
+                    .disabled(!viewModel.isAddModelValid)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - Helpers
+
+    private var newModelMaxContextBinding: Binding<String> {
         Binding(
-            get: { String(viewModel.maxContextTokens) },
+            get: { String(viewModel.newModelMaxContext) },
             set: { newValue in
                 let filtered = newValue.filter(\.isWholeNumber)
                 if let value = Int(filtered) {
-                    viewModel.maxContextTokens = min(max(value, 1), 2_000_000)
-                    viewModel.contextLengthAutoDetected = false
+                    viewModel.newModelMaxContext = min(max(value, 1), 2_000_000)
                 }
             }
         )

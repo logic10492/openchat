@@ -56,10 +56,7 @@ struct SettingsView: View {
                         name: "",
                         baseURL: "",
                         apiKey: nil,
-                        modelName: AppConstants.defaultModelName,
-                        maxContextTokens: AppConstants.defaultMaxContextTokens,
                         isDefault: viewModel.endpoints.isEmpty,
-                        apiMode: APIMode.chatCompletions.rawValue,
                         createdAt: .now,
                         updatedAt: .now
                     )
@@ -68,6 +65,10 @@ struct SettingsView: View {
 
             Section(String(localized: "Model Defaults")) {
                 ModelParametersView(viewModel: viewModel)
+            }
+
+            Section(String(localized: "Display")) {
+                Toggle(String(localized: "Detailed Token Stats"), isOn: statsBinding)
             }
 
             Section(String(localized: "Data")) {
@@ -93,6 +94,16 @@ struct SettingsView: View {
         Task {
             await viewModel.loadEndpoints()
         }
+    }
+
+    private var statsBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.showDetailedStats },
+            set: {
+                viewModel.showDetailedStats = $0
+                viewModel.persistDefaults()
+            }
+        )
     }
 }
 
