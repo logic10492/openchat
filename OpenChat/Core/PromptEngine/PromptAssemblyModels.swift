@@ -19,6 +19,7 @@ struct TokenUsageReport: Sendable {
     let systemPrompt: Int
     let characterDescription: Int
     let scenario: Int
+    let slowPlotDirective: Int
     let timeContext: Int
     let worldBookEntries: Int
     let memories: Int

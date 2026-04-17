@@ -18,7 +18,7 @@ struct PromptAssemblerTests {
             worldBookEntries: [afterEntry, beforeEntry],
             recentMessages: [TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "Old reply", sortOrder: 1)],
             currentInput: "dragon",
-            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 1000)
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
         )
 
         #expect(preview.messagesBeforeHistory.count >= 5)
@@ -26,6 +26,7 @@ struct PromptAssemblerTests {
         #expect(preview.messagesBeforeHistory[1].content.contains("After system note."))
         #expect(preview.messagesBeforeHistory[2].content.contains("Character:"))
         #expect(preview.messagesBeforeHistory[3].content.localizedCaseInsensitiveContains("tavern"))
+        #expect(preview.messagesBeforeHistory[4].content.contains("场景维持者"))
         #expect(preview.messagesBeforeHistory.contains(where: { $0.content.contains("Before history note.") }))
         #expect(preview.triggeredEntries.count == 2)
     }
@@ -115,5 +116,79 @@ struct PromptAssemblerTests {
         )
         let content = PromptAssembler.makeMemoryMessageContent(entry)
         #expect(content == "[Memory — event]\nThe hero defeated the dragon.")
+    }
+
+    @Test func test_preview_includes_slow_plot_directive_when_enabled() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: true)
+        let card = TestHelpers.makeCharacterCard()
+
+        let preview = PromptAssembler.preview(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
+        )
+
+        let slowPlotIndex = preview.messagesBeforeHistory.firstIndex { $0.content.contains("场景维持者") }
+        let scenarioIndex = preview.messagesBeforeHistory.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") }
+        let timeIndex = preview.messagesBeforeHistory.firstIndex { $0.content.contains("[Current Time:") }
+
+        #expect(slowPlotIndex != nil)
+        if let si = scenarioIndex, let spi = slowPlotIndex {
+            #expect(spi == si + 1)
+        }
+        if let spi = slowPlotIndex, let ti = timeIndex {
+            #expect(ti == spi + 1)
+        }
+        #expect(preview.tokenUsage.slowPlotDirective > 0)
+    }
+
+    @Test func test_preview_excludes_slow_plot_directive_when_disabled() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+
+        let preview = PromptAssembler.preview(
+            conversation: conversation,
+            characterCard: nil,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
+        )
+
+        let hasSlowPlot = preview.messagesBeforeHistory.contains { $0.content.contains("场景维持者") }
+        #expect(!hasSlowPlot)
+        #expect(preview.tokenUsage.slowPlotDirective == 0)
+    }
+
+    @Test func test_slow_plot_directive_tokens_counted_in_budget() throws {
+        let enabledConversation = TestHelpers.makeConversation(slowPlotMode: true)
+        let disabledConversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let endpoint = TestHelpers.makeEndpoint(maxContextTokens: 2000)
+
+        let enabledPreview = PromptAssembler.preview(
+            conversation: enabledConversation,
+            characterCard: nil,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: endpoint
+        )
+        let disabledPreview = PromptAssembler.preview(
+            conversation: disabledConversation,
+            characterCard: nil,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: endpoint
+        )
+
+        #expect(enabledPreview.fixedTokens > disabledPreview.fixedTokens)
+        #expect(enabledPreview.historyBudget < disabledPreview.historyBudget)
     }
 }

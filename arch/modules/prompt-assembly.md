@@ -38,15 +38,18 @@
 │  [3] system: 场景设定                            │  ← 固定段
 │      (会话 customScenario ?? 角色卡 scenario)    │
 ├─────────────────────────────────────────────────┤
-│  [4] system: 时间上下文                          │  ← 固定段（始终注入）
+│  [4] system: 慢速剧情推进指令 (beta)             │  ← 条件段
+│      (仅 conversation.slowPlotMode=true 时注入)  │
+├─────────────────────────────────────────────────┤
+│  [5] system: 时间上下文                          │  ← 固定段（始终注入）
 │      [Time] ISO 8601 当前时间含时区 [/Time]      │
 ├─────────────────────────────────────────────────┤
-│  [5] system: 世界书条目 (position=before_history)│  ← 动态段
+│  [6] system: 世界书条目 (position=before_history)│  ← 动态段
 ├─────────────────────────────────────────────────┤
-│  [6] system: 跨对话记忆                          │  ← 动态段
+│  [7] system: 跨对话记忆                          │  ← 动态段
 │      (经语义检索匹配的记忆条目，按相关度排序)  │
 ├─────────────────────────────────────────────────┤
-│  [7..N-2] 示例对话                               │  ← 可选段
+│  [8..N-2] 示例对话                               │  ← 可选段
 │      (user/assistant 交替)                       │
 ├─────────────────────────────────────────────────┤
 │  [N-1..M-1] 会话历史                             │  ← 动态段
@@ -125,7 +128,7 @@ struct TokenBudget {
 ### 4.3 预算分配流程
 
 ```
-1. 计算固定段总 token：systemPrompt + charDesc + scenario + timeContext + currentInput
+1. 计算固定段总 token：systemPrompt + charDesc + scenario + slowPlotDirective(条件) + timeContext + currentInput
 2. 剩余预算 = totalBudget - 固定段总 token
 3. 分配示例对话预算 = min(剩余 * 0.25, 示例对话实际 token)
 4. 分配世界书预算 = min(剩余 * 0.35, 触发条目总 token)
@@ -189,6 +192,7 @@ enum PromptSegment {
     case systemPrompt(String)
     case characterDescription(String)
     case scenario(String)
+    case slowPlotDirective(String)             // 慢速剧情推进指令（beta，会话级可关闭）
     case timeContext(String)                    // ISO 8601 时间上下文（始终注入）
     case worldBookEntry(WorldBookEntryRecord)
     case memoryEntry(MemoryEntryRecord)         // 跨对话记忆
@@ -211,6 +215,7 @@ enum PromptSegment {
 | `systemPrompt` | system | .max | true | |
 | `characterDescription` | system | .max | false | |
 | `scenario` | system | .max | false | |
+| `slowPlotDirective` | system | .max | false | 仅 conversation.slowPlotMode=true 时注入，内容定义于 AppConstants |
 | `timeContext` | system | .max | true | 由 PromptAssembler 内部 `Date()` → ISO 8601 生成，格式 `[Time] ... [/Time]`，~15 tokens |
 | `worldBookEntry` | system | entry.priority | false | |
 | `memoryEntry` | system | 85 | false | 高于 exampleDialog(75)，低于世界书条目最大值 |
@@ -275,6 +280,10 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
     if let s = scenario, !s.isEmpty:
         segments.append(.scenario(s))
 
+    // 4.5 慢速剧情推进指令（beta，会话级可关闭）
+    if conversation.slowPlotMode:
+        segments.append(.slowPlotDirective(AppConstants.slowPlotModePrompt))
+
     // 5. 时间上下文（始终注入）
     timeString = ISO8601DateFormatter().string(from: Date())
     segments.append(.timeContext("[Time] \(timeString) [/Time]"))
@@ -334,16 +343,21 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
 3. **近似 token 计数**：避免引入重型依赖（tiktoken），用近似算法覆盖 90%+ 场景。CJK 文本的误差通过预留余量吸收
 4. **预算分配弹性**：历史消息获得最大弹性空间，因为对话质量主要取决于近期上下文
 5. **可选段可裁剪**：当 token 紧张时，示例对话优先被裁剪，因为其作用是引导风格而非提供关键信息
+6. **慢速剧情推进模式（beta）**：作为条件固定段注入，默认开启，会话级可关闭。提示词内容固定存储于 AppConstants，不可用户编辑。isRequired=false 但 priority=.max（开启时不被裁剪）
 
-## 实现证据（2026-04-14）
+## 实现证据（2026-04-14，更新于 2026-04-17）
 
 - 代码位置：
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift`
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
+  - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — TokenUsageReport 含 slowPlotDirective 字段
+  - `OpenChat/App/AppConstants.swift` — slowPlotModePrompt 常量
+  - `OpenChat/Core/Database/Records/ConversationRecord.swift` — slowPlotMode 字段
+  - `OpenChat/Core/Database/Migrations.swift` — v7_add_slow_plot_mode 迁移
 - 已验证测试：
-  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
 - 当前实现已具备角色卡字段注入、世界书关键词触发、固定段预估与历史预算协作的基础能力，可支撑聊天主链路运行

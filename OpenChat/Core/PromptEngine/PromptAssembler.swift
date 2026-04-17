@@ -34,6 +34,9 @@ struct PromptAssembler {
         let systemMessage = ChatMessage(role: "system", content: systemPrompt)
         let characterMessage = characterDescription.map { ChatMessage(role: "system", content: $0) }
         let scenarioMessage = scenario.map { ChatMessage(role: "system", content: $0) }
+        let slowPlotMessage: ChatMessage? = conversation.slowPlotMode
+            ? ChatMessage(role: "system", content: AppConstants.slowPlotModePrompt)
+            : nil
         let timeContextMessage = ChatMessage(role: "system", content: timeContext)
         let currentInputMessage = ChatMessage(role: "user", content: currentInput)
 
@@ -41,6 +44,7 @@ struct PromptAssembler {
             TokenCounter.count(message: systemMessage) +
             (characterMessage.map { TokenCounter.count(message: $0) } ?? 0) +
             (scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0) +
+            (slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0) +
             TokenCounter.count(message: timeContextMessage) +
             (currentInput.isEmpty ? 0 : TokenCounter.count(message: currentInputMessage))
         let worldBookTokens = (afterSystemEntries + beforeHistoryEntries).reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
@@ -68,6 +72,9 @@ struct PromptAssembler {
         if let scenarioMessage {
             messagesBeforeHistory.append(scenarioMessage)
         }
+        if let slowPlotMessage {
+            messagesBeforeHistory.append(slowPlotMessage)
+        }
         messagesBeforeHistory.append(timeContextMessage)
         if !trimmedMemories.isEmpty {
             messagesBeforeHistory.append(contentsOf: trimmedMemories.map { ChatMessage(role: "system", content: makeMemoryMessageContent($0)) })
@@ -84,6 +91,7 @@ struct PromptAssembler {
             systemPrompt: TokenCounter.count(message: systemMessage),
             characterDescription: characterMessage.map { TokenCounter.count(message: $0) } ?? 0,
             scenario: scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0,
+            slowPlotDirective: slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0,
             timeContext: TokenCounter.count(message: timeContextMessage),
             worldBookEntries: trimmedWorldBookEntries.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) },
             memories: trimmedMemories.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent($1))) },
@@ -136,6 +144,7 @@ struct PromptAssembler {
             systemPrompt: context.tokenUsage.systemPrompt,
             characterDescription: context.tokenUsage.characterDescription,
             scenario: context.tokenUsage.scenario,
+            slowPlotDirective: context.tokenUsage.slowPlotDirective,
             timeContext: context.tokenUsage.timeContext,
             worldBookEntries: context.tokenUsage.worldBookEntries,
             memories: context.tokenUsage.memories,

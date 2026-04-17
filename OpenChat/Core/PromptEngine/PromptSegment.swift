@@ -5,6 +5,7 @@ enum PromptSegment {
     case worldBookEntry(WorldBookEntryRecord)
     case characterDescription(String)
     case scenario(String)
+    case slowPlotDirective(String)
     case timeContext(String)
     case memoryEntry(MemoryEntryRecord)
     case exampleDialog(ChatMessage)
@@ -27,7 +28,7 @@ enum PromptSegment {
     var content: String {
         switch self {
         case .systemPrompt(let value), .characterDescription(let value),
-             .scenario(let value), .timeContext(let value), .currentInput(let value):
+             .scenario(let value), .slowPlotDirective(let value), .timeContext(let value), .currentInput(let value):
             value
         case .worldBookEntry(let entry):
             entry.content
@@ -46,7 +47,7 @@ enum PromptSegment {
 
     var priority: Int {
         switch self {
-        case .systemPrompt, .characterDescription, .scenario, .timeContext, .currentInput:
+        case .systemPrompt, .characterDescription, .scenario, .slowPlotDirective, .timeContext, .currentInput:
             .max
         case .worldBookEntry(let entry):
             entry.priority
