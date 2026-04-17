@@ -389,4 +389,14 @@ final class MemoryListViewModel {
 - `MigrationTests`: v4 表创建 + 列验证 + CASCADE 删除（3 tests）
 - `DatabaseManagerMemoryTests`: 8 tests 覆盖 save/fetch/delete/count/ids/type/recent/conversation
 - `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
-- 全部 35 tests 通过
+- `MemoryExtractionParsingTests`: 13 tests 覆盖 ExtractedMemory JSON 容错解析（大小写 type、字符串 importance、缺失字段、额外字段）+ latestMemoryDate 查询 + StreamDelta usage
+- 全部 73 tests 通过
+
+### 2026-04-16 修复
+
+- **记忆提取静默失败修复**：替换 `try?` 为 `do/catch` + `os.Logger` 日志
+- **ExtractedMemory 解析容错**：`type` 做 `lowercased()` 匹配 + fallback 到 "event"；`importance` 支持 String → Int；缺失字段有默认值
+- **增量提取**：不再一刀切跳过已提取对话，通过 `latestMemoryDate` 只提取新消息
+- **Conversation 数据刷新**：extractMemories 入口从 DB 重新 fetch 最新 ConversationRecord
+- **周期性提取**：每 10 条消息自动触发后台提取
+- **提取结果通知**：返回 `[MemoryEntryRecord]`，UI 显示 "已提取 N 条记忆" banner

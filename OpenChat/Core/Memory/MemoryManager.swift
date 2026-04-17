@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.openchat", category: "Memory")
 
 struct MemoryManager: Sendable {
     private let databaseManager: DatabaseManager
@@ -23,44 +26,65 @@ struct MemoryManager: Sendable {
 
     // MARK: - Extraction
 
-    func extractMemories(from conversation: ConversationRecord) async throws {
-        guard let characterCardId = conversation.characterCardId else { return }
+    @discardableResult
+    func extractMemories(from conversation: ConversationRecord) async throws -> [MemoryEntryRecord] {
+        // Refresh conversation from DB to get latest characterCardId
+        let freshConversation = try await databaseManager.fetchConversation(id: conversation.id)
+        guard let current = freshConversation,
+              let characterCardId = current.characterCardId else {
+            logger.info("Skipping memory extraction: no character card bound to conversation \(conversation.id)")
+            return []
+        }
 
-        let alreadyExtracted = try await databaseManager.hasMemoriesForConversation(
-            conversationId: conversation.id
+        // Incremental extraction: only process messages after the last extracted memory
+        let lastExtractionDate = try await databaseManager.latestMemoryDate(
+            conversationId: current.id
         )
-        guard !alreadyExtracted else { return }
+        let allMessages = try await databaseManager.fetchMessages(conversationId: current.id)
+        let messages: [MessageRecord]
+        if let cutoff = lastExtractionDate {
+            messages = allMessages.filter { $0.createdAt > cutoff }
+        } else {
+            messages = allMessages
+        }
 
-        let messages = try await databaseManager.fetchMessages(conversationId: conversation.id)
-        guard messages.count >= Self.minimumMessagesForExtraction else { return }
+        guard messages.count >= Self.minimumMessagesForExtraction else {
+            logger.info("Skipping memory extraction: only \(messages.count) new messages (need \(Self.minimumMessagesForExtraction))")
+            return []
+        }
 
-        let endpoint = try await resolveEndpoint(for: conversation)
+        let endpoint = try await resolveEndpoint(for: current)
         let extractedMemories = try await callExtractionAPI(
             messages: messages,
             endpoint: endpoint
         )
 
         let now = Date()
+        var saved: [MemoryEntryRecord] = []
         for extracted in extractedMemories {
             let entry = MemoryEntryRecord(
                 id: UUID().uuidString,
                 characterCardId: characterCardId,
-                sourceConversationId: conversation.id,
+                sourceConversationId: current.id,
                 content: extracted.content,
-                memoryType: extracted.type.rawValue,
-                importance: extracted.importance,
+                memoryType: extracted.resolvedType.rawValue,
+                importance: extracted.resolvedImportance,
                 createdAt: now,
                 updatedAt: now
             )
             try await databaseManager.saveMemory(entry)
+            saved.append(entry)
 
             do {
                 let embedding = try embeddingService.embed(entry.content, isQuery: false)
                 try await vectorStore.insert(entryId: entry.id, embedding: embedding)
             } catch {
-                // Vector storage failure is non-fatal; memory is still in DB
+                logger.warning("Vector storage failed for memory \(entry.id): \(error.localizedDescription)")
             }
         }
+
+        logger.info("Extracted \(saved.count) memories from conversation \(current.id)")
+        return saved
     }
 
     // MARK: - Retrieval
@@ -127,7 +151,28 @@ struct MemoryManager: Sendable {
         guard let record else {
             throw APIError.noEndpointConfigured
         }
-        return try APIEndpointConfig(from: record)
+
+        // Resolve model: conversation.modelName → default model for endpoint
+        let model: EndpointModelRecord
+        if let modelName = conversation.modelName,
+           let found = try await databaseManager.fetchEndpointModel(endpointId: record.id, modelId: modelName) {
+            model = found
+        } else if let defaultModel = try await databaseManager.fetchDefaultModel(endpointId: record.id) {
+            model = defaultModel
+        } else {
+            model = EndpointModelRecord(
+                id: UUID().uuidString,
+                endpointId: record.id,
+                modelId: conversation.modelName ?? "default",
+                maxContextTokens: AppConstants.defaultMaxContextTokens,
+                apiMode: APIMode.chatCompletions.rawValue,
+                isDefault: true,
+                isManual: true,
+                createdAt: .now
+            )
+        }
+
+        return try APIEndpointConfig(from: record, model: model)
     }
 
     private func callExtractionAPI(
@@ -183,10 +228,16 @@ struct MemoryManager: Sendable {
 
     private func parseExtractedMemories(_ content: String) throws -> [ExtractedMemory] {
         // Try to find JSON array in response (may have markdown fences)
-        let cleaned = content
+        var cleaned = content
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to extract JSON array if there's surrounding text
+        if let start = cleaned.firstIndex(of: "["),
+           let end = cleaned.lastIndex(of: "]") {
+            cleaned = String(cleaned[start...end])
+        }
 
         guard let data = cleaned.data(using: .utf8) else {
             throw MemoryError.invalidExtractionResponse
@@ -195,6 +246,7 @@ struct MemoryManager: Sendable {
         do {
             return try JSONDecoder().decode([ExtractedMemory].self, from: data)
         } catch {
+            logger.error("Failed to parse extraction response: \(error.localizedDescription)\nRaw content: \(cleaned.prefix(500))")
             throw MemoryError.extractionFailed(reason: "Failed to parse extraction response: \(error.localizedDescription)")
         }
     }
@@ -202,8 +254,54 @@ struct MemoryManager: Sendable {
 
 // MARK: - Extraction DTO
 
-private struct ExtractedMemory: Codable {
+struct ExtractedMemory: Sendable {
     let content: String
-    let type: MemoryType
-    let importance: Int
+    let type: String
+    let importance: RawImportance
+
+    var resolvedType: MemoryType {
+        MemoryType(rawValue: type.lowercased()) ?? .event
+    }
+
+    var resolvedImportance: Int {
+        importance.value.clamped(to: 0...100)
+    }
+
+    /// Handles LLM returning importance as either Int or String
+    enum RawImportance: Sendable {
+        case int(Int)
+        case string(String)
+
+        var value: Int {
+            switch self {
+            case .int(let v): v
+            case .string(let s): Int(s) ?? 50
+            }
+        }
+    }
+}
+
+extension ExtractedMemory: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case content, type, importance
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(String.self, forKey: .content)
+        type = (try? container.decode(String.self, forKey: .type)) ?? "event"
+        if let intVal = try? container.decode(Int.self, forKey: .importance) {
+            importance = .int(intVal)
+        } else if let strVal = try? container.decode(String.self, forKey: .importance) {
+            importance = .string(strVal)
+        } else {
+            importance = .int(50)
+        }
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
 }
