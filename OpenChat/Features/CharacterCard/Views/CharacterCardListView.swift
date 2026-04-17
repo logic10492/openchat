@@ -42,6 +42,7 @@ struct CharacterCardListView: View {
                         exampleDialogs: nil,
                         creatorNotes: nil,
                         tags: nil,
+                        worldBookId: nil,
                         createdAt: .now,
                         updatedAt: .now
                     )

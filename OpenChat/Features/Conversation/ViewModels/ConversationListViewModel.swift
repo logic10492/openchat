@@ -37,9 +37,12 @@ final class ConversationListViewModel {
             title: String(localized: "New Chat"),
             characterCardId: nil,
             apiEndpointId: endpoint?.id,
+            modelName: nil,
             contextStrategy: AppConstants.defaultContextStrategy.rawValue,
             customScenario: nil,
             modelParameters: nil,
+            slowPlotMode: true,
+            isTitleGenerated: false,
             isPinned: false,
             createdAt: now,
             updatedAt: now
@@ -62,6 +65,23 @@ final class ConversationListViewModel {
             conversations.removeAll { $0.id == conversation.id }
             if appState.selectedConversationID == conversation.id {
                 appState.selectedConversationID = conversations.first?.id
+            }
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func renameConversation(_ id: String, newTitle: String) async {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            guard var conversation = try await databaseManager.fetchConversation(id: id) else { return }
+            conversation.title = trimmed
+            conversation.isTitleGenerated = true
+            conversation.updatedAt = .now
+            try await databaseManager.saveConversation(conversation)
+            if let index = conversations.firstIndex(where: { $0.id == id }) {
+                conversations[index] = conversation
             }
         } catch {
             appState.present(error: error.localizedDescription)

@@ -10,6 +10,7 @@ final class WorldBookEditorViewModel {
     var description = ""
     var isEnabled = true
     var entries: [WorldBookEntryRecord] = []
+    private(set) var characters: [CharacterCardRecord] = []
     let editingWorldBook: WorldBookRecord?
 
     init(
@@ -31,6 +32,14 @@ final class WorldBookEditorViewModel {
         } catch {
             entries = []
         }
+    }
+
+    func loadCharacters() async {
+        guard let worldBookId = editingWorldBook?.id else {
+            characters = []
+            return
+        }
+        characters = (try? await databaseManager.fetchCharacterCards(worldBookId: worldBookId)) ?? []
     }
 
     func save() async throws -> WorldBookRecord {

@@ -18,16 +18,21 @@ final class CharacterCardEditorViewModel {
     var exampleDialogs: [ChatMessage] = []
     var tags: [String] = []
     var creatorNotes = ""
+    var worldBookId: String?
+    private(set) var availableWorldBooks: [WorldBookRecord] = []
     let editingCard: CharacterCardRecord?
 
     init(
         databaseManager: DatabaseManager,
-        editingCard: CharacterCardRecord? = nil
+        editingCard: CharacterCardRecord? = nil,
+        defaultWorldBookId: String? = nil
     ) {
         self.databaseManager = databaseManager
         self.editingCard = editingCard
         if let editingCard {
             loadFromRecord(editingCard)
+        } else {
+            self.worldBookId = defaultWorldBookId
         }
     }
 
@@ -52,6 +57,11 @@ final class CharacterCardEditorViewModel {
         exampleDialogs = record.decodedExampleDialogs
         tags = record.decodedTags
         creatorNotes = record.creatorNotes ?? ""
+        worldBookId = record.worldBookId
+    }
+
+    func loadWorldBooks() async {
+        availableWorldBooks = (try? await databaseManager.fetchWorldBooks()) ?? []
     }
 
     func save() async throws -> CharacterCardRecord {
@@ -70,6 +80,7 @@ final class CharacterCardEditorViewModel {
             exampleDialogs: RecordCoders.encode(exampleDialogs),
             creatorNotes: creatorNotes.nilIfBlank,
             tags: RecordCoders.encode(tags),
+            worldBookId: worldBookId,
             createdAt: editingCard?.createdAt ?? now,
             updatedAt: now
         )

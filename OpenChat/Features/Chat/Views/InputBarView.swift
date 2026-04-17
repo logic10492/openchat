@@ -12,44 +12,49 @@ struct InputBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(alignment: .bottom, spacing: 0) {
-                TextField(String(localized: "Message"), text: $text, axis: .vertical)
-                    .lineLimit(1...6)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .focused($isFocused)
+        HStack(alignment: .bottom, spacing: 0) {
+            TextField(String(localized: "Message"), text: $text, axis: .vertical)
+                .lineLimit(1...6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .focused($isFocused)
 
-                sendButton
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 8)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color(.separator), lineWidth: 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
-                    )
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            sendButton
+                .padding(.trailing, 8)
+                .padding(.bottom, 8)
         }
-        .background(Color(.systemBackground))
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                .blendMode(.overlay)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder
     private var sendButton: some View {
         if isGenerating {
-            Button(action: onStop) {
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onStop()
+            }) {
                 Image(systemName: "stop.circle.fill")
                     .font(.system(size: 28))
                     .foregroundStyle(.primary)
             }
             .accessibilityLabel(String(localized: "Stop generating"))
         } else {
-            Button(action: onSend) {
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onSend()
+            }) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 28))
                     .foregroundStyle(canSend ? Color.primary : Color(.systemGray3))
@@ -58,6 +63,7 @@ struct InputBarView: View {
             .accessibilityLabel(String(localized: "Send message"))
         }
     }
+
 }
 
 #Preview {

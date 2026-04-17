@@ -1,11 +1,14 @@
 import SwiftUI
 
 struct WorldBookEditorView: View {
+    @Environment(DependencyContainer.self) private var container
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: WorldBookEditorViewModel
     @State private var editingEntry: WorldBookEntryRecord?
     @State private var importText = ""
     @State private var isShowingImport = false
+    @State private var editingCharacterCard: CharacterCardRecord?
+    @State private var selectedCharacterCard: CharacterCardRecord?
 
     init(viewModel: WorldBookEditorViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -18,6 +21,58 @@ struct WorldBookEditorView: View {
                     TextField(String(localized: "Name"), text: bind(\.name))
                     TextField(String(localized: "Description"), text: bind(\.description), axis: .vertical)
                     Toggle(String(localized: "Enabled"), isOn: bind(\.isEnabled))
+                }
+
+                if viewModel.editingWorldBook != nil {
+                    Section(String(localized: "Characters")) {
+                        ForEach(viewModel.characters) { card in
+                            Button {
+                                selectedCharacterCard = card
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.12))
+                                        .frame(width: 32, height: 32)
+                                        .overlay {
+                                            Image(systemName: "person.fill")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(Color.accentColor)
+                                        }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(card.name)
+                                            .font(.subheadline.weight(.medium))
+                                        if !card.decodedTags.isEmpty {
+                                            Text(card.decodedTags.joined(separator: " · "))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button(String(localized: "New Character")) {
+                            editingCharacterCard = CharacterCardRecord(
+                                id: "",
+                                name: "",
+                                avatar: nil,
+                                personality: nil,
+                                appearance: nil,
+                                physique: nil,
+                                speechStyle: nil,
+                                backstory: nil,
+                                systemPrompt: nil,
+                                scenario: nil,
+                                exampleDialogs: nil,
+                                creatorNotes: nil,
+                                tags: nil,
+                                worldBookId: viewModel.editingWorldBook?.id,
+                                createdAt: .now,
+                                updatedAt: .now
+                            )
+                        }
+                    }
                 }
 
                 Section(String(localized: "Entries")) {
@@ -65,6 +120,7 @@ struct WorldBookEditorView: View {
             }
             .task {
                 await viewModel.loadEntries()
+                await viewModel.loadCharacters()
             }
             .sheet(item: $editingEntry, onDismiss: reloadEntries) { entry in
                 WorldBookEntryEditorView(
@@ -100,6 +156,24 @@ struct WorldBookEditorView: View {
                     }
                 }
             }
+            .sheet(item: $editingCharacterCard, onDismiss: reloadCharacters) { card in
+                CharacterCardEditorView(
+                    viewModel: CharacterCardEditorViewModel(
+                        databaseManager: container.databaseManager,
+                        editingCard: card.id.isEmpty ? nil : card,
+                        defaultWorldBookId: viewModel.editingWorldBook?.id
+                    )
+                )
+            }
+            .sheet(item: $selectedCharacterCard, onDismiss: reloadCharacters) { card in
+                CharacterCardDetailView(
+                    card: card,
+                    onEdit: {
+                        selectedCharacterCard = nil
+                        editingCharacterCard = card
+                    }
+                )
+            }
         }
     }
 
@@ -114,6 +188,12 @@ struct WorldBookEditorView: View {
     private func reloadEntries() {
         Task {
             await viewModel.loadEntries()
+        }
+    }
+
+    private func reloadCharacters() {
+        Task {
+            await viewModel.loadCharacters()
         }
     }
 }

@@ -5,6 +5,7 @@ struct CharacterCardDetailView: View {
     let card: CharacterCardRecord
     let onEdit: () -> Void
     @State private var memoryCount: Int = 0
+    @State private var worldBookName: String?
 
     var body: some View {
         NavigationStack {
@@ -23,7 +24,10 @@ struct CharacterCardDetailView: View {
                     Button(String(localized: "Edit"), action: onEdit)
                 }
             }
-            .task { await loadMemoryCount() }
+            .task {
+                await loadMemoryCount()
+                await loadWorldBookName()
+            }
         }
     }
 
@@ -53,6 +57,12 @@ struct CharacterCardDetailView: View {
                             .background(Color(.systemGray5), in: Capsule())
                     }
                 }
+            }
+
+            if let worldBookName {
+                Label(worldBookName, systemImage: "book.closed")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -113,6 +123,11 @@ struct CharacterCardDetailView: View {
 
     private func loadMemoryCount() async {
         memoryCount = (try? await container.databaseManager.fetchMemoryCount(characterCardId: card.id)) ?? 0
+    }
+
+    private func loadWorldBookName() async {
+        guard let worldBookId = card.worldBookId else { return }
+        worldBookName = (try? await container.databaseManager.fetchWorldBook(id: worldBookId))?.name
     }
 }
 

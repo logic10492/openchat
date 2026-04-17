@@ -15,6 +15,12 @@ struct CharacterCardEditorView: View {
                     TextField(String(localized: "Name"), text: bind(\.name))
                     TextField(String(localized: "Tags (comma separated)"), text: tagsBinding)
                     TextField(String(localized: "Creator Notes"), text: bind(\.creatorNotes), axis: .vertical)
+                    Picker(String(localized: "World Book"), selection: worldBookIdBinding) {
+                        Text(String(localized: "None")).tag(String?.none)
+                        ForEach(viewModel.availableWorldBooks) { book in
+                            Text(book.name).tag(Optional(book.id))
+                        }
+                    }
                 }
 
                 Section(String(localized: "Description")) {
@@ -41,12 +47,15 @@ struct CharacterCardEditorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
                         Task {
-                            try? await viewModel.save()
+                            _ = try? await viewModel.save()
                             dismiss()
                         }
                     }
                     .disabled(!viewModel.isValid)
                 }
+            }
+            .task {
+                await viewModel.loadWorldBooks()
             }
         }
     }
@@ -68,6 +77,14 @@ struct CharacterCardEditorView: View {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
             }
+        )
+    }
+
+    private var worldBookIdBinding: Binding<String?> {
+        @Bindable var viewModel = viewModel
+        return Binding(
+            get: { viewModel.worldBookId },
+            set: { viewModel.worldBookId = $0 }
         )
     }
 }

@@ -67,6 +67,7 @@ final class CharacterCardListViewModel {
             exampleDialogs: card.exampleDialogs,
             creatorNotes: card.creatorNotes,
             tags: card.tags,
+            worldBookId: card.worldBookId,
             createdAt: now,
             updatedAt: now
         )

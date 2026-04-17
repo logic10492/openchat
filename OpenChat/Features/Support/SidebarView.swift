@@ -6,6 +6,8 @@ struct SidebarView: View {
     @State private var viewModel: ConversationListViewModel
     @State private var isShowingCharacters = false
     @State private var isShowingWorldBooks = false
+    @State private var renamingConversationID: String?
+    @State private var renameText = ""
 
     init(viewModel: ConversationListViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -20,6 +22,27 @@ struct SidebarView: View {
         }
         .task {
             await viewModel.loadConversations()
+        }
+        .onChange(of: appState.conversationListNeedsRefresh) { _, needsRefresh in
+            if needsRefresh {
+                appState.conversationListNeedsRefresh = false
+                Task { await viewModel.loadConversations() }
+            }
+        }
+        .alert(
+            String(localized: "Rename Conversation"),
+            isPresented: renameAlertBinding
+        ) {
+            TextField(String(localized: "Title"), text: $renameText)
+            Button(String(localized: "Cancel"), role: .cancel) {
+                renamingConversationID = nil
+            }
+            Button(String(localized: "Save")) {
+                if let id = renamingConversationID {
+                    Task { await viewModel.renameConversation(id, newTitle: renameText) }
+                }
+                renamingConversationID = nil
+            }
         }
         .sheet(isPresented: $isShowingCharacters) {
             NavigationStack {
@@ -106,6 +129,19 @@ struct SidebarView: View {
                             Task { await viewModel.deleteConversation(conversation) }
                         }
                     }
+                    .contextMenu {
+                        Button {
+                            renameText = conversation.title
+                            renamingConversationID = conversation.id
+                        } label: {
+                            Label(String(localized: "Rename"), systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteConversation(conversation) }
+                        } label: {
+                            Label(String(localized: "Delete"), systemImage: "trash")
+                        }
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -172,6 +208,13 @@ struct SidebarView: View {
     private var settingsBinding: Binding<Bool> {
         @Bindable var appState = appState
         return $appState.isShowingSettings
+    }
+
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { renamingConversationID != nil },
+            set: { if !$0 { renamingConversationID = nil } }
+        )
     }
 }
 
