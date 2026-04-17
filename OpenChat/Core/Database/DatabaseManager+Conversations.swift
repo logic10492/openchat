@@ -41,7 +41,7 @@ extension DatabaseManager {
     func saveMessage(_ message: MessageRecord) async throws {
         try await write { db in
             try message.save(db)
-            try ConversationRecord
+            _ = try ConversationRecord
                 .filter(Column("id") == message.conversationId)
                 .updateAll(db, Column("updatedAt").set(to: message.createdAt))
         }

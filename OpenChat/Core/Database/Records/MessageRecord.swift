@@ -13,6 +13,7 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord, Identifiable,
     var originalContent: String?
     var sortOrder: Int
     var createdAt: Date
+    var reasoningContent: String?
 
     static let conversation = belongsTo(ConversationRecord.self)
 

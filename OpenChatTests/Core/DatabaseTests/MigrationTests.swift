@@ -129,4 +129,110 @@ struct MigrationTests {
         }
         #expect(count == 0)
     }
+
+    // MARK: - v8 endpoint_model decoupling
+
+    @Test func test_v8_creates_endpoint_model_table() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+        #expect(tableNames.contains("endpoint_model"))
+    }
+
+    @Test func test_v8_endpoint_model_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "endpoint_model").map(\.name)
+        }
+        #expect(columns.contains("id"))
+        #expect(columns.contains("endpointId"))
+        #expect(columns.contains("modelId"))
+        #expect(columns.contains("maxContextTokens"))
+        #expect(columns.contains("apiMode"))
+        #expect(columns.contains("isDefault"))
+        #expect(columns.contains("isManual"))
+        #expect(columns.contains("createdAt"))
+    }
+
+    @Test func test_v8_conversation_has_modelName_column() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "conversation").map(\.name)
+        }
+        #expect(columns.contains("modelName"))
+    }
+
+    @Test func test_v8_api_endpoint_no_longer_has_model_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "api_endpoint").map(\.name)
+        }
+        #expect(!columns.contains("modelName"))
+        #expect(!columns.contains("maxContextTokens"))
+        #expect(!columns.contains("apiMode"))
+    }
+
+    @Test func test_v8_endpoint_model_cascade_on_endpoint_delete() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "ep1",
+            name: "Test",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "m1",
+            endpointId: "ep1",
+            modelId: "gpt-4o",
+            maxContextTokens: 4096,
+            apiMode: "chatCompletions",
+            isDefault: true,
+            isManual: false,
+            createdAt: now
+        )
+
+        try await manager.write { db in
+            try endpoint.insert(db)
+            try model.insert(db)
+        }
+
+        try await manager.write { db in
+            try db.execute(sql: "DELETE FROM api_endpoint WHERE id = 'ep1'")
+        }
+
+        let count = try await manager.read { db in
+            try EndpointModelRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
+
+    // MARK: - v9
+
+    @Test func test_v9_conversation_has_isTitleGenerated_column() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "conversation").map(\.name)
+        }
+        #expect(columns.contains("isTitleGenerated"))
+    }
+
+    @Test func test_v9_isTitleGenerated_defaults_to_false() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation()
+        try await manager.write { db in
+            try conversation.insert(db)
+        }
+
+        let fetched = try await manager.read { db in
+            try ConversationRecord.fetchOne(db, id: conversation.id)
+        }
+
+        #expect(fetched?.isTitleGenerated == false)
+    }
 }

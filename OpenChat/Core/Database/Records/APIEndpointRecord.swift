@@ -8,15 +8,9 @@ struct APIEndpointRecord: Codable, FetchableRecord, PersistableRecord, Identifia
     var name: String
     var baseURL: String
     var apiKey: String?
-    var modelName: String
-    var maxContextTokens: Int
     var isDefault: Bool
-    var apiMode: String
     var createdAt: Date
     var updatedAt: Date
 
-    var apiModeValue: APIMode {
-        get { APIMode(rawValue: apiMode) ?? .chatCompletions }
-        set { apiMode = newValue.rawValue }
-    }
+    static let models = hasMany(EndpointModelRecord.self)
 }

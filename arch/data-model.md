@@ -10,7 +10,7 @@
 
 ### 1. api_endpoint — API 端点配置
 
-存储用户添加的 OpenAI 兼容 API 端点。
+存储用户添加的 OpenAI 兼容 API 端点。端点仅定义 URL 和 API Key 的组合，模型配置通过 `endpoint_model` 表独立管理。
 
 | 列名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
@@ -18,10 +18,7 @@
 | name | TEXT | NOT NULL | 显示名称，如 "本地 Llama" |
 | baseURL | TEXT | NOT NULL | 接口基础地址，如 `http://localhost:8080/v1` |
 | apiKey | TEXT | | API 密钥（可选，本地模型可为空） |
-| modelName | TEXT | NOT NULL | 默认模型标识符，如 `gpt-3.5-turbo` |
-| maxContextTokens | INTEGER | NOT NULL, DEFAULT 4096 | 该端点支持的最大上下文 token 数 |
 | isDefault | INTEGER | NOT NULL, DEFAULT 0 | 是否为默认端点（布尔值） |
-| apiMode | TEXT | NOT NULL, DEFAULT 'chatCompletions' | API 模式：`chatCompletions` / `responses` |
 | createdAt | TEXT | NOT NULL | ISO 8601 时间戳 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 时间戳 |
 
@@ -33,12 +30,49 @@ struct APIEndpointRecord: Codable, FetchableRecord, PersistableRecord {
     var name: String
     var baseURL: String
     var apiKey: String?
-    var modelName: String
-    var maxContextTokens: Int
     var isDefault: Bool
-    var apiMode: String          // "chatCompletions" | "responses"
     var createdAt: Date
     var updatedAt: Date
+
+    static let models = hasMany(EndpointModelRecord.self)
+}
+```
+
+---
+
+### 1b. endpoint_model — 端点可用模型
+
+存储每个端点的可用模型列表，包含模型级别的上下文窗口和 API 模式配置。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| endpointId | TEXT | NOT NULL, FK → api_endpoint.id | 所属端点 |
+| modelId | TEXT | NOT NULL | 模型标识符，如 `gpt-4o` |
+| maxContextTokens | INTEGER | NOT NULL, DEFAULT 4096 | 该模型的最大上下文 token 数 |
+| apiMode | TEXT | NOT NULL, DEFAULT 'chatCompletions' | API 模式：`chatCompletions` / `responses` |
+| isDefault | BOOLEAN | NOT NULL, DEFAULT 0 | 是否为该端点的默认模型 |
+| isManual | BOOLEAN | NOT NULL, DEFAULT 0 | 是否为用户手动添加（不被 API 拉取覆盖） |
+| createdAt | TEXT | NOT NULL | ISO 8601 时间戳 |
+
+**约束**：
+- 外键：`endpointId` → `api_endpoint(id)` ON DELETE CASCADE
+- 唯一约束：`UNIQUE(endpointId, modelId)`
+
+**Swift Record**:
+```swift
+struct EndpointModelRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "endpoint_model"
+    var id: String
+    var endpointId: String
+    var modelId: String
+    var maxContextTokens: Int
+    var apiMode: String          // "chatCompletions" | "responses"
+    var isDefault: Bool
+    var isManual: Bool
+    var createdAt: Date
+
+    static let endpoint = belongsTo(APIEndpointRecord.self)
 }
 ```
 
@@ -166,9 +200,11 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
 | title | TEXT | NOT NULL | 会话标题（可自动生成或用户编辑） |
 | characterCardId | TEXT | FK → character_card.id | 绑定的角色卡（可选，世界书通过角色卡间接关联） |
 | apiEndpointId | TEXT | FK → api_endpoint.id | 使用的 API 端点 |
+| modelName | TEXT | | 会话使用的模型名称（字符串引用，非 FK） |
 | contextStrategy | TEXT | NOT NULL, DEFAULT 'truncation' | 上下文策略：`truncation` / `compression` |
 | customScenario | TEXT | | 会话专属场景覆盖（优先于角色卡场景） |
 | modelParameters | TEXT | | 模型参数覆盖（JSON: `{"temperature":0.8,...}`） |
+| slowPlotMode | INTEGER | NOT NULL, DEFAULT 1 | 慢速剧情推进模式开关（beta） |
 | isPinned | INTEGER | NOT NULL, DEFAULT 0 | 是否置顶 |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 |
@@ -181,9 +217,11 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     var title: String
     var characterCardId: String?
     var apiEndpointId: String?
+    var modelName: String?           // 动态选择的模型名称
     var contextStrategy: String      // "truncation" | "compression"
     var customScenario: String?
     var modelParameters: String?     // JSON
+    var slowPlotMode: Bool
     var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -276,6 +314,7 @@ struct MemoryEntryRecord: Codable, FetchableRecord, PersistableRecord {
 ## 实体关系图（文字 ER）
 
 ```
+api_endpoint 1 ──── 0..* endpoint_model
 api_endpoint 1 ──── 0..* conversation
 character_card 1 ──── 0..* conversation
 world_book 1 ──── 0..* character_card
@@ -286,7 +325,9 @@ conversation 1 ──── 0..* message
 ```
 
 关系说明：
+- 一个 `api_endpoint` 包含多个 `endpoint_model`（可用模型列表）
 - 一个 `conversation` 可选绑定一个 `character_card`、一个 `api_endpoint`
+- `conversation.modelName` 为字符串引用（非 FK），记录该对话使用的模型名称
 - 一个 `character_card` 可选归属于一个 `world_book`（世界书通过角色卡间接关联到对话）
 - 一个 `world_book` 包含多个 `world_book_entry`
 - 一个 `character_card` 关联多条 `memory_entry`（跨对话记忆）
@@ -296,6 +337,7 @@ conversation 1 ──── 0..* message
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
 - 删除 `character_card` 时级联删除其所有 `memory_entry`
 - 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
+- 删除 `api_endpoint` 时，级联删除其所有 `endpoint_model`
 - 删除 `world_book` 时，关联 `character_card` 的 `worldBookId` 置 NULL
 - 删除 `conversation` 时，关联 `memory_entry` 的 `sourceConversationId` 置 NULL
 
@@ -495,6 +537,35 @@ migrator.registerMigration("v5_addApiMode") { db in
     try db.alter(table: "api_endpoint") { t in
         t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
     }
+}
+```
+
+### v8_endpoint_model_decoupling
+
+将模型配置从端点表解耦到独立的 `endpoint_model` 表。端点仅保留 URL + API Key 组合，模型（含 maxContextTokens、apiMode）独立管理。对话通过 `modelName` 字符串记录所选模型。
+
+```swift
+migrator.registerMigration("v8_endpoint_model_decoupling") { db in
+    // 1. 创建 endpoint_model 表
+    try db.create(table: "endpoint_model") { t in
+        t.column("id", .text).notNull().primaryKey()
+        t.column("endpointId", .text).notNull()
+            .references("api_endpoint", onDelete: .cascade)
+        t.column("modelId", .text).notNull()
+        t.column("maxContextTokens", .integer).notNull().defaults(to: 4096)
+        t.column("apiMode", .text).notNull().defaults(to: "chatCompletions")
+        t.column("isDefault", .boolean).notNull().defaults(to: false)
+        t.column("isManual", .boolean).notNull().defaults(to: false)
+        t.column("createdAt", .datetime).notNull()
+        t.uniqueKey(["endpointId", "modelId"])
+    }
+
+    // 2. 迁移现有端点的模型数据
+    // 每个端点的 modelName → endpoint_model（isDefault=true, isManual=true）
+
+    // 3. 为 conversation 添加 modelName 列，回填自端点
+
+    // 4. 从 api_endpoint 移除 modelName、maxContextTokens、apiMode 列
 }
 ```
 

@@ -72,6 +72,74 @@ enum Migrations {
                 t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
             }
         }
+        migrator.registerMigration("v6_add_reasoning_content") { db in
+            try db.alter(table: "message") { t in
+                t.add(column: "reasoningContent", .text)
+            }
+        }
+        migrator.registerMigration("v7_add_slow_plot_mode") { db in
+            try db.alter(table: "conversation") { t in
+                t.add(column: "slowPlotMode", .boolean).notNull().defaults(to: true)
+            }
+        }
+        migrator.registerMigration("v8_endpoint_model_decoupling") { db in
+            // 1. Create endpoint_model table
+            try db.create(table: EndpointModelRecord.databaseTableName) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("endpointId", .text).notNull()
+                    .references(APIEndpointRecord.databaseTableName, onDelete: .cascade)
+                t.column("modelId", .text).notNull()
+                t.column("maxContextTokens", .integer).notNull().defaults(to: 4096)
+                t.column("apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+                t.column("isDefault", .boolean).notNull().defaults(to: false)
+                t.column("isManual", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+                t.uniqueKey(["endpointId", "modelId"])
+            }
+            try db.create(
+                index: "idx_endpoint_model_endpointId",
+                on: EndpointModelRecord.databaseTableName,
+                columns: ["endpointId"]
+            )
+
+            // 2. Migrate existing endpoint model data into endpoint_model table
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, modelName, maxContextTokens, apiMode FROM api_endpoint
+                """)
+            let now = Date()
+            for row in rows {
+                let endpointId: String = row["id"]
+                let modelName: String = row["modelName"]
+                let maxCtx: Int = row["maxContextTokens"]
+                let apiMode: String = row["apiMode"]
+                try db.execute(sql: """
+                    INSERT INTO endpoint_model (id, endpointId, modelId, maxContextTokens, apiMode, isDefault, isManual, createdAt)
+                    VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+                    """, arguments: [UUID().uuidString, endpointId, modelName, maxCtx, apiMode, now])
+            }
+
+            // 3. Add modelName column to conversation and back-fill from endpoint
+            try db.alter(table: "conversation") { t in
+                t.add(column: "modelName", .text)
+            }
+            try db.execute(sql: """
+                UPDATE conversation SET modelName = (
+                    SELECT modelName FROM api_endpoint WHERE api_endpoint.id = conversation.apiEndpointId
+                ) WHERE apiEndpointId IS NOT NULL
+                """)
+
+            // 4. Drop migrated columns from api_endpoint (SQLite 3.35+, iOS 16+)
+            try db.alter(table: "api_endpoint") { t in
+                t.drop(column: "modelName")
+                t.drop(column: "maxContextTokens")
+                t.drop(column: "apiMode")
+            }
+        }
+        migrator.registerMigration("v9_add_is_title_generated") { db in
+            try db.alter(table: "conversation") { t in
+                t.add(column: "isTitleGenerated", .boolean).notNull().defaults(to: false)
+            }
+        }
         return migrator
     }
 

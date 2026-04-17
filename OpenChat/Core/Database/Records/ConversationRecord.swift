@@ -8,9 +8,12 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     var title: String
     var characterCardId: String?
     var apiEndpointId: String?
+    var modelName: String?
     var contextStrategy: String
     var customScenario: String?
     var modelParameters: String?
+    var slowPlotMode: Bool
+    var isTitleGenerated: Bool
     var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date

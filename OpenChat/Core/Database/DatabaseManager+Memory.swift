@@ -50,6 +50,16 @@ extension DatabaseManager {
         }
     }
 
+    func latestMemoryDate(conversationId: String) async throws -> Date? {
+        try await read { db in
+            try MemoryEntryRecord
+                .filter(Column("sourceConversationId") == conversationId)
+                .select(max(Column("createdAt")))
+                .asRequest(of: Date?.self)
+                .fetchOne(db) ?? nil
+        }
+    }
+
     func saveMemory(_ memory: MemoryEntryRecord) async throws {
         try await write { db in
             try memory.save(db)

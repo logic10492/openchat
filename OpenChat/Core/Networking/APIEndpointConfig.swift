@@ -15,10 +15,16 @@ struct APIEndpointConfig: Equatable, Sendable {
         self.apiMode = apiMode
     }
 
-    init(from record: APIEndpointRecord) throws {
-        guard let baseURL = URL(string: record.baseURL) else {
-            throw APIError.invalidURL(record.baseURL)
+    init(from endpoint: APIEndpointRecord, model: EndpointModelRecord) throws {
+        guard let baseURL = URL(string: endpoint.baseURL) else {
+            throw APIError.invalidURL(endpoint.baseURL)
         }
-        self.init(baseURL: baseURL, apiKey: record.apiKey, modelName: record.modelName, maxContextTokens: record.maxContextTokens, apiMode: record.apiModeValue)
+        self.init(
+            baseURL: baseURL,
+            apiKey: endpoint.apiKey,
+            modelName: model.modelId,
+            maxContextTokens: model.maxContextTokens,
+            apiMode: model.apiModeValue
+        )
     }
 }

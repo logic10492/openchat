@@ -5,53 +5,40 @@ import Testing
 
 @Suite("ModelObject")
 struct ModelObjectTests {
-    // MARK: - applyContextLength
-
-    @MainActor
-    @Test func test_applyContextLength_sets_value_when_model_has_contextLength() throws {
-        let db = try TestHelpers.makeDatabaseManager()
-        let client = APIClient(session: .shared)
-        let vm = APIEndpointEditorViewModel(databaseManager: db, apiClient: client)
-
-        vm.fetchedModels = [
-            ModelObject(id: "llama-3", object: "model", ownedBy: "meta", contextLength: 65_536),
-            ModelObject(id: "gpt-4o", object: "model", ownedBy: "openai", contextLength: nil),
-        ]
-
-        vm.applyContextLength(for: "llama-3")
-        #expect(vm.maxContextTokens == 65_536)
-        #expect(vm.contextLengthAutoDetected == true)
+    @Test func test_model_object_decodes_context_length() throws {
+        let json = """
+        {"id": "llama-3", "object": "model", "owned_by": "meta", "context_length": 65536}
+        """
+        let data = Data(json.utf8)
+        let model = try JSONDecoder().decode(ModelObject.self, from: data)
+        #expect(model.id == "llama-3")
+        #expect(model.contextLength == 65_536)
     }
 
-    @MainActor
-    @Test func test_applyContextLength_does_not_change_when_model_has_no_contextLength() throws {
-        let db = try TestHelpers.makeDatabaseManager()
-        let client = APIClient(session: .shared)
-        let vm = APIEndpointEditorViewModel(databaseManager: db, apiClient: client)
-        let original = vm.maxContextTokens
-
-        vm.fetchedModels = [
-            ModelObject(id: "gpt-4o", object: "model", ownedBy: "openai", contextLength: nil),
-        ]
-
-        vm.applyContextLength(for: "gpt-4o")
-        #expect(vm.maxContextTokens == original)
-        #expect(vm.contextLengthAutoDetected == false)
+    @Test func test_model_object_decodes_without_context_length() throws {
+        let json = """
+        {"id": "gpt-4o", "object": "model", "owned_by": "openai"}
+        """
+        let data = Data(json.utf8)
+        let model = try JSONDecoder().decode(ModelObject.self, from: data)
+        #expect(model.id == "gpt-4o")
+        #expect(model.contextLength == nil)
     }
 
-    @MainActor
-    @Test func test_applyContextLength_does_not_change_for_unknown_model() throws {
-        let db = try TestHelpers.makeDatabaseManager()
-        let client = APIClient(session: .shared)
-        let vm = APIEndpointEditorViewModel(databaseManager: db, apiClient: client)
-        let original = vm.maxContextTokens
+    @Test func test_endpoint_model_record_api_mode_value() {
+        var record = EndpointModelRecord(
+            id: "1",
+            endpointId: "ep1",
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: "chatCompletions",
+            isDefault: true,
+            isManual: false,
+            createdAt: .now
+        )
+        #expect(record.apiModeValue == .chatCompletions)
 
-        vm.fetchedModels = [
-            ModelObject(id: "llama-3", object: "model", ownedBy: "meta", contextLength: 65_536),
-        ]
-
-        vm.applyContextLength(for: "unknown-model")
-        #expect(vm.maxContextTokens == original)
-        #expect(vm.contextLengthAutoDetected == false)
+        record.apiModeValue = .responses
+        #expect(record.apiMode == "responses")
     }
 }

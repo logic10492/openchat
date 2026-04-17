@@ -27,16 +27,21 @@ enum TestHelpers {
     static func makeConversation(
         id: String = UUID().uuidString,
         title: String = "Test Conversation",
-        contextStrategy: ContextStrategy = .truncation
+        contextStrategy: ContextStrategy = .truncation,
+        modelName: String? = nil,
+        slowPlotMode: Bool = true
     ) -> ConversationRecord {
         ConversationRecord(
             id: id,
             title: title,
             characterCardId: nil,
             apiEndpointId: nil,
+            modelName: modelName,
             contextStrategy: contextStrategy.rawValue,
             customScenario: nil,
             modelParameters: nil,
+            slowPlotMode: slowPlotMode,
+            isTitleGenerated: false,
             isPinned: false,
             createdAt: .now,
             updatedAt: .now
