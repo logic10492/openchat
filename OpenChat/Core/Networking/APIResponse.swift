@@ -20,11 +20,28 @@ struct ChatCompletionResponse: Codable, Sendable {
         let promptTokens: Int
         let completionTokens: Int
         let totalTokens: Int
+        let completionTokensDetails: CompletionTokensDetails?
+
+        init(promptTokens: Int, completionTokens: Int, totalTokens: Int, completionTokensDetails: CompletionTokensDetails? = nil) {
+            self.promptTokens = promptTokens
+            self.completionTokens = completionTokens
+            self.totalTokens = totalTokens
+            self.completionTokensDetails = completionTokensDetails
+        }
 
         enum CodingKeys: String, CodingKey {
             case promptTokens = "prompt_tokens"
             case completionTokens = "completion_tokens"
             case totalTokens = "total_tokens"
+            case completionTokensDetails = "completion_tokens_details"
+        }
+    }
+
+    struct CompletionTokensDetails: Codable, Sendable {
+        let reasoningTokens: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case reasoningTokens = "reasoning_tokens"
         }
     }
 }
@@ -32,6 +49,7 @@ struct ChatCompletionResponse: Codable, Sendable {
 struct ChatCompletionChunk: Codable, Sendable {
     let id: String
     let choices: [ChunkChoice]
+    let usage: ChatCompletionResponse.Usage?
 
     struct ChunkChoice: Codable, Sendable {
         let index: Int
@@ -47,12 +65,48 @@ struct ChatCompletionChunk: Codable, Sendable {
     struct Delta: Codable, Sendable {
         let role: String?
         let content: String?
+        let reasoningContent: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role, content
+            case reasoningContent = "reasoning_content"
+        }
     }
 }
 
 struct StreamDelta: Sendable, Equatable {
     let content: String
+    let reasoningContent: String?
     let finishReason: String?
+    let usage: StreamUsage?
+
+    init(content: String, finishReason: String?, usage: StreamUsage? = nil) {
+        self.content = content
+        self.reasoningContent = nil
+        self.finishReason = finishReason
+        self.usage = usage
+    }
+
+    init(content: String, reasoningContent: String?, finishReason: String?, usage: StreamUsage? = nil) {
+        self.content = content
+        self.reasoningContent = reasoningContent
+        self.finishReason = finishReason
+        self.usage = usage
+    }
+}
+
+struct StreamUsage: Sendable, Equatable {
+    let promptTokens: Int
+    let completionTokens: Int
+    let totalTokens: Int
+    let reasoningTokens: Int
+
+    init(promptTokens: Int, completionTokens: Int, totalTokens: Int, reasoningTokens: Int = 0) {
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.totalTokens = totalTokens
+        self.reasoningTokens = reasoningTokens
+    }
 }
 
 struct APIErrorEnvelope: Codable, Sendable {

@@ -63,6 +63,11 @@ struct ResponseOutputTextDelta: Codable, Sendable {
     let delta: String
 }
 
+struct ResponseReasoningDelta: Codable, Sendable {
+    let type: String
+    let delta: String
+}
+
 struct ResponseCompletedEvent: Codable, Sendable {
     let type: String
     let response: ResponseCompletedPayload

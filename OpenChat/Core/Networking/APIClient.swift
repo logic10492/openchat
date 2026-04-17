@@ -109,11 +109,33 @@ final class APIClient: @unchecked Sendable {
                         } catch {
                             throw APIError.decodingError(underlying: error)
                         }
+
+                        // Usage-only chunk (stream_options: include_usage)
+                        let streamUsage = chunk.usage.map {
+                            StreamUsage(
+                                promptTokens: $0.promptTokens,
+                                completionTokens: $0.completionTokens,
+                                totalTokens: $0.totalTokens,
+                                reasoningTokens: $0.completionTokensDetails?.reasoningTokens ?? 0
+                            )
+                        }
+
                         for choice in chunk.choices {
                             let content = choice.delta.content ?? ""
-                            if !content.isEmpty || choice.finishReason != nil {
-                                continuation.yield(StreamDelta(content: content, finishReason: choice.finishReason))
+                            let reasoning = choice.delta.reasoningContent
+                            if !content.isEmpty || reasoning != nil || choice.finishReason != nil {
+                                continuation.yield(StreamDelta(
+                                    content: content,
+                                    reasoningContent: reasoning,
+                                    finishReason: choice.finishReason,
+                                    usage: streamUsage
+                                ))
                             }
+                        }
+
+                        // Final chunk may have usage but empty choices
+                        if chunk.choices.isEmpty, let usage = streamUsage {
+                            continuation.yield(StreamDelta(content: "", finishReason: nil, usage: usage))
                         }
                     }
 
@@ -214,8 +236,23 @@ final class APIClient: @unchecked Sendable {
                                 continuation.yield(StreamDelta(content: delta.delta, finishReason: nil))
                             }
 
+                        case "response.reasoning.delta":
+                            let delta: ResponseReasoningDelta
+                            do {
+                                delta = try self.decoder.decode(ResponseReasoningDelta.self, from: Data(event.data.utf8))
+                            } catch {
+                                throw APIError.decodingError(underlying: error)
+                            }
+                            if !delta.delta.isEmpty {
+                                continuation.yield(StreamDelta(content: "", reasoningContent: delta.delta, finishReason: nil))
+                            }
+
                         case "response.completed":
-                            continuation.yield(StreamDelta(content: "", finishReason: "stop"))
+                            let completedEvent = try? self.decoder.decode(ResponseCompletedEvent.self, from: Data(event.data.utf8))
+                            let usage = completedEvent?.response.usage.map {
+                                StreamUsage(promptTokens: $0.inputTokens, completionTokens: $0.outputTokens, totalTokens: $0.totalTokens)
+                            }
+                            continuation.yield(StreamDelta(content: "", finishReason: "stop", usage: usage))
                             continuation.finish()
                             return
 

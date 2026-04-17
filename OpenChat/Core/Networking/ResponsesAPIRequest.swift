@@ -9,6 +9,7 @@ struct ResponsesAPIRequest: Codable, Sendable {
     let topP: Double?
     let maxOutputTokens: Int?
     let store: Bool
+    let reasoning: ReasoningConfig?
 
     init(messages: [ChatMessage], endpoint: APIEndpointConfig, parameters: ModelParameters, stream: Bool) {
         model = endpoint.modelName
@@ -32,11 +33,27 @@ struct ResponsesAPIRequest: Codable, Sendable {
         temperature = filtered.temperature
         topP = filtered.topP
         maxOutputTokens = filtered.maxTokens
+
+        if let budget = filtered.thinkingBudget {
+            reasoning = ReasoningConfig(effort: "medium", maxTokens: budget)
+        } else {
+            reasoning = nil
+        }
     }
 
     enum CodingKeys: String, CodingKey {
-        case model, input, instructions, stream, temperature, store
+        case model, input, instructions, stream, temperature, store, reasoning
         case topP = "top_p"
         case maxOutputTokens = "max_output_tokens"
+    }
+}
+
+struct ReasoningConfig: Codable, Sendable {
+    let effort: String
+    let maxTokens: Int
+
+    enum CodingKeys: String, CodingKey {
+        case effort
+        case maxTokens = "max_tokens"
     }
 }

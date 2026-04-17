@@ -11,8 +11,8 @@ struct SSEStreamParser {
     }
 
     static func parse<S: AsyncSequence>(sequence: S) -> AsyncThrowingStream<SSEEvent, Error> where S.Element == UInt8 {
-        let pump = Pump(iterator: sequence.makeAsyncIterator())
         return AsyncThrowingStream { continuation in
+            let pump = Pump(iterator: sequence.makeAsyncIterator())
             let task = Task {
                 do {
                     while let event = try await pump.nextEvent() {

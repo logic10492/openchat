@@ -7,6 +7,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
     var frequencyPenalty: Double
     var presencePenalty: Double
     var stop: [String]?
+    var thinkingBudget: Int?
 
     init(
         temperature: Double = 0.8,
@@ -14,7 +15,8 @@ struct ModelParameters: Codable, Equatable, Sendable {
         maxTokens: Int? = nil,
         frequencyPenalty: Double = 0.0,
         presencePenalty: Double = 0.0,
-        stop: [String]? = nil
+        stop: [String]? = nil,
+        thinkingBudget: Int? = nil
     ) {
         self.temperature = temperature
         self.topP = topP
@@ -22,7 +24,11 @@ struct ModelParameters: Codable, Equatable, Sendable {
         self.frequencyPenalty = frequencyPenalty
         self.presencePenalty = presencePenalty
         self.stop = stop
+        self.thinkingBudget = thinkingBudget
     }
+
+    /// Whether thinking/reasoning mode is enabled.
+    var isThinkingEnabled: Bool { thinkingBudget != nil }
 
     func forAPIMode(_ mode: APIMode) -> ModelParameters {
         switch mode {
@@ -35,7 +41,8 @@ struct ModelParameters: Codable, Equatable, Sendable {
                 maxTokens: maxTokens,
                 frequencyPenalty: 0.0,
                 presencePenalty: 0.0,
-                stop: nil
+                stop: nil,
+                thinkingBudget: thinkingBudget
             )
         }
     }
