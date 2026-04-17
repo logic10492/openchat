@@ -7,6 +7,7 @@ final class DependencyContainer {
     let apiClient: APIClient
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let titleGenerator: TitleGenerator
 
     init(
         databaseManager: DatabaseManager,
@@ -25,6 +26,7 @@ final class DependencyContainer {
             vectorStore: VectorStore(databaseManager: databaseManager),
             apiClient: resolvedClient
         )
+        self.titleGenerator = TitleGenerator(apiClient: resolvedClient)
     }
 
     static func live() throws -> DependencyContainer {

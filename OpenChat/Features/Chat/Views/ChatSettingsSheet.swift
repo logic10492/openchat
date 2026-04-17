@@ -14,6 +14,17 @@ struct ChatSettingsSheet: View {
                             Text(endpoint.name).tag(Optional(endpoint.id))
                         }
                     }
+                    .onChange(of: viewModel.selectedEndpointID) {
+                        viewModel.selectedModelName = nil
+                        Task { await viewModel.loadModelsForEndpoint() }
+                    }
+
+                    Picker(String(localized: "Model"), selection: modelBinding) {
+                        Text(String(localized: "Use Default")).tag(Optional<String>.none)
+                        ForEach(viewModel.availableModelsForEndpoint) { model in
+                            Text(model.modelId).tag(Optional(model.modelId))
+                        }
+                    }
 
                     Picker(String(localized: "Character"), selection: characterBinding) {
                         Text(String(localized: "None")).tag(Optional<String>.none)
@@ -36,6 +47,8 @@ struct ChatSettingsSheet: View {
                     }
 
                     TextField(String(localized: "Custom Scenario"), text: scenarioBinding, axis: .vertical)
+
+                    Toggle(String(localized: "Slow Plot Progression (Beta)"), isOn: slowPlotModeBinding)
                 }
 
                 Section(String(localized: "Model")) {
@@ -51,6 +64,14 @@ struct ChatSettingsSheet: View {
 
                     Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
                         Text("\(String(localized: "Max Tokens")): \(viewModel.modelMaxTokens)")
+                    }
+
+                    Toggle(String(localized: "Enable Thinking"), isOn: thinkingEnabledBinding)
+
+                    if viewModel.thinkingEnabled {
+                        Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
+                            Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
+                        }
                     }
                 }
             }
@@ -73,6 +94,11 @@ struct ChatSettingsSheet: View {
         return $viewModel.selectedEndpointID
     }
 
+    private var modelBinding: Binding<String?> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.selectedModelName
+    }
+
     private var characterBinding: Binding<String?> {
         @Bindable var viewModel = viewModel
         return $viewModel.selectedCharacterCardID
@@ -88,6 +114,11 @@ struct ChatSettingsSheet: View {
         return $viewModel.customScenario
     }
 
+    private var slowPlotModeBinding: Binding<Bool> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.slowPlotMode
+    }
+
     private var temperatureBinding: Binding<Double> {
         @Bindable var viewModel = viewModel
         return $viewModel.modelTemperature
@@ -101,5 +132,15 @@ struct ChatSettingsSheet: View {
     private var maxTokensBinding: Binding<Int> {
         @Bindable var viewModel = viewModel
         return $viewModel.modelMaxTokens
+    }
+
+    private var thinkingEnabledBinding: Binding<Bool> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.thinkingEnabled
+    }
+
+    private var thinkingBudgetBinding: Binding<Int> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.thinkingBudget
     }
 }

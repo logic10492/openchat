@@ -3,30 +3,45 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
     @State private var isShowingSettings = false
+    @State private var isShowingRename = false
+    @State private var renameText = ""
 
     init(viewModel: ChatViewModel) {
         _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            messageList
-            InputBarView(
-                text: binding(\.inputText),
-                isGenerating: viewModel.isGenerating,
-                onSend: {
-                    Task { await viewModel.sendMessage() }
-                },
-                onStop: {
-                    viewModel.stopGenerating()
+        messageList
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                InputBarView(
+                    text: binding(\.inputText),
+                    isGenerating: viewModel.isGenerating,
+                    onSend: {
+                        Task { await viewModel.sendMessage() }
+                    },
+                    onStop: {
+                        viewModel.stopGenerating()
+                    }
+                )
+                .padding(.bottom, 8)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle(viewModel.conversation.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        renameText = viewModel.conversation.title
+                        isShowingRename = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
                 }
-            )
-        }
-        .background(Color(.systemBackground))
-        .navigationTitle(viewModel.conversation.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                if viewModel.isGeneratingTitle {
+                    ProgressView()
+                        .controlSize(.small)
+                }
                 if let tokenUsage = viewModel.tokenUsage {
                     Text("\(tokenUsage.totalUsed)/\(tokenUsage.totalBudget)")
                         .font(.caption.monospacedDigit())
@@ -50,6 +65,13 @@ struct ChatView: View {
             ChatSettingsSheet(viewModel: viewModel)
                 .presentationDetents([.medium, .large])
         }
+        .alert(String(localized: "Rename Conversation"), isPresented: $isShowingRename) {
+            TextField(String(localized: "Title"), text: $renameText)
+            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(String(localized: "Save")) {
+                Task { await viewModel.renameConversation(newTitle: renameText) }
+            }
+        }
     }
 
     // MARK: - Message List
@@ -62,18 +84,24 @@ struct ChatView: View {
                 } else {
                     LazyVStack(spacing: 24) {
                         ForEach(viewModel.messages) { item in
-                            MessageBubbleView(
-                                item: item,
-                                isStreaming: isStreamingMessage(item),
-                                characterName: viewModel.selectedCharacterName,
-                                onDelete: {
-                                    Task { await viewModel.deleteMessage(item.id) }
-                                },
-                                onRegenerate: {
-                                    Task { await viewModel.regenerateLastResponse() }
-                                }
-                            )
-                            .id(item.id)
+                            if item.role == "memory" || item.role == "memory-error" {
+                                MemoryMarkerView(item: item)
+                                    .id(item.id)
+                            } else {
+                                MessageBubbleView(
+                                    item: item,
+                                    isStreaming: isStreamingMessage(item),
+                                    characterName: viewModel.selectedCharacterName,
+                                    showDetailedStats: viewModel.showDetailedStats,
+                                    onDelete: {
+                                        Task { await viewModel.deleteMessage(item.id) }
+                                    },
+                                    onRegenerate: {
+                                        Task { await viewModel.regenerateLastResponse() }
+                                    }
+                                )
+                                .id(item.id)
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -132,9 +160,12 @@ struct ChatView: View {
                     title: "Preview Chat",
                     characterCardId: nil,
                     apiEndpointId: nil,
+                    modelName: nil,
                     contextStrategy: "truncation",
                     customScenario: nil,
                     modelParameters: nil,
+                    slowPlotMode: true,
+                    isTitleGenerated: false,
                     isPinned: false,
                     createdAt: .now,
                     updatedAt: .now
@@ -143,6 +174,7 @@ struct ChatView: View {
                 apiClient: DependencyContainer.preview().apiClient,
                 contextManager: DependencyContainer.preview().contextManager,
                 memoryManager: DependencyContainer.preview().memoryManager,
+                titleGenerator: DependencyContainer.preview().titleGenerator,
                 appState: AppState()
             )
         )

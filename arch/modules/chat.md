@@ -12,17 +12,22 @@
 - 编辑已发送的用户消息（编辑后重新生成）
 - 当前会话设置（上下文策略、角色卡/世界书切换）
 - 会话信息展示（角色卡头像、token 使用情况）
+- 每条 AI 回复下方显示详细统计（输入/输出 token 数、TPS、上下文窗口剩余百分比），可在全局设置中关闭详细模式，关闭后仅在窗口余量 < 20% 时显示上下文窗口剩余百分比
+- 记忆提取完成时在对话中显示临时提示（"已提取 N 条记忆"，3 秒后自动消失）
 
 ## 2. 文件清单与职责
 
 | 文件 | 职责 |
 |---|---|
-| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 |
-| `MessageBubbleView.swift` | 单条消息气泡，支持 Markdown、长按菜单 |
+| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 + 记忆更新 banner |
+| `MessageBubbleView.swift` | 单条消息气泡，支持 Markdown、长按菜单、流式统计展示 |
 | `InputBarView.swift` | 底部输入栏（文本框 + 发送/停止按钮） |
 | `ChatSettingsSheet.swift` | 当前会话设置面板 |
 | `ChatViewModel.swift` | 核心 ViewModel，管理消息状态、调度 API 请求 |
-| `MessageDisplayItem.swift` | 消息展示用 DTO |
+| `ChatViewModel+Support.swift` | 生成/流式/记忆提取的实现细节 |
+| `MessageDisplayItem.swift` | 消息展示用 DTO（含可选 StreamingStats） |
+| `StreamingStats.swift` | 流式输出统计数据（输入/输出 token、TPS、上下文余量） |
+| `StatsBarView.swift` | 统计数据展示组件（详细/精简两种模式） |
 
 ## 3. 视图设计
 
@@ -30,7 +35,7 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│ [←] 🎭 艾拉              [⚙️] [📊]    │  ← 导航栏：返回 + 角色头像名称 + 设置 + token统计
+│ [←] 🎭 艾拉              [⚙️] [📊]    │  ← 导航栏：返回 + 角色头像名称 + 设置 
 │─────────────────────────────────────────│
 │                                         │
 │         [场景：银月森林的入口]           │  ← 场景提示（可选显示）
@@ -45,7 +50,7 @@
 │  └──────────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │
-│  │ 👤 这里是哪里？                  │   │  ← 可编辑：长按 → 编辑
+│  │ 👤 这里是哪里？                  │   │  ← 可编辑：气泡方的铅笔按钮
 │  └──────────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │
@@ -368,16 +373,29 @@ struct MessageDisplayItem: Identifiable {
 4. **编辑即重新生成**：编辑消息后删除后续消息并重新生成，保持对话逻辑一致性
 5. **Token 透明**：显示详细的 token 使用报告，帮助用户理解上下文分配情况
 
-## 实现证据（2026-04-14）
+## 实现证据（2026-04-16）
 
 - 代码位置：
-  - `OpenChat/Features/Chat/ChatView.swift`
-  - `OpenChat/Features/Chat/ChatViewModel.swift`
-  - `OpenChat/Features/Chat/ChatViewModel+Support.swift`
+  - `OpenChat/Features/Chat/Views/ChatView.swift` — 主界面 + 记忆更新 banner
+  - `OpenChat/Features/Chat/Views/MessageBubbleView.swift` — 气泡 + StatsBarView 集成
+  - `OpenChat/Features/Chat/Views/StatsBarView.swift` — 详细/精简统计展示
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集 + 记忆提取
+  - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
+  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats）
   - `OpenChat/ContentView.swift`
-- 当前已完成聊天主路径的装配：会话读取、消息发送、流式增量展示、数据库持久化、PromptAssembler/ContextManager 接线
-- 该模块的核心依赖已通过自动化测试间接验证：
+- 已完成功能：
+  - 聊天主路径：会话读取、消息发送、流式增量展示、数据库持久化
+  - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
+  - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
+  - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
+  - 记忆更新提示 banner（3 秒自动消失）
+  - 周期性记忆提取（每 10 条消息 + onDisappear）
+  - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志
+- 该模块的核心依赖已通过自动化测试验证（73 tests）：
+  - `MemoryExtractionParsingTests`（13 tests: JSON 容错、latestMemoryDate、StreamDelta usage）
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
   - `CompressionStrategyTests`
+  - `DatabaseManagerMemoryTests`

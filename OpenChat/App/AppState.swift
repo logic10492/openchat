@@ -18,6 +18,7 @@ final class AppState {
     var isShowingSettings = false
     var isShowingError = false
     var lastErrorMessage: String?
+    var conversationListNeedsRefresh = false
 
     func present(error message: String) {
         lastErrorMessage = message

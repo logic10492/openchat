@@ -4,6 +4,7 @@ struct MessageBubbleView: View {
     let item: MessageDisplayItem
     var isStreaming = false
     var characterName: String?
+    var showDetailedStats = false
     let onDelete: () -> Void
     let onRegenerate: () -> Void
     @State private var isHovering = false
@@ -26,6 +27,7 @@ struct MessageBubbleView: View {
                     roleLabel
                     contentView
                     actionBar
+                    statsBar
                 }
                 Spacer(minLength: 48)
             }
@@ -92,18 +94,75 @@ struct MessageBubbleView: View {
         Group {
             if item.role == "user" {
                 Text(item.content)
-                    .padding(12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                            .blendMode(.overlay)
+                    )
+                    .shadowElevation1()
             } else {
-                HStack(spacing: 0) {
-                    MarkdownTextView(text: item.content)
-                    if isStreaming {
-                        streamingCursor
+                VStack(alignment: .leading, spacing: 8) {
+                    reasoningSection
+                    HStack(spacing: 0) {
+                        MarkdownTextView(text: item.content)
+                        if isStreaming {
+                            streamingCursor
+                        }
                     }
                 }
+                .padding(.vertical, 4)
             }
         }
         .textSelection(.enabled)
+    }
+
+    // MARK: - Reasoning Section
+
+    @State private var isReasoningExpanded = false
+
+    @ViewBuilder
+    private var reasoningSection: some View {
+        if let reasoning = item.reasoningContent, !reasoning.isEmpty {
+            DisclosureGroup(isExpanded: $isReasoningExpanded) {
+                Text(reasoning)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            } label: {
+                Label {
+                    Text(String(localized: "Thinking"))
+                    if isStreaming && item.content.isEmpty {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .padding(.leading, 4)
+                    }
+                } icon: {
+                    Image(systemName: "brain")
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.purple)
+            }
+            .padding(8)
+            .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if isStreaming && item.content.isEmpty {
+            // Streaming hasn't produced content yet — may be in reasoning phase
+            HStack(spacing: 6) {
+                Image(systemName: "brain")
+                Text(String(localized: "Thinking…"))
+                ProgressView()
+                    .controlSize(.mini)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.purple)
+            .padding(8)
+            .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
     }
 
     private var streamingCursor: some View {
@@ -129,6 +188,15 @@ struct MessageBubbleView: View {
                 onDelete: onDelete
             )
             .opacity(isHovering ? 1 : 0.5)
+        }
+    }
+
+    // MARK: - Stats Bar
+
+    @ViewBuilder
+    private var statsBar: some View {
+        if !isStreaming, let stats = item.streamingStats {
+            StatsBarView(stats: stats, showDetailed: showDetailedStats)
         }
     }
 }

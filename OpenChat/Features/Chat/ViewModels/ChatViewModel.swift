@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -8,24 +9,32 @@ final class ChatViewModel {
     let apiClient: APIClient
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let titleGenerator: TitleGenerator
     let appState: AppState
 
     var conversation: ConversationRecord
     var messages: [MessageDisplayItem] = []
     var isGenerating = false
+    var isGeneratingTitle = false
     var tokenUsage: TokenUsageReport?
     private(set) var availableEndpoints: [APIEndpointRecord] = []
     private(set) var availableCharacterCards: [CharacterCardRecord] = []
     private(set) var availableWorldBooks: [WorldBookRecord] = []
+    private(set) var availableModelsForEndpoint: [EndpointModelRecord] = []
 
     var inputText = ""
     var selectedEndpointID: String?
+    var selectedModelName: String?
     var selectedCharacterCardID: String?
     var selectedContextStrategy: ContextStrategy
     var customScenario = ""
+    var slowPlotMode: Bool
     var modelTemperature = AppConstants.defaultTemperature
     var modelTopP = AppConstants.defaultTopP
     var modelMaxTokens = 1024
+    var thinkingEnabled = false
+    var thinkingBudget = 8192
+    var showDetailedStats: Bool
 
     var selectedCharacterName: String? {
         guard let id = selectedCharacterCardID else { return nil }
@@ -41,6 +50,9 @@ final class ChatViewModel {
 
     @ObservationIgnored
     var streamTask: Task<Void, Never>?
+    @ObservationIgnored
+    var messagesSinceLastExtraction = 0
+    static let extractionInterval = 10
 
     init(
         conversation: ConversationRecord,
@@ -48,6 +60,7 @@ final class ChatViewModel {
         apiClient: APIClient,
         contextManager: ContextManager,
         memoryManager: MemoryManager,
+        titleGenerator: TitleGenerator,
         appState: AppState
     ) {
         self.conversation = conversation
@@ -55,16 +68,22 @@ final class ChatViewModel {
         self.apiClient = apiClient
         self.contextManager = contextManager
         self.memoryManager = memoryManager
+        self.titleGenerator = titleGenerator
         self.appState = appState
         selectedEndpointID = conversation.apiEndpointId
+        selectedModelName = conversation.modelName
         selectedCharacterCardID = conversation.characterCardId
         selectedContextStrategy = ContextStrategy(rawValue: conversation.contextStrategy) ?? .truncation
         customScenario = conversation.customScenario ?? ""
+        slowPlotMode = conversation.slowPlotMode
+        showDetailedStats = UserDefaults.standard.bool(forKey: "show_detailed_stats")
 
         if let parameters = conversation.decodedModelParameters {
             modelTemperature = parameters.temperature
             modelTopP = parameters.topP
             modelMaxTokens = parameters.maxTokens ?? 1024
+            thinkingEnabled = parameters.isThinkingEnabled
+            thinkingBudget = parameters.thinkingBudget ?? 8192
         }
     }
 
@@ -86,20 +105,88 @@ final class ChatViewModel {
             availableEndpoints = try await endpoints
             availableCharacterCards = try await characterCards
             availableWorldBooks = try await worldBooks
+            await loadModelsForEndpoint()
         } catch {
             appState.present(error: error.localizedDescription)
         }
+    }
+
+    func loadModelsForEndpoint() async {
+        let endpointId = selectedEndpointID ?? conversation.apiEndpointId
+        guard let endpointId else {
+            // Try default endpoint
+            if let defaultEndpoint = try? await databaseManager.fetchDefaultEndpoint() {
+                availableModelsForEndpoint = (try? await databaseManager.fetchEndpointModels(endpointId: defaultEndpoint.id)) ?? []
+            } else {
+                availableModelsForEndpoint = []
+            }
+            return
+        }
+        availableModelsForEndpoint = (try? await databaseManager.fetchEndpointModels(endpointId: endpointId)) ?? []
     }
 
     func sendMessage() async {
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty, !isGenerating else { return }
 
+        // Generate title first if this is a fresh conversation
+        if !conversation.isTitleGenerated {
+            await generateTitleIfNeeded(userMessage: trimmedInput)
+        }
+
         do {
             try await generateResponse(for: trimmedInput, persistUserMessage: true)
             inputText = ""
         } catch {
             appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func renameConversation(newTitle: String) async {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        conversation.title = trimmed
+        conversation.isTitleGenerated = true
+        conversation.updatedAt = .now
+        do {
+            try await databaseManager.saveConversation(conversation)
+            appState.conversationListNeedsRefresh = true
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    private func generateTitleIfNeeded(userMessage: String) async {
+        isGeneratingTitle = true
+        defer { isGeneratingTitle = false }
+
+        do {
+            let endpoint = try await resolveEndpointConfig()
+
+            let characterCard = try await databaseManager.fetchCharacterCard(
+                id: selectedCharacterCardID ?? conversation.characterCardId
+            )
+
+            let scenario = conversation.customScenario?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+                ?? characterCard?.scenario?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+
+            let title = try await titleGenerator.generateTitle(
+                scenario: scenario,
+                characterCard: characterCard,
+                userMessage: userMessage,
+                endpoint: endpoint,
+                parameters: currentParameters
+            )
+
+            conversation.title = title
+            conversation.isTitleGenerated = true
+            conversation.updatedAt = .now
+            try await databaseManager.saveConversation(conversation)
+            appState.conversationListNeedsRefresh = true
+        } catch {
+            // Title generation failure is non-blocking — keep the default title
+            os.Logger(subsystem: "com.openchat", category: "TitleGenerator")
+                .warning("Title generation failed, keeping default: \(error.localizedDescription)")
         }
     }
 
@@ -149,9 +236,11 @@ final class ChatViewModel {
 
     func saveConversationSettings() async {
         conversation.apiEndpointId = selectedEndpointID
+        conversation.modelName = selectedModelName
         conversation.characterCardId = selectedCharacterCardID
         conversation.contextStrategy = selectedContextStrategy.rawValue
         conversation.customScenario = customScenario.nilIfBlank
+        conversation.slowPlotMode = slowPlotMode
         conversation.modelParameters = RecordCoders.encode(currentParameters)
         conversation.updatedAt = .now
 
@@ -173,7 +262,8 @@ final class ChatViewModel {
             maxTokens: modelMaxTokens,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            stop: nil
+            stop: nil,
+            thinkingBudget: thinkingEnabled ? thinkingBudget : nil
         )
     }
 }
