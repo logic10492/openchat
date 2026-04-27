@@ -6,6 +6,33 @@ import Testing
 
 @Suite("Database migrations")
 struct MigrationTests {
+    @Test func test_migrations_do_not_reference_runtime_record_or_enum_symbols() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let projectRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let migrationsURL = projectRoot
+            .appendingPathComponent("OpenChat")
+            .appendingPathComponent("Core")
+            .appendingPathComponent("Database")
+            .appendingPathComponent("Migrations.swift")
+        let source = try String(contentsOf: migrationsURL, encoding: .utf8)
+        let forbiddenReferences = [
+            ".databaseTableName",
+            "APIMode.",
+            "WorldBookEntryPosition.",
+            "ContextStrategy."
+        ]
+        let violations = forbiddenReferences.filter { source.contains($0) }
+
+        #expect(
+            violations.isEmpty,
+            "Migrations must use migration-local historical constants, not runtime symbols: \(violations.joined(separator: ", "))"
+        )
+    }
+
     @Test func test_v1_creates_expected_tables_and_indexes() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let tableNames = try await manager.read { db in

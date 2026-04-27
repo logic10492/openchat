@@ -2,6 +2,20 @@ import Foundation
 import GRDB
 
 enum Migrations {
+    private enum Historical {
+        static let apiEndpointTable = "api_endpoint"
+        static let characterCardTable = "character_card"
+        static let worldBookTable = "world_book"
+        static let worldBookEntryTable = "world_book_entry"
+        static let conversationTable = "conversation"
+        static let messageTable = "message"
+        static let endpointModelTable = "endpoint_model"
+
+        static let apiModeChatCompletions = "chatCompletions"
+        static let worldBookEntryBeforeHistory = "before_history"
+        static let contextStrategyTruncation = "truncation"
+    }
+
     static func makeMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_initial") { db in
@@ -69,7 +83,7 @@ enum Migrations {
         }
         migrator.registerMigration("v5_addApiMode") { db in
             try db.alter(table: "api_endpoint") { t in
-                t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+                t.add(column: "apiMode", .text).notNull().defaults(to: Historical.apiModeChatCompletions)
             }
         }
         migrator.registerMigration("v6_add_reasoning_content") { db in
@@ -84,13 +98,13 @@ enum Migrations {
         }
         migrator.registerMigration("v8_endpoint_model_decoupling") { db in
             // 1. Create endpoint_model table
-            try db.create(table: EndpointModelRecord.databaseTableName) { t in
+            try db.create(table: Historical.endpointModelTable) { t in
                 t.column("id", .text).notNull().primaryKey()
                 t.column("endpointId", .text).notNull()
-                    .references(APIEndpointRecord.databaseTableName, onDelete: .cascade)
+                    .references(Historical.apiEndpointTable, onDelete: .cascade)
                 t.column("modelId", .text).notNull()
                 t.column("maxContextTokens", .integer).notNull().defaults(to: 4096)
-                t.column("apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+                t.column("apiMode", .text).notNull().defaults(to: Historical.apiModeChatCompletions)
                 t.column("isDefault", .boolean).notNull().defaults(to: false)
                 t.column("isManual", .boolean).notNull().defaults(to: false)
                 t.column("createdAt", .datetime).notNull()
@@ -98,7 +112,7 @@ enum Migrations {
             }
             try db.create(
                 index: "idx_endpoint_model_endpointId",
-                on: EndpointModelRecord.databaseTableName,
+                on: Historical.endpointModelTable,
                 columns: ["endpointId"]
             )
 
@@ -144,7 +158,7 @@ enum Migrations {
     }
 
     private static func createTables(_ db: Database) throws {
-        try db.create(table: APIEndpointRecord.databaseTableName) { t in
+        try db.create(table: Historical.apiEndpointTable) { t in
             t.column("id", .text).notNull().primaryKey()
             t.column("name", .text).notNull()
             t.column("baseURL", .text).notNull()
@@ -156,7 +170,7 @@ enum Migrations {
             t.column("updatedAt", .datetime).notNull()
         }
 
-        try db.create(table: CharacterCardRecord.databaseTableName) { t in
+        try db.create(table: Historical.characterCardTable) { t in
             t.column("id", .text).notNull().primaryKey()
             t.column("name", .text).notNull()
             t.column("avatar", .blob)
@@ -174,7 +188,7 @@ enum Migrations {
             t.column("updatedAt", .datetime).notNull()
         }
 
-        try db.create(table: WorldBookRecord.databaseTableName) { t in
+        try db.create(table: Historical.worldBookTable) { t in
             t.column("id", .text).notNull().primaryKey()
             t.column("name", .text).notNull()
             t.column("description", .text)
@@ -183,26 +197,26 @@ enum Migrations {
             t.column("updatedAt", .datetime).notNull()
         }
 
-        try db.create(table: WorldBookEntryRecord.databaseTableName) { t in
+        try db.create(table: Historical.worldBookEntryTable) { t in
             t.column("id", .text).notNull().primaryKey()
-            t.column("worldBookId", .text).notNull().references(WorldBookRecord.databaseTableName, onDelete: .cascade)
+            t.column("worldBookId", .text).notNull().references(Historical.worldBookTable, onDelete: .cascade)
             t.column("title", .text).notNull()
             t.column("content", .text).notNull()
             t.column("keywords", .text).notNull()
             t.column("priority", .integer).notNull().defaults(to: 50)
             t.column("isEnabled", .boolean).notNull().defaults(to: true)
-            t.column("position", .text).notNull().defaults(to: WorldBookEntryPosition.beforeHistory.rawValue)
+            t.column("position", .text).notNull().defaults(to: Historical.worldBookEntryBeforeHistory)
             t.column("createdAt", .datetime).notNull()
             t.column("updatedAt", .datetime).notNull()
         }
 
-        try db.create(table: ConversationRecord.databaseTableName) { t in
+        try db.create(table: Historical.conversationTable) { t in
             t.column("id", .text).notNull().primaryKey()
             t.column("title", .text).notNull()
-            t.column("characterCardId", .text).references(CharacterCardRecord.databaseTableName, onDelete: .setNull)
-            t.column("worldBookId", .text).references(WorldBookRecord.databaseTableName, onDelete: .setNull)
-            t.column("apiEndpointId", .text).references(APIEndpointRecord.databaseTableName, onDelete: .setNull)
-            t.column("contextStrategy", .text).notNull().defaults(to: ContextStrategy.truncation.rawValue)
+            t.column("characterCardId", .text).references(Historical.characterCardTable, onDelete: .setNull)
+            t.column("worldBookId", .text).references(Historical.worldBookTable, onDelete: .setNull)
+            t.column("apiEndpointId", .text).references(Historical.apiEndpointTable, onDelete: .setNull)
+            t.column("contextStrategy", .text).notNull().defaults(to: Historical.contextStrategyTruncation)
             t.column("customScenario", .text)
             t.column("modelParameters", .text)
             t.column("isPinned", .boolean).notNull().defaults(to: false)
@@ -210,9 +224,9 @@ enum Migrations {
             t.column("updatedAt", .datetime).notNull()
         }
 
-        try db.create(table: MessageRecord.databaseTableName) { t in
+        try db.create(table: Historical.messageTable) { t in
             t.column("id", .text).notNull().primaryKey()
-            t.column("conversationId", .text).notNull().references(ConversationRecord.databaseTableName, onDelete: .cascade)
+            t.column("conversationId", .text).notNull().references(Historical.conversationTable, onDelete: .cascade)
             t.column("role", .text).notNull()
             t.column("content", .text).notNull()
             t.column("tokenCount", .integer)
@@ -224,10 +238,10 @@ enum Migrations {
     }
 
     private static func createIndexes(_ db: Database) throws {
-        try db.create(index: "idx_message_conversationId", on: MessageRecord.databaseTableName, columns: ["conversationId"])
-        try db.create(index: "idx_message_sortOrder", on: MessageRecord.databaseTableName, columns: ["conversationId", "sortOrder"])
-        try db.create(index: "idx_world_book_entry_worldBookId", on: WorldBookEntryRecord.databaseTableName, columns: ["worldBookId"])
-        try db.create(index: "idx_conversation_characterCardId", on: ConversationRecord.databaseTableName, columns: ["characterCardId"])
-        try db.create(index: "idx_conversation_updatedAt", on: ConversationRecord.databaseTableName, columns: ["updatedAt"])
+        try db.create(index: "idx_message_conversationId", on: Historical.messageTable, columns: ["conversationId"])
+        try db.create(index: "idx_message_sortOrder", on: Historical.messageTable, columns: ["conversationId", "sortOrder"])
+        try db.create(index: "idx_world_book_entry_worldBookId", on: Historical.worldBookEntryTable, columns: ["worldBookId"])
+        try db.create(index: "idx_conversation_characterCardId", on: Historical.conversationTable, columns: ["characterCardId"])
+        try db.create(index: "idx_conversation_updatedAt", on: Historical.conversationTable, columns: ["updatedAt"])
     }
 }
