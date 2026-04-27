@@ -354,7 +354,7 @@ migrator.registerMigration("v1_initial") { db in
     // 按依赖顺序建表：api_endpoint → character_card → world_book
     // → world_book_entry → conversation → message
 
-    try db.create(table: "api_endpoint") { t in
+    try db.create(table: Historical.apiEndpointTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("name", .text).notNull()
         t.column("baseURL", .text).notNull()
@@ -366,7 +366,7 @@ migrator.registerMigration("v1_initial") { db in
         t.column("updatedAt", .datetime).notNull()
     }
 
-    try db.create(table: "character_card") { t in
+    try db.create(table: Historical.characterCardTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("name", .text).notNull()
         t.column("avatar", .blob)
@@ -384,7 +384,7 @@ migrator.registerMigration("v1_initial") { db in
         t.column("updatedAt", .datetime).notNull()
     }
 
-    try db.create(table: "world_book") { t in
+    try db.create(table: Historical.worldBookTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("name", .text).notNull()
         t.column("description", .text)
@@ -393,28 +393,28 @@ migrator.registerMigration("v1_initial") { db in
         t.column("updatedAt", .datetime).notNull()
     }
 
-    try db.create(table: "world_book_entry") { t in
+    try db.create(table: Historical.worldBookEntryTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("worldBookId", .text).notNull()
-            .references("world_book", onDelete: .cascade)
+            .references(Historical.worldBookTable, onDelete: .cascade)
         t.column("title", .text).notNull()
         t.column("content", .text).notNull()
         t.column("keywords", .text).notNull()
         t.column("priority", .integer).notNull().defaults(to: 50)
         t.column("isEnabled", .boolean).notNull().defaults(to: true)
-        t.column("position", .text).notNull().defaults(to: "before_history")
+        t.column("position", .text).notNull().defaults(to: Historical.worldBookEntryBeforeHistory)
         t.column("createdAt", .datetime).notNull()
         t.column("updatedAt", .datetime).notNull()
     }
 
-    try db.create(table: "conversation") { t in
+    try db.create(table: Historical.conversationTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("title", .text).notNull()
         t.column("characterCardId", .text)
-            .references("character_card", onDelete: .setNull)
+            .references(Historical.characterCardTable, onDelete: .setNull)
         t.column("apiEndpointId", .text)
-            .references("api_endpoint", onDelete: .setNull)
-        t.column("contextStrategy", .text).notNull().defaults(to: "truncation")
+            .references(Historical.apiEndpointTable, onDelete: .setNull)
+        t.column("contextStrategy", .text).notNull().defaults(to: Historical.contextStrategyTruncation)
         t.column("customScenario", .text)
         t.column("modelParameters", .text)
         t.column("isPinned", .boolean).notNull().defaults(to: false)
@@ -422,10 +422,10 @@ migrator.registerMigration("v1_initial") { db in
         t.column("updatedAt", .datetime).notNull()
     }
 
-    try db.create(table: "message") { t in
+    try db.create(table: Historical.messageTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("conversationId", .text).notNull()
-            .references("conversation", onDelete: .cascade)
+            .references(Historical.conversationTable, onDelete: .cascade)
         t.column("role", .text).notNull()
         t.column("content", .text).notNull()
         t.column("tokenCount", .integer)
@@ -441,11 +441,11 @@ migrator.registerMigration("v1_initial") { db in
 
 ```swift
 // v1_initial 迁移中追加索引
-try db.create(index: "idx_message_conversationId", on: "message", columns: ["conversationId"])
-try db.create(index: "idx_message_sortOrder", on: "message", columns: ["conversationId", "sortOrder"])
-try db.create(index: "idx_world_book_entry_worldBookId", on: "world_book_entry", columns: ["worldBookId"])
-try db.create(index: "idx_conversation_characterCardId", on: "conversation", columns: ["characterCardId"])
-try db.create(index: "idx_conversation_updatedAt", on: "conversation", columns: ["updatedAt"])
+try db.create(index: "idx_message_conversationId", on: Historical.messageTable, columns: ["conversationId"])
+try db.create(index: "idx_message_sortOrder", on: Historical.messageTable, columns: ["conversationId", "sortOrder"])
+try db.create(index: "idx_world_book_entry_worldBookId", on: Historical.worldBookEntryTable, columns: ["worldBookId"])
+try db.create(index: "idx_conversation_characterCardId", on: Historical.conversationTable, columns: ["characterCardId"])
+try db.create(index: "idx_conversation_updatedAt", on: Historical.conversationTable, columns: ["updatedAt"])
 ```
 
 ### v2_world_book_character_card
@@ -454,12 +454,12 @@ try db.create(index: "idx_conversation_updatedAt", on: "conversation", columns: 
 
 ```swift
 migrator.registerMigration("v2_world_book_character_card") { db in
-    try db.alter(table: "character_card") { t in
+    try db.alter(table: Historical.characterCardTable) { t in
         t.add(column: "worldBookId", .text)
-            .references("world_book", onDelete: .setNull)
+            .references(Historical.worldBookTable, onDelete: .setNull)
     }
     try db.create(index: "idx_character_card_worldBookId",
-                  on: "character_card", columns: ["worldBookId"])
+                  on: Historical.characterCardTable, columns: ["worldBookId"])
 }
 ```
 
@@ -481,7 +481,7 @@ migrator.registerMigration("v3_remove_world_book_from_conversation") { db in
     """)
 
     // iOS 17+ SQLite 原生支持 ALTER TABLE DROP COLUMN
-    try db.alter(table: "conversation") { t in
+    try db.alter(table: Historical.conversationTable) { t in
         t.drop(column: "worldBookId")
     }
 }
@@ -493,12 +493,12 @@ migrator.registerMigration("v3_remove_world_book_from_conversation") { db in
 
 ```swift
 migrator.registerMigration("v4_create_memory_tables") { db in
-    try db.create(table: "memory_entry") { t in
+    try db.create(table: Historical.memoryEntryTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("characterCardId", .text).notNull()
-            .references("character_card", onDelete: .cascade)
+            .references(Historical.characterCardTable, onDelete: .cascade)
         t.column("sourceConversationId", .text)
-            .references("conversation", onDelete: .setNull)
+            .references(Historical.conversationTable, onDelete: .setNull)
         t.column("content", .text).notNull()
         t.column("memoryType", .text).notNull()
         t.column("importance", .integer).notNull().defaults(to: 50)
@@ -507,13 +507,13 @@ migrator.registerMigration("v4_create_memory_tables") { db in
     }
 
     try db.create(index: "idx_memory_entry_characterCardId",
-                  on: "memory_entry", columns: ["characterCardId"])
+                  on: Historical.memoryEntryTable, columns: ["characterCardId"])
     try db.create(index: "idx_memory_entry_sourceConversationId",
-                  on: "memory_entry", columns: ["sourceConversationId"])
+                  on: Historical.memoryEntryTable, columns: ["sourceConversationId"])
 
     // sqlite-vec 虚拟表：存储 384 维嵌入向量
     try db.execute(sql: """
-        CREATE VIRTUAL TABLE memory_embedding USING vec0(
+        CREATE VIRTUAL TABLE \(Historical.memoryEmbeddingTable) USING vec0(
             entry_id TEXT PRIMARY KEY,
             embedding float[384]
         )
@@ -528,14 +528,20 @@ migrator.registerMigration("v4_create_memory_tables") { db in
 - 迁移中使用 `ALTER TABLE` 添加列而非重建表
 - 迁移代码中不引用 Record 类型，使用原始 SQL 或 GRDB DDL API
 
+### Migration 源码约束
+
+- migration 中使用迁移本地常量记录历史表名和默认值，例如 `Historical.apiEndpointTable`、`Historical.apiModeChatCompletions`。
+- migration 不引用 `Record.databaseTableName`、`APIMode.*.rawValue`、`WorldBookEntryPosition.*.rawValue`、`ContextStrategy.*.rawValue`，避免未来 runtime 重命名破坏旧迁移。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 中的 `test_migrations_do_not_reference_runtime_record_or_enum_symbols` 保护该约束。
+
 ### v5_addApiMode
 
 为 `api_endpoint` 表添加 `apiMode` 列，支持 Chat Completions 和 Responses API 两种模式切换。
 
 ```swift
 migrator.registerMigration("v5_addApiMode") { db in
-    try db.alter(table: "api_endpoint") { t in
-        t.add(column: "apiMode", .text).notNull().defaults(to: APIMode.chatCompletions.rawValue)
+    try db.alter(table: Historical.apiEndpointTable) { t in
+        t.add(column: "apiMode", .text).notNull().defaults(to: Historical.apiModeChatCompletions)
     }
 }
 ```
@@ -547,13 +553,13 @@ migrator.registerMigration("v5_addApiMode") { db in
 ```swift
 migrator.registerMigration("v8_endpoint_model_decoupling") { db in
     // 1. 创建 endpoint_model 表
-    try db.create(table: "endpoint_model") { t in
+    try db.create(table: Historical.endpointModelTable) { t in
         t.column("id", .text).notNull().primaryKey()
         t.column("endpointId", .text).notNull()
-            .references("api_endpoint", onDelete: .cascade)
+            .references(Historical.apiEndpointTable, onDelete: .cascade)
         t.column("modelId", .text).notNull()
         t.column("maxContextTokens", .integer).notNull().defaults(to: 4096)
-        t.column("apiMode", .text).notNull().defaults(to: "chatCompletions")
+        t.column("apiMode", .text).notNull().defaults(to: Historical.apiModeChatCompletions)
         t.column("isDefault", .boolean).notNull().defaults(to: false)
         t.column("isManual", .boolean).notNull().defaults(to: false)
         t.column("createdAt", .datetime).notNull()

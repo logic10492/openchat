@@ -199,18 +199,16 @@ sendMessage():
        memories = await memoryManager.retrieveMemories(
            for: characterCard.id, query: inputText)
 
-    7. // 阶段1：计算固定段 token
-       fixedTokens = PromptAssembler.calculateFixedTokens(
-           characterCard, worldBookEntries, currentInput, ...)
+    7. 从 DB 读取当前会话消息后，构造 promptHistoryMessages：
+       - 乐观保存的当前 user message 保留在 DB/UI 中；
+       - prompt history 中排除本轮 current input record；
+       - 重新生成/编辑时排除与 currentInput 对应的最后一条 user record。
 
-    8. // 阶段2：上下文管理
-       processedHistory = await contextManager.prepareHistory(
-           conversation, endpoint, fixedTokens)
+    8. PromptAssembler.preview(...) 使用 promptHistoryMessages 计算固定段 token。
 
-    9. // 阶段3：拼装 prompt
-       result = PromptAssembler.assemble(
-           conversation, characterCard, worldBook, worldBookEntries,
-           memories, processedHistory, inputText, endpoint)
+    9. ContextManager.prepareHistory(messages:promptHistoryMessages, ...)
+       只处理过滤后的历史，再由 PromptAssembler.assemble(...)
+       在末尾追加一次 currentInput。
        tokenUsage = result.tokenUsage
 
     10. // 创建空的 assistantMessage 占位
@@ -277,21 +275,27 @@ editMessage(messageId, newContent):
 
 ### 4.6 记忆提取触发
 
-当用户离开当前对话时（导航到其他页面、切换对话），自动触发记忆提取：
+当前源码在每轮 user + assistant 生成完成后将 `messagesSinceLastExtraction += 2`，当计数达到 `ChatViewModel.extractionInterval == 10` 时自动触发记忆提取：
 
 ```swift
 func triggerMemoryExtraction() {
-    guard let characterCardId = conversation.characterCardId else { return }
-    Task.detached(priority: .background) { [memoryManager, conversation] in
-        try? await memoryManager.extractMemories(from: conversation)
+    Task {
+        do {
+            let result = try await memoryManager.extractMemories(from: conversation)
+            if !result.isEmpty {
+                messages.append(.memoryMarker(content: "..."))
+            }
+        } catch {
+            messages.append(.memoryMarker(content: "...", isError: true))
+        }
     }
 }
 ```
 
-- **触发时机**：`ChatView.onDisappear` 或 `ChatViewModel.deinit`
-- **后台执行**：使用 `Task.detached(priority: .background)`，不阻塞 UI
-- **静默降级**：提取失败仅记录日志，不向用户展示错误
-- **去重保护**：MemoryManager 内部检查该对话是否已提取过
+- **触发时机**：发送链路内的周期性后台提取；`ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`。切换对话可通过视图消失间接触发；App 进入后台的 lifecycle hook 仍不属于当前源码行为
+- **后台执行**：使用 `Task` 调用 `MemoryManager.extractMemories(from:)`，不阻塞流式生成完成后的 UI
+- **错误反馈**：提取失败记录日志，并向聊天 UI 追加临时 memory marker
+- **去重保护**：MemoryManager 内部按最新记忆时间做增量提取
 
 ## 5. MessageDisplayItem
 
@@ -390,9 +394,9 @@ struct MessageDisplayItem: Identifiable {
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
   - 记忆更新提示 banner（3 秒自动消失）
-  - 周期性记忆提取（每 10 条消息 + onDisappear）
+  - 周期性记忆提取（每 10 条 user/assistant 消息）
   - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志
-- 该模块的核心依赖已通过自动化测试验证（73 tests）：
+- 该模块的核心依赖和 Chat prompt 链路已通过当前审计工作区自动化测试验证（133 tests；包含审计开始前已有未提交 networking 测试改动），其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次：
   - `MemoryExtractionParsingTests`（13 tests: JSON 容错、latestMemoryDate、StreamDelta usage）
   - `APIClientTests`
   - `PromptAssemblerTests`

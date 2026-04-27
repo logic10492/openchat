@@ -108,9 +108,9 @@ struct TokenBudget {
     var currentInputTokens: Int       // 实际计数
 
     // 可选段：有预算上限
-    var exampleDialogsMaxTokens: Int  // 上限 = totalBudget * 15%
-    var worldBookMaxTokens: Int       // 上限 = totalBudget * 20%
-    var memoryMaxTokens: Int          // 上限 = totalBudget * 10%
+    var exampleDialogsMaxTokens: Int  // 上限 = remaining * 25%
+    var worldBookMaxTokens: Int       // 上限 = remaining * 35%
+    var memoryMaxTokens: Int          // 上限 = remaining * 15%
 
     // 动态段：弹性填充剩余空间
     var historyMaxTokens: Int         // = totalBudget - 所有固定段 - 可选段实际占用
@@ -345,10 +345,10 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
 5. **可选段可裁剪**：当 token 紧张时，示例对话优先被裁剪，因为其作用是引导风格而非提供关键信息
 6. **慢速剧情推进模式（beta）**：作为条件固定段注入，默认开启，会话级可关闭。提示词内容固定存储于 AppConstants，不可用户编辑。isRequired=false 但 priority=.max（开启时不被裁剪）
 
-## 实现证据（2026-04-14，更新于 2026-04-17）
+## 实现证据（2026-04-14，更新于 2026-04-27）
 
 - 代码位置：
-  - `OpenChat/Core/PromptEngine/PromptAssembler.swift`
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `makeTimeContext()` 输出 `[Time] <ISO8601> [/Time]`；`before_history` 世界书条目位于 memory 前。
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
@@ -357,7 +357,7 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
   - `OpenChat/Core/Database/Records/ConversationRecord.swift` — slowPlotMode 字段
   - `OpenChat/Core/Database/Migrations.swift` — v7_add_slow_plot_mode 迁移
 - 已验证测试：
-  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试）
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖 ISO8601 时间格式、memory 注入、`before_history -> memory -> exampleDialogs` 相对顺序）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
 - 当前实现已具备角色卡字段注入、世界书关键词触发、固定段预估与历史预算协作的基础能力，可支撑聊天主链路运行

@@ -4,13 +4,13 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-04-16）
+## 当前落地状态（2026-04-27）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
-  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test`
-- 当前通过的核心测试（60 个）：
+  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'`
+- 当前审计工作区通过的 Swift Testing 测试（133 个；包含审计开始前已有未提交 networking 测试改动）：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -317,7 +317,7 @@ Phase 1 (基础骨架)
 7. 实现 `EmbeddingService`：CoreML 推理 + XLMRobertaTokenizer 分词，输出 384 维归一化向量
 8. 实现 `VectorStore`：sqlite-vec 向量 CRUD 封装（插入 / KNN 检索 / 删除）
 9. 实现 `MemoryManager`：记忆提取（调用 API 提取结构化事件）+ 语义检索编排
-10. 更新 `PromptSegment` + `PromptAssembler`：新增 `.timeContext` 和 `.memoryEntry` 段，记忆 token 预算上限 10%
+10. 更新 `PromptSegment` + `PromptAssembler`：新增 `.timeContext` 和 `.memoryEntry` 段，记忆 token 预算上限为剩余预算的 15%
 11. 更新 `ChatViewModel`：发送消息时检索记忆、离开对话时触发记忆提取
 12. 实现 `MemoryListView` + `MemoryListViewModel`：按角色查看/删除记忆
 13. 更新 `DependencyContainer`：注入 `MemoryManager`、`EmbeddingService`、`VectorStore`

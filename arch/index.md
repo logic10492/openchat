@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' build`
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' test`
-- 当前自动化测试结果：12 个核心测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩
+- 当前审计工作区自动化测试结果：133 个 Swift Testing 测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩、Chat 发送链路当前输入去重。该计数包含审计开始前已有未提交 networking 测试改动。
 
 ## 功能需求
 
@@ -58,7 +58,7 @@
 10. 当前用户输入
 
 ### 4. 跨对话记忆
-- **记忆提取**：对话结束后自动调用 API 提取关键事件、事实、关系变化和摘要
+- **记忆提取**：当前源码在 Chat 生成链路中每累计 10 条 user/assistant 消息后后台触发，调用 API 提取关键事件、事实、关系变化和摘要
 - **向量存储**：使用本地 CoreML 嵌入模型（MultilingualE5Small）将记忆向量化，存储在 sqlite-vec 中
 - **记忆检索**：新对话开始时拉取近期摘要，每次发送消息时语义检索相关记忆并注入 prompt
 - **角色绑定**：记忆以角色卡为单位存储，同一角色的不同对话共享记忆
@@ -80,12 +80,10 @@
 ┌──────────────────────▼───────────────────────────────┐
 │                   Features Layer                      │
 │  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
-│  │  Chat   │ │Character │ │WorldBook │ │ Memory   │ │
+│  │  Chat   │ │Character │ │WorldBook │ │ Settings │ │
 │  │         │ │  Card    │ │          │ │          │ │
 │  └────┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ │
-│  │Settings│                                           │
-│  └────┬───┘                                           │
-└───────┼───────────┼────────────┼────────────┼────────┘
+└───────┼───────────┼────────────┼────────────┼───────┘
         │           │            │            │
 ┌───────▼───────────▼────────────▼────────────▼────────┐
 │                    Core Layer                         │
@@ -133,7 +131,7 @@ ChatViewModel
            │
            └─→ SSEStreamParser → StreamDelta → UI 更新
 
-对话结束时：
+生成完成后达到周期阈值时：
 ChatViewModel
    └─→ MemoryManager.extractMemories()
            │
@@ -156,4 +154,5 @@ ChatViewModel
 | [modules/chat.md](modules/chat.md) | 聊天模块（消息展示 / 流式输出 / 交互） |
 | [modules/memory/index.md](modules/memory/index.md) | 跨对话记忆系统（向量存储 / 嵌入模型 / 记忆提取检索） |
 | [modules/settings.md](modules/settings.md) | 设置模块（API 配置 / 参数 / 数据管理） |
+| [AntiEntropy/index.md](AntiEntropy/index.md) | 传播审计与 arch-test / arch-src / src-test 三边一致性结论 |
 | [roadmap.md](roadmap.md) | 6 阶段落地路线图 |

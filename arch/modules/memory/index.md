@@ -1,6 +1,6 @@
- # 跨对话记忆模块设计
+# 跨对话记忆模块设计
 
-> 所属层：`Core/Memory/` + `Features/Memory/`
+> 所属层：`Core/Memory/` + `Features/CharacterCard/`
 > 依赖：Core/Database（MemoryEntryRecord）, Core/Networking（APIClient）, Shared/Extensions
 
 ## 1. 功能范围
@@ -8,7 +8,7 @@
 - 同一角色跨对话的记忆存储与语义检索
 - 本地嵌入模型推理（CoreML MultilingualE5Small）
 - 向量存储与 KNN 相似度检索（sqlite-vec）
-- 对话结束后自动提取关键事件/摘要作为记忆条目
+- Chat 生成链路中按周期自动提取关键事件/摘要作为记忆条目
 - 新对话开始时拉取角色近期记忆摘要
 - 每次发送消息时检索与当前输入语义相关的记忆
 - 记忆条目的查看、搜索与删除管理
@@ -22,8 +22,8 @@
 | `Core/Memory/MemoryManager.swift` | 记忆提取与检索的编排层 |
 | `Core/Memory/MemoryError.swift` | 记忆模块统一错误类型 |
 | `Core/Database/Records/MemoryEntryRecord.swift` | GRDB Record：记忆条目 |
-| `Features/Memory/Views/MemoryListView.swift` | 记忆列表界面 |
-| `Features/Memory/ViewModels/MemoryListViewModel.swift` | 记忆列表状态管理 |
+| `Features/CharacterCard/Views/MemoryListView.swift` | 角色卡详情入口下的记忆列表界面 |
+| `Features/CharacterCard/ViewModels/MemoryListViewModel.swift` | 记忆列表状态管理 |
 
 ## 3. 数据结构
 
@@ -148,23 +148,27 @@ struct VectorStore: Sendable {
 
 ### 6.1 触发时机
 
-- 用户离开当前对话（导航到其他页面）
-- 用户切换到另一个对话
-- App 进入后台
+当前实现采用发送链路内的周期性后台提取，并保留 `ChatView.onDisappear` 触发：
 
-由 `ChatViewModel` 在上述事件发生时调用 `MemoryManager.extractMemories()`。**后台 Task 异步执行，不阻塞 UI**。
+- `ChatViewModel` 每完成一轮 user + assistant 生成后将 `messagesSinceLastExtraction += 2`。
+- 当计数达到 `ChatViewModel.extractionInterval == 10` 时，调用 `triggerMemoryExtraction()`。
+- `triggerMemoryExtraction()` 内部启动后台 `Task`，调用 `MemoryManager.extractMemories(from:)`，成功后向聊天 UI 追加 memory marker。
+- `ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`，因此离开当前聊天视图或切换对话时可能触发提取。
+
+App 进入后台的 lifecycle hook 不属于当前源码行为，作为后续 UX/生命周期增强项单独规划。
 
 ### 6.2 提取步骤
 
 ```
 extractMemories(from conversation):
-    1. 检查该对话是否已提取过记忆（避免重复提取）
-    2. 从 DB 加载对话全部消息
-    3. 如果消息数 < 阈值（如 4 条），跳过提取
-    4. 构建提取 prompt（见 6.3）
-    5. 调用 APIClient.sendMessage()（非流式，使用对话关联的端点）
-    6. 解析 API 返回的 JSON 数组
-    7. 对每条提取出的记忆：
+    1. 从 DB 重新读取最新 ConversationRecord，确认已绑定 characterCardId
+    2. 查询 latestMemoryDate(conversationId:) 作为增量 cutoff
+    3. 从 DB 加载该对话消息，仅保留 createdAt > cutoff 的新消息；没有 cutoff 时使用全部消息
+    4. 如果新消息数 < minimumMessagesForExtraction（当前 4 条），跳过提取
+    5. 构建提取 prompt（见 6.3）
+    6. 调用 APIClient.sendMessage()（非流式，使用对话关联的端点）
+    7. 解析 API 返回的 JSON 数组
+    8. 对每条提取出的记忆：
        a. 创建 MemoryEntryRecord 并保存到 DB
        b. 调用 EmbeddingService.embed(content, isQuery: false) 生成向量
        c. 调用 VectorStore.insert() 存储向量
@@ -196,8 +200,9 @@ Conversation:
 
 ### 6.4 去重策略
 
-- 提取前检查 `memory_entry` 表中该 `sourceConversationId` 是否已有记录
-- 若已存在，跳过提取
+- 通过 `DatabaseManager.latestMemoryDate(conversationId:)` 查询该对话最近一次已保存记忆的时间。
+- 若存在上次提取时间，只处理 `createdAt > latestMemoryDate` 的新消息；若不存在，则处理该对话全部消息。
+- 新消息数少于 `MemoryManager.minimumMessagesForExtraction` 时跳过本轮提取。
 - 后续可扩展：对新提取的记忆与已有记忆做向量相似度比较，去除高度重复条目
 
 ## 7. 记忆检索流程
@@ -229,7 +234,7 @@ retrieveMemories(for characterCardId, query: currentInput, limit: 5):
 - **位置**：世界书条目（before_history）之后、示例对话之前
 - **role**: `"system"`
 - **priority**: 85（高于 exampleDialog:75，低于世界书条目最大值）
-- **token 预算**: 上限为 totalBudget × 10%
+- **token 预算**: 上限为剩余预算 × 15%
 - **格式**: 每条记忆作为独立的 system 消息注入
 
 ## 8. MemoryManager 接口
@@ -242,7 +247,7 @@ struct MemoryManager: Sendable {
     private let apiClient: APIClient
 
     /// 从对话中提取记忆（后台异步调用）
-    func extractMemories(from conversation: ConversationRecord) async throws
+    func extractMemories(from conversation: ConversationRecord) async throws -> [MemoryEntryRecord]
 
     /// 语义检索相关记忆（每次发送消息时调用）
     func retrieveMemories(
@@ -341,8 +346,8 @@ final class MemoryListViewModel {
 
 | 交互对象 | 交互方式 |
 |---|---|
-| `Core/PromptEngine` | 检索到的记忆作为 `PromptSegment.memoryEntry` 注入 prompt，token 预算上限 10% |
-| `Features/Chat` | `ChatViewModel` 在发送消息时调用 `retrieveMemories()`；在离开对话时调用 `extractMemories()` |
+| `Core/PromptEngine` | 检索到的记忆作为 `PromptSegment.memoryEntry` 注入 prompt，token 预算上限为剩余预算 × 15% |
+| `Features/Chat` | `ChatViewModel` 在发送消息时调用 `retrieveMemories()`；每累计 10 条 user/assistant 消息后周期性调用 `extractMemories()`；`ChatView.onDisappear` 也会触发提取 |
 | `Core/Database` | `MemoryEntryRecord` CRUD + `memory_embedding` sqlite-vec 虚拟表操作 |
 | `Core/Networking` | 记忆提取时调用 `APIClient.sendMessage()` 请求 LLM 提取结构化记忆 |
 | `Features/CharacterCard` | 角色详情页提供记忆列表入口 |
@@ -352,9 +357,9 @@ final class MemoryListViewModel {
 1. **摘要/事件级粒度**：不存储原始消息向量（量大且噪声高），而是提取关键事件/摘要后向量化，质量更高
 2. **本地嵌入模型**：使用 CoreML 在设备端推理，无需网络请求，保护用户隐私
 3. **sqlite-vec**：复用已有的 SQLite 基础设施，无需引入独立的向量数据库
-4. **10% token 预算**：避免记忆占用过多上下文空间，保持当前对话质量
+4. **15% memory token 预算**：避免记忆占用过多上下文空间，保持当前对话质量
 5. **静默降级**：记忆系统故障不应影响核心聊天功能
-6. **对话级提取**：在对话结束时一次性提取，避免每条消息都调用 API 提取带来的成本和延迟
+6. **周期性增量提取 + 视图消失触发**：当前源码每累计 10 条 user/assistant 消息后后台提取，`ChatView.onDisappear` 也会触发提取；App 进入后台 lifecycle hook 另行规划
 
 ## 13. 实现证据
 
@@ -378,7 +383,7 @@ final class MemoryListViewModel {
 ### 关键集成点
 
 - `DependencyContainer` → 注入 `MemoryManager`（含 EmbeddingService + VectorStore）
-- `ChatViewModel` → 持有 `memoryManager`，发送消息时 `retrieveMemories()`，离开对话时 `triggerMemoryExtraction()`
+- `ChatViewModel` → 持有 `memoryManager`，发送消息时 `retrieveMemories()`，每 10 条 user/assistant 消息后周期性 `triggerMemoryExtraction()`；`ChatView.onDisappear` 也会触发提取
 - `PromptAssembler` → `memories: [MemoryEntryRecord]` 参数，`makeMemoryMessageContent()` 格式化
 - `TokenBudget` → `memoryBudget`（remaining × 15%）
 - `PromptSegment` → `.timeContext(String)` + `.memoryEntry(MemoryEntryRecord)`
@@ -390,7 +395,7 @@ final class MemoryListViewModel {
 - `DatabaseManagerMemoryTests`: 8 tests 覆盖 save/fetch/delete/count/ids/type/recent/conversation
 - `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
 - `MemoryExtractionParsingTests`: 13 tests 覆盖 ExtractedMemory JSON 容错解析（大小写 type、字符串 importance、缺失字段、额外字段）+ latestMemoryDate 查询 + StreamDelta usage
-- 全部 73 tests 通过
+- 当前审计工作区全量 `xcodebuild test` 为 133 个 Swift Testing 测试通过；该计数包含审计开始前已有未提交 networking 测试改动。Memory 直接覆盖仍以 DB、解析、Prompt 注入为主，EmbeddingService/VectorStore KNN 属于后续测试补强范围。
 
 ### 2026-04-16 修复
 

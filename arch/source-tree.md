@@ -32,10 +32,12 @@ OpenChat/
 │   │   ├── Views/
 │   │   │   ├── CharacterCardListView.swift     # 角色卡列表（Grid / List 切换）
 │   │   │   ├── CharacterCardEditorView.swift   # 角色卡编辑器（分 section 表单）
-│   │   │   └── CharacterCardDetailView.swift   # 角色卡详情预览
+│   │   │   ├── CharacterCardDetailView.swift   # 角色卡详情预览
+│   │   │   └── MemoryListView.swift            # 角色卡详情入口下的记忆列表界面
 │   │   ├── ViewModels/
 │   │   │   ├── CharacterCardListViewModel.swift
-│   │   │   └── CharacterCardEditorViewModel.swift
+│   │   │   ├── CharacterCardEditorViewModel.swift
+│   │   │   └── MemoryListViewModel.swift       # 记忆列表状态管理
 │   │   └── Models/
 │   │       └── CharacterCardField.swift        # 编辑器字段枚举 / 校验规则
 │   │
@@ -57,12 +59,6 @@ OpenChat/
 │   │   │   └── ConversationRowView.swift       # 单行会话摘要
 │   │   └── ViewModels/
 │   │       └── ConversationListViewModel.swift
-│   │
-│   ├── Memory/
-│   │   ├── Views/
-│   │   │   └── MemoryListView.swift            # 角色记忆列表界面
-│   │   └── ViewModels/
-│   │       └── MemoryListViewModel.swift       # 记忆列表状态管理
 │   │
 │   └── Settings/
 │       ├── Views/

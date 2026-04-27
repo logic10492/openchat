@@ -87,7 +87,7 @@ struct KeywordMatcher {
 | position 值 | 注入位置 | 典型用途 |
 |---|---|---|
 | `after_system` | system prompt 之后、角色描述之前 | 世界观基础设定 |
-| `before_history` | 示例对话之后、会话历史之前 | 当前场景相关的动态知识 |
+| `before_history` | 时间上下文之后、跨对话记忆和示例对话之前 | 当前场景相关的动态知识 |
 
 ### 4.4 token 预算
 

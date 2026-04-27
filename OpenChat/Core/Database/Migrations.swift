@@ -9,6 +9,8 @@ enum Migrations {
         static let worldBookEntryTable = "world_book_entry"
         static let conversationTable = "conversation"
         static let messageTable = "message"
+        static let memoryEntryTable = "memory_entry"
+        static let memoryEmbeddingTable = "memory_embedding"
         static let endpointModelTable = "endpoint_model"
 
         static let apiModeChatCompletions = "chatCompletions"
@@ -23,13 +25,13 @@ enum Migrations {
             try createIndexes(db)
         }
         migrator.registerMigration("v2_world_book_character_card") { db in
-            try db.alter(table: "character_card") { t in
+            try db.alter(table: Historical.characterCardTable) { t in
                 t.add(column: "worldBookId", .text)
-                    .references("world_book", onDelete: .setNull)
+                    .references(Historical.worldBookTable, onDelete: .setNull)
             }
             try db.create(
                 index: "idx_character_card_worldBookId",
-                on: "character_card",
+                on: Historical.characterCardTable,
                 columns: ["worldBookId"]
             )
         }
@@ -45,17 +47,17 @@ enum Migrations {
                 WHERE worldBookId IS NULL
                 """)
 
-            try db.alter(table: "conversation") { t in
+            try db.alter(table: Historical.conversationTable) { t in
                 t.drop(column: "worldBookId")
             }
         }
         migrator.registerMigration("v4_create_memory_tables") { db in
-            try db.create(table: "memory_entry") { t in
+            try db.create(table: Historical.memoryEntryTable) { t in
                 t.column("id", .text).notNull().primaryKey()
                 t.column("characterCardId", .text).notNull()
-                    .references("character_card", onDelete: .cascade)
+                    .references(Historical.characterCardTable, onDelete: .cascade)
                 t.column("sourceConversationId", .text)
-                    .references("conversation", onDelete: .setNull)
+                    .references(Historical.conversationTable, onDelete: .setNull)
                 t.column("content", .text).notNull()
                 t.column("memoryType", .text).notNull()
                 t.column("importance", .integer).notNull().defaults(to: 50)
@@ -65,34 +67,34 @@ enum Migrations {
 
             try db.create(
                 index: "idx_memory_entry_characterCardId",
-                on: "memory_entry",
+                on: Historical.memoryEntryTable,
                 columns: ["characterCardId"]
             )
             try db.create(
                 index: "idx_memory_entry_sourceConversationId",
-                on: "memory_entry",
+                on: Historical.memoryEntryTable,
                 columns: ["sourceConversationId"]
             )
 
             try db.execute(sql: """
-                CREATE VIRTUAL TABLE memory_embedding USING vec0(
+                CREATE VIRTUAL TABLE \(Historical.memoryEmbeddingTable) USING vec0(
                     entry_id TEXT PRIMARY KEY,
                     embedding float[384]
                 )
                 """)
         }
         migrator.registerMigration("v5_addApiMode") { db in
-            try db.alter(table: "api_endpoint") { t in
+            try db.alter(table: Historical.apiEndpointTable) { t in
                 t.add(column: "apiMode", .text).notNull().defaults(to: Historical.apiModeChatCompletions)
             }
         }
         migrator.registerMigration("v6_add_reasoning_content") { db in
-            try db.alter(table: "message") { t in
+            try db.alter(table: Historical.messageTable) { t in
                 t.add(column: "reasoningContent", .text)
             }
         }
         migrator.registerMigration("v7_add_slow_plot_mode") { db in
-            try db.alter(table: "conversation") { t in
+            try db.alter(table: Historical.conversationTable) { t in
                 t.add(column: "slowPlotMode", .boolean).notNull().defaults(to: true)
             }
         }
@@ -133,7 +135,7 @@ enum Migrations {
             }
 
             // 3. Add modelName column to conversation and back-fill from endpoint
-            try db.alter(table: "conversation") { t in
+            try db.alter(table: Historical.conversationTable) { t in
                 t.add(column: "modelName", .text)
             }
             try db.execute(sql: """
@@ -143,14 +145,14 @@ enum Migrations {
                 """)
 
             // 4. Drop migrated columns from api_endpoint (SQLite 3.35+, iOS 16+)
-            try db.alter(table: "api_endpoint") { t in
+            try db.alter(table: Historical.apiEndpointTable) { t in
                 t.drop(column: "modelName")
                 t.drop(column: "maxContextTokens")
                 t.drop(column: "apiMode")
             }
         }
         migrator.registerMigration("v9_add_is_title_generated") { db in
-            try db.alter(table: "conversation") { t in
+            try db.alter(table: Historical.conversationTable) { t in
                 t.add(column: "isTitleGenerated", .boolean).notNull().defaults(to: false)
             }
         }
