@@ -76,10 +76,10 @@ struct PromptAssembler {
             messagesBeforeHistory.append(slowPlotMessage)
         }
         messagesBeforeHistory.append(timeContextMessage)
+        messagesBeforeHistory.append(contentsOf: trimmedBeforeHistoryEntries.map { ChatMessage(role: "system", content: makeWorldBookMessageContent($0)) })
         if !trimmedMemories.isEmpty {
             messagesBeforeHistory.append(contentsOf: trimmedMemories.map { ChatMessage(role: "system", content: makeMemoryMessageContent($0)) })
         }
-        messagesBeforeHistory.append(contentsOf: trimmedBeforeHistoryEntries.map { ChatMessage(role: "system", content: makeWorldBookMessageContent($0)) })
         messagesBeforeHistory.append(contentsOf: trimmedExampleDialogs)
 
         let actualFixedTokens = messagesBeforeHistory.reduce(0) { $0 + TokenCounter.count(message: $1) }

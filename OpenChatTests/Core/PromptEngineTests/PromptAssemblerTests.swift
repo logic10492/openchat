@@ -11,12 +11,14 @@ struct PromptAssemblerTests {
         let book = TestHelpers.makeWorldBook(isEnabled: true)
         let afterEntry = TestHelpers.makeWorldBookEntry(worldBookId: book.id, title: "After", keywords: ["dragon"], priority: 90, position: .afterSystem, content: "After system note.")
         let beforeEntry = TestHelpers.makeWorldBookEntry(worldBookId: book.id, title: "Before", keywords: ["dragon"], priority: 80, position: .beforeHistory, content: "Before history note.")
+        let memory = TestHelpers.makeMemoryEntry(characterCardId: card.id, content: "Hero remembers the dragon map.", memoryType: .event)
 
         let preview = PromptAssembler.preview(
             conversation: conversation,
             characterCard: card,
             worldBook: book,
             worldBookEntries: [afterEntry, beforeEntry],
+            memories: [memory],
             recentMessages: [TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "Old reply", sortOrder: 1)],
             currentInput: "dragon",
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
@@ -29,6 +31,11 @@ struct PromptAssemblerTests {
         #expect(preview.messagesBeforeHistory[3].content.localizedCaseInsensitiveContains("tavern"))
         #expect(preview.messagesBeforeHistory[4].content.contains("场景维持者"))
         #expect(preview.messagesBeforeHistory.contains(where: { $0.content.contains("Before history note.") }))
+        let beforeIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content.contains("Before history note.") })
+        let memoryIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content.contains("Hero remembers the dragon map.") })
+        let exampleIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content == "Hello" })
+        #expect(beforeIndex < memoryIndex)
+        #expect(memoryIndex < exampleIndex)
         #expect(preview.triggeredEntries.count == 2)
     }
 
