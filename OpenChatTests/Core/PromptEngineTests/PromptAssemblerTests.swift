@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import OpenChat
@@ -43,8 +44,13 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 1000)
         )
 
-        let hasTimeContext = preview.messagesBeforeHistory.contains { $0.content.contains("[Current Time:") }
-        #expect(hasTimeContext)
+        let timeContext = try #require(preview.messagesBeforeHistory.first { $0.content.hasPrefix("[Time] ") })
+        #expect(timeContext.content.hasSuffix(" [/Time]"))
+
+        let timestamp = timeContext.content
+            .replacing("[Time] ", with: "")
+            .replacing(" [/Time]", with: "")
+        #expect(ISO8601DateFormatter().date(from: timestamp) != nil)
         #expect(preview.tokenUsage.timeContext > 0)
     }
 
@@ -89,7 +95,7 @@ struct PromptAssemblerTests {
         )
 
         #expect(result.messages.contains(where: { $0.content.contains("[Memory") }))
-        #expect(result.messages.contains(where: { $0.content.contains("[Current Time:") }))
+        #expect(result.messages.contains(where: { $0.content.hasPrefix("[Time] ") && $0.content.hasSuffix(" [/Time]") }))
         #expect(result.tokenUsage.timeContext > 0)
         #expect(result.tokenUsage.memories > 0)
     }
@@ -134,7 +140,7 @@ struct PromptAssemblerTests {
 
         let slowPlotIndex = preview.messagesBeforeHistory.firstIndex { $0.content.contains("场景维持者") }
         let scenarioIndex = preview.messagesBeforeHistory.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") }
-        let timeIndex = preview.messagesBeforeHistory.firstIndex { $0.content.contains("[Current Time:") }
+        let timeIndex = preview.messagesBeforeHistory.firstIndex { $0.content.hasPrefix("[Time] ") }
 
         #expect(slowPlotIndex != nil)
         if let si = scenarioIndex, let spi = slowPlotIndex {

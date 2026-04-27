@@ -191,10 +191,9 @@ struct PromptAssembler {
     }
 
     private static func makeTimeContext() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd EEEE HH:mm"
-        formatter.locale = Locale(identifier: "en_US")
-        return "[Current Time: \(formatter.string(from: Date()))]"
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return "[Time] \(formatter.string(from: Date())) [/Time]"
     }
 
     private static func makeSystemPrompt(characterCard: CharacterCardRecord?) -> String {
