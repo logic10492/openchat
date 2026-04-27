@@ -68,6 +68,11 @@ extension ChatViewModel {
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
         let currentMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        let promptHistoryMessages = makePromptHistoryMessages(
+            from: currentMessages,
+            prompt: prompt,
+            persistedUserMessage: userMessageRecord
+        )
 
         var memories: [MemoryEntryRecord] = []
         if let characterCardId = characterCard?.id {
@@ -84,12 +89,13 @@ extension ChatViewModel {
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
             memories: memories,
-            recentMessages: currentMessages,
+            recentMessages: promptHistoryMessages,
             currentInput: prompt,
             endpoint: endpoint
         )
 
         let history = try await contextManager.prepareHistory(
+            messages: promptHistoryMessages,
             conversation: conversation,
             endpoint: endpoint,
             fixedTokens: preview.fixedTokens
@@ -101,7 +107,7 @@ extension ChatViewModel {
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
             memories: memories,
-            recentMessages: currentMessages,
+            recentMessages: promptHistoryMessages,
             processedHistory: history,
             currentInput: prompt,
             endpoint: endpoint
@@ -247,5 +253,22 @@ extension ChatViewModel {
                 }
             }
         }
+    }
+
+    private func makePromptHistoryMessages(
+        from messages: [MessageRecord],
+        prompt: String,
+        persistedUserMessage: MessageRecord?
+    ) -> [MessageRecord] {
+        if let persistedUserMessage {
+            return messages.filter { $0.id != persistedUserMessage.id }
+        }
+
+        guard let currentInputRecord = messages.last(where: {
+            $0.role == "user" && $0.content == prompt
+        }) else {
+            return messages
+        }
+        return messages.filter { $0.id != currentInputRecord.id }
     }
 }

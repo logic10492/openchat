@@ -16,6 +16,20 @@ struct ContextManager {
         fixedTokens: Int
     ) async throws -> [MessageRecord] {
         let allMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        return try await prepareHistory(
+            messages: allMessages,
+            conversation: conversation,
+            endpoint: endpoint,
+            fixedTokens: fixedTokens
+        )
+    }
+
+    func prepareHistory(
+        messages allMessages: [MessageRecord],
+        conversation: ConversationRecord,
+        endpoint: APIEndpointConfig,
+        fixedTokens: Int
+    ) async throws -> [MessageRecord] {
         let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
         let historyBudget = max(totalBudget - fixedTokens, 0)
 

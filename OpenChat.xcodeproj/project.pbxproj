@@ -93,6 +93,7 @@
 		B114B6113986F7F9483A7E99 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 143AD834D644876D141CE5C9 /* Localizable.xcstrings */; };
 		B1E8EA17F33F3132646B7BB1 /* MessageDisplayItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D291535741C01A2A2BA579 /* MessageDisplayItem.swift */; };
 		B2D352229A7EF0FB31C80899 /* String+Token.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4283D9BEABA0C979019472C0 /* String+Token.swift */; };
+		B4BDD9C5D9D92765CC5F43A7 /* ChatViewModelPromptAssemblyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF1FA75ECD2BFF5D0955490 /* ChatViewModelPromptAssemblyTests.swift */; };
 		B89351B4101EB8EFD2F1B857 /* WorldBookImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B05E489E0D24DFF7B32D488 /* WorldBookImportView.swift */; };
 		BA60E7C7824526B845CA90EE /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F2240CA3B7221C5143895F36 /* GRDB */; };
 		BB84C6FB19AC9AC43DC11B50 /* WorldBookEntryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4EFFE9E4AA2689FE49ABC78 /* WorldBookEntryRecord.swift */; };
@@ -250,6 +251,7 @@
 		DC50FD0D92B4B45B0EC1B104 /* WelcomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		DC91749A0DDF72B7F2B9DD56 /* TokenBudget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TokenBudget.swift; sourceTree = "<group>"; };
 		DCC699226752AA1EEAAB102F /* MemoryEntryRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryEntryRecord.swift; sourceTree = "<group>"; };
+		DDF1FA75ECD2BFF5D0955490 /* ChatViewModelPromptAssemblyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatViewModelPromptAssemblyTests.swift; sourceTree = "<group>"; };
 		DF972118E4BC4EC672B2D3A9 /* TestJSONFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestJSONFactory.swift; sourceTree = "<group>"; };
 		E02B9F057688B6E2F7C422E0 /* DatabaseManager+EndpointModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "DatabaseManager+EndpointModels.swift"; sourceTree = "<group>"; };
 		E6B3BD54F8452356CED37A0F /* SidebarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -384,6 +386,15 @@
 			);
 			name = Views;
 			path = Views;
+			sourceTree = "<group>";
+		};
+		2A47B42DB6E72FE39290511A /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				E8E1C7DDDF0343BE8D7917A1 /* ChatTests */,
+			);
+			name = Features;
+			path = Features;
 			sourceTree = "<group>";
 		};
 		386761FBDFF12F4266AACCBD /* Extensions */ = {
@@ -576,10 +587,20 @@
 			path = DatabaseTests;
 			sourceTree = "<group>";
 		};
+		E8E1C7DDDF0343BE8D7917A1 /* ChatTests */ = {
+			isa = PBXGroup;
+			children = (
+				DDF1FA75ECD2BFF5D0955490 /* ChatViewModelPromptAssemblyTests.swift */,
+			);
+			name = ChatTests;
+			path = ChatTests;
+			sourceTree = "<group>";
+		};
 		90BF152685FA8D1859795ABE /* OpenChatTests */ = {
 			isa = PBXGroup;
 			children = (
 				1230FC016694D4C1FE0CF578 /* Core */,
+				2A47B42DB6E72FE39290511A /* Features */,
 				39B3355138949A917D333463 /* TestHelpers */,
 			);
 			name = OpenChatTests;
@@ -937,6 +958,7 @@
 				0D3AD20CEBDA5E5E74F37199 /* SSEStreamParserTests.swift in Sources */,
 				EC01256953C8F3EB0F80742D /* ThinkingFeatureTests.swift in Sources */,
 				18221962B443969F672973D8 /* TitleGeneratorTests.swift in Sources */,
+				B4BDD9C5D9D92765CC5F43A7 /* ChatViewModelPromptAssemblyTests.swift in Sources */,
 				00B629622455C7A53B766451 /* KeywordMatcherTests.swift in Sources */,
 				6088FA4523E15AB18980298E /* PromptAssemblerTests.swift in Sources */,
 				BB91756648545812E3C56904 /* TokenCounterTests.swift in Sources */,
