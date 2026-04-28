@@ -51,6 +51,7 @@ struct APIEndpointRecord: Codable, FetchableRecord, PersistableRecord {
 | modelId | TEXT | NOT NULL | 模型标识符，如 `gpt-4o` |
 | maxContextTokens | INTEGER | NOT NULL, DEFAULT 4096 | 该模型的最大上下文 token 数 |
 | apiMode | TEXT | NOT NULL, DEFAULT 'chatCompletions' | API 模式：`chatCompletions` / `responses` |
+| providerDialect | TEXT | NOT NULL, DEFAULT 'openAICompatible' | 供应商方言：`openAICompatible` / `deepSeekV4` |
 | isDefault | BOOLEAN | NOT NULL, DEFAULT 0 | 是否为该端点的默认模型 |
 | isManual | BOOLEAN | NOT NULL, DEFAULT 0 | 是否为用户手动添加（不被 API 拉取覆盖） |
 | createdAt | TEXT | NOT NULL | ISO 8601 时间戳 |
@@ -68,6 +69,7 @@ struct EndpointModelRecord: Codable, FetchableRecord, PersistableRecord {
     var modelId: String
     var maxContextTokens: Int
     var apiMode: String          // "chatCompletions" | "responses"
+    var providerDialect: String  // "openAICompatible" | "deepSeekV4"
     var isDefault: Bool
     var isManual: Bool
     var createdAt: Date
@@ -247,6 +249,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
 | originalContent | TEXT | | 压缩前的原始内容（仅压缩消息有值） |
 | sortOrder | INTEGER | NOT NULL | 排序序号（时间顺序递增） |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
+| reasoningContent | TEXT | | 模型返回的角色思考链，例如 DeepSeek V4 `reasoning_content` |
 
 **外键**：`conversationId` → `conversation(id)` ON DELETE CASCADE
 
@@ -263,8 +266,12 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord {
     var originalContent: String?
     var sortOrder: Int
     var createdAt: Date
+    var reasoningContent: String?
 
     static let conversation = belongsTo(ConversationRecord.self)
+
+    // 普通 prompt 历史不回传 reasoningContent。
+    var chatMessage: ChatMessage { ChatMessage(role: role, content: content) }
 }
 ```
 
@@ -546,6 +553,18 @@ migrator.registerMigration("v5_addApiMode") { db in
 }
 ```
 
+### v6_add_reasoning_content
+
+为 `message` 添加 `reasoningContent`，保存 DeepSeek V4 等模型返回的角色思考链。该字段用于展示与持久化；普通 prompt 历史通过 `MessageRecord.chatMessage` 仅回传 `role` 与 `content`，不回传历史 `reasoningContent`。
+
+```swift
+migrator.registerMigration("v6_add_reasoning_content") { db in
+    try db.alter(table: Historical.messageTable) { t in
+        t.add(column: "reasoningContent", .text)
+    }
+}
+```
+
 ### v8_endpoint_model_decoupling
 
 将模型配置从端点表解耦到独立的 `endpoint_model` 表。端点仅保留 URL + API Key 组合，模型（含 maxContextTokens、apiMode）独立管理。对话通过 `modelName` 字符串记录所选模型。
@@ -572,6 +591,29 @@ migrator.registerMigration("v8_endpoint_model_decoupling") { db in
     // 3. 为 conversation 添加 modelName 列，回填自端点
 
     // 4. 从 api_endpoint 移除 modelName、maxContextTokens、apiMode 列
+}
+```
+
+### v10_add_provider_dialect_to_endpoint_model
+
+为 `endpoint_model` 添加 `providerDialect`，使 API 路由模式和供应商请求方言分离。历史记录默认 `openAICompatible`；`deepseek-v4-flash` / `deepseek-v4-pro` / `deepseek-v4-*` 自动标记为 `deepSeekV4`。当历史 DeepSeek V4 模型仍使用 4096 默认 context 时，迁移提升为 1,000,000，以符合 DeepSeek V4 1M 上下文能力。
+
+```swift
+migrator.registerMigration("v10_add_provider_dialect_to_endpoint_model") { db in
+    try db.alter(table: Historical.endpointModelTable) { t in
+        t.add(column: "providerDialect", .text)
+            .notNull()
+            .defaults(to: Historical.providerDialectOpenAICompatible)
+    }
+    try db.execute(sql: """
+        UPDATE endpoint_model
+        SET providerDialect = ?,
+            maxContextTokens = CASE
+                WHEN maxContextTokens = 4096 THEN 1000000
+                ELSE maxContextTokens
+            END
+        WHERE lower(modelId) LIKE 'deepseek-v4-%'
+        """, arguments: [Historical.providerDialectDeepSeekV4])
 }
 ```
 

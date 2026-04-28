@@ -22,7 +22,10 @@
 | `APIClient.swift` | 主客户端，暴露 `sendMessage()` 和 `streamMessage()`，根据 `endpoint.apiMode` 分发到 Chat Completions 或 Responses 实现 |
 | `SSEStreamParser.swift` | 将 `URLSession.AsyncBytes` 逐行解析为 SSE 事件流，支持 `event:` 类型行 |
 | `APIMode.swift` | API 模式枚举：`chatCompletions` / `responses` |
-| `APIEndpointConfig.swift` | 端点配置值对象（含 `apiMode`，从 `APIEndpointRecord` 转换） |
+| `APIProviderDialect.swift` | 模型级供应商请求方言：`openAICompatible` / `deepSeekV4`，以及 DeepSeek V4 默认上下文与 reasoning effort |
+| `APIEndpointConfig.swift` | 端点配置值对象（含 `apiMode` 与 `providerDialect`，从 `APIEndpointRecord` + `EndpointModelRecord` 转换） |
+| `ModelParameters.swift` | 模型采样参数、thinking budget、DeepSeek V4 `reasoningEffort` |
+| `ChatMessage.swift` | Chat 消息结构体，支持响应侧 `reasoning_content`，请求侧默认剥离 reasoning 内容 |
 | `APIRequest.swift` | Chat Completion 请求体构建 |
 | `APIResponse.swift` | Chat Completion 响应模型：完整响应 + 流式 Delta |
 | `ResponsesAPIRequest.swift` | Responses API 请求体构建（自动提取 system → `instructions`） |
@@ -94,6 +97,10 @@ APIClient 根据 `endpoint.apiMode` 在内部分发：
 struct ChatMessage: Codable {
     let role: String       // "system" | "user" | "assistant"
     let content: String
+    let reasoningContent: String? // DeepSeek V4 响应侧 reasoning_content
+
+    // 普通请求历史默认不携带 reasoning_content。
+    func requestMessage(includeReasoningContent: Bool = false) -> ChatMessage
 }
 
 struct APIRequest: Codable {
@@ -108,6 +115,8 @@ struct APIRequest: Codable {
     let frequencyPenalty: Double?
     let presencePenalty: Double?
     let stop: [String]?
+    let thinking: DeepSeekThinkingConfig?
+    let reasoningEffort: String?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, stream, temperature, stop
@@ -117,7 +126,13 @@ struct APIRequest: Codable {
         case maxCompletionTokens = "max_completion_tokens"
         case frequencyPenalty = "frequency_penalty"
         case presencePenalty = "presence_penalty"
+        case thinking
+        case reasoningEffort = "reasoning_effort"
     }
+}
+
+struct DeepSeekThinkingConfig: Codable {
+    let type: String // "enabled" | "disabled"
 }
 
 struct ResponsesAPIRequest: Codable {
@@ -146,6 +161,7 @@ struct ModelParameters {
     var presencePenalty: Double = 0.0
     var stop: [String]? = nil
     var thinkingBudget: Int? = nil
+    var reasoningEffort: ReasoningEffort = .high
 }
 
 // --- 响应（非流式） ---
@@ -217,13 +233,14 @@ struct APIEndpointConfig {
     let modelName: String
     let maxContextTokens: Int
     let apiMode: APIMode           // 默认 .chatCompletions
+    let providerDialect: APIProviderDialect // 默认 .openAICompatible
 
-    init(baseURL: URL, apiKey: String?, modelName: String, maxContextTokens: Int, apiMode: APIMode = .chatCompletions)
+    init(baseURL: URL, apiKey: String?, modelName: String, maxContextTokens: Int, apiMode: APIMode = .chatCompletions, providerDialect: APIProviderDialect = .openAICompatible)
     init(from endpoint: APIEndpointRecord, model: EndpointModelRecord) throws
 }
 ```
 
-### 3.5 APIError
+### 3.6 APIError
 
 ```swift
 enum APIError: LocalizedError {
@@ -320,7 +337,8 @@ Accept: text/event-stream           // 仅流式请求
 - 流式字段：`stream`；流式时自动带 `stream_options: { "include_usage": true }`
 - token 上限：
   - 标准模式使用 `max_tokens`
-  - thinking/reasoning 模式使用 `max_completion_tokens`，其值包含可见输出 token 和 reasoning token 预算
+  - `openAICompatible` 方言的 thinking/reasoning 模式使用 `max_completion_tokens`，其值包含可见输出 token 和 reasoning token 预算
+  - `deepSeekV4` 方言使用 `max_tokens` + `thinking` / `reasoning_effort`，见 6.2
 - 响应解析：
   - 非流式读取 `choices[].message.content` 和 `usage`
   - 流式读取 `choices[].delta.content`
@@ -329,7 +347,30 @@ Accept: text/event-stream           // 仅流式请求
 
 当前未覆盖 OpenAI Chat Completions 全量字段，例如 `tools` / `tool_choice` / `parallel_tool_calls`、多模态 content array、`response_format`、`metadata`、`logprobs`、`web_search_options`、`store`、`n`、`seed` 等。后续新增这些字段时，应先扩展请求/响应模型和测试，不应把当前文本聊天适配器描述为全量兼容实现。
 
-### 6.2 Responses API
+### 6.2 DeepSeek V4 方言
+
+DeepSeek V4 使用 OpenAI-compatible Chat Completions 路由，但请求体不是当前 OpenAI reasoning 分支的 `max_completion_tokens` 语义。模型级 `providerDialect = deepSeekV4` 时：
+
+- 路由仍为 `POST {baseURL}/chat/completions`。
+- 官方 baseURL 为 `https://api.deepseek.com`。
+- 模型为 `deepseek-v4-flash` / `deepseek-v4-pro`，本地推断也覆盖 `deepseek-v4-*`。
+- thinking enabled 时发送：
+  - `thinking: { "type": "enabled" }`
+  - `reasoning_effort: "high" | "max"`
+  - `max_tokens` 作为可见输出上限
+  - 不发送 `temperature`、`top_p`、`presence_penalty`、`frequency_penalty`
+- thinking disabled 时发送：
+  - `thinking: { "type": "disabled" }`
+  - 常规采样参数按 UI 配置发送
+- DeepSeek V4 返回的 `reasoning_content` 作为角色思考链保存和展示。当前 OpenChat 没有 Tool Calls 执行器，因此正常角色对话历史不会回传历史 `reasoning_content`；未来接入工具调用时，发生 tool call 的 assistant 消息必须完整回传 `reasoning_content`、`tool_calls` 与后续 `role: tool` 消息。
+
+实现证据：
+- `OpenChat/Core/Networking/APIProviderDialect.swift`：DeepSeek V4 方言推断、1,000,000 默认上下文、`ReasoningEffort.high/max`。
+- `OpenChat/Core/Networking/APIRequest.swift`：DeepSeek V4 下编码 `thinking` / `reasoning_effort`，thinking enabled 时使用 `max_tokens` 并剥离无效采样参数。
+- `OpenChat/Core/Networking/ChatMessage.swift`、`OpenChat/Core/Networking/APIRequest.swift`、`OpenChat/Core/Networking/ResponsesAPIRequest.swift`：`reasoning_content` 可解码，但普通请求历史默认经 `requestMessage()` 剥离。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`、`OpenChat/Features/Chat/Views/MessageBubbleView.swift`：流式 reasoning delta 累积到 `MessageRecord.reasoningContent` 并以“角色思考”展示。
+
+### 6.3 Responses API
 
 当前实现覆盖：
 
@@ -387,23 +428,26 @@ Accept: text/event-stream           // 仅流式请求
 | `Core/Database` | `APIEndpointRecord`（用于 `APIEndpointConfig` 初始化） |
 | 被依赖方 | `Features/Chat/ChatViewModel`、`Core/ContextManager/CompressionStrategy` |
 
-## 实现证据（2026-04-27 核对）
+## 实现证据（2026-04-29 核对）
 
 - 代码位置：
   - `OpenChat/Core/Networking/APIClient.swift` — 根据 apiMode 分发到 Chat Completions / Responses 实现，并以 `endpoint.baseURL` 追加相对路径 `models`、`chat/completions`、`responses`
   - `OpenChat/Core/Networking/SSEStreamParser.swift` — 支持 `event:` 类型行
   - `OpenChat/Core/Networking/APIMode.swift` — API 模式枚举
-  - `OpenChat/Core/Networking/APIRequest.swift` — Chat Completions 请求体（`max_tokens` / `max_completion_tokens`、`stream_options.include_usage`）
-  - `OpenChat/Core/Networking/APIResponse.swift` — Chat Completions 响应体
+  - `OpenChat/Core/Networking/APIProviderDialect.swift` — 供应商方言、DeepSeek V4 推断、默认上下文与 `ReasoningEffort`
+  - `OpenChat/Core/Networking/APIRequest.swift` — Chat Completions 请求体（`max_tokens` / `max_completion_tokens`、DeepSeek V4 `thinking` / `reasoning_effort`、`stream_options.include_usage`）
+  - `OpenChat/Core/Networking/APIResponse.swift` — Chat Completions 响应体与流式 `reasoning_content`
+  - `OpenChat/Core/Networking/ChatMessage.swift` — 响应侧 `reasoning_content` 解码，请求侧默认剥离历史 reasoning 内容
   - `OpenChat/Core/Networking/ResponsesAPIRequest.swift` — Responses API 请求体（system → instructions 提取）
   - `OpenChat/Core/Networking/ResponsesAPIResponse.swift` — Responses API 响应体 + 转换
-  - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 `init(from:model:)` 从端点+模型记录构造
+  - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 `init(from:model:)` 从端点+模型记录构造，并携带 `providerDialect`
   - `OpenChat/Core/Networking/APIError.swift`
-- 已验证测试（2026-04-27）：
+- 已验证测试（2026-04-29）：
   - `OpenChatTests/Core/NetworkingTests/APIClientTests.swift` — Chat Completions 模式测试
   - `OpenChatTests/Core/NetworkingTests/SSEStreamParserTests.swift` — SSE 解析测试
   - `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift` — Responses API 请求/响应/流式/参数过滤测试
   - `OpenChatTests/Core/NetworkingTests/ThinkingFeatureTests.swift` — thinking/reasoning 请求参数、流式 reasoning delta、usage reasoning tokens 测试
+  - `OpenChatTests/Core/NetworkingTests/DeepSeekV4RequestTests.swift` — DeepSeek V4 `thinking` / `reasoning_effort` 请求编码、非流式 reasoning 解码、请求历史不回传 reasoning 内容
   - `OpenChatTests/Core/NetworkingTests/ModelObjectTests.swift` — ModelObject 解码 + EndpointModelRecord 测试
 - 验证命令：
-  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'` — 全量 133 个 Swift Testing 测试通过（2026-04-29）
+  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'` — 全量 152 个 Swift Testing 测试通过（2026-04-29）

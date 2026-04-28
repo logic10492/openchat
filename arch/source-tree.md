@@ -75,18 +75,15 @@ OpenChat/
 │   │   ├── APIClient.swift                 # OpenAI-compatible HTTP 请求封装（根据 apiMode 分发）
 │   │   ├── SSEStreamParser.swift           # Server-Sent Events 流式解析器（支持 typed events）
 │   │   ├── APIMode.swift                   # API 模式枚举（chatCompletions / responses）
-│   │   ├── APIEndpointConfig.swift         # 端点配置 VO（URL / key / model / apiMode）
-│   │   ├── APIRequest.swift                # Chat Completions 请求体构建
-│   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta）
+│   │   ├── APIProviderDialect.swift        # 供应商请求方言（OpenAI-compatible / DeepSeek V4）
+│   │   ├── APIEndpointConfig.swift         # 端点配置 VO（URL / key / model / apiMode / providerDialect）
+│   │   ├── APIRequest.swift                # Chat Completions 请求体构建（含 DeepSeek V4 thinking）
+│   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta / reasoning_content）
 │   │   ├── ResponsesAPIRequest.swift       # Responses API 请求体构建（system → instructions 提取）
 │   │   ├── ResponsesAPIResponse.swift      # Responses API 响应模型 + 到统一类型的转换
-│   │   ├── ModelParameters.swift           # 模型采样参数（含 API 模式过滤）
-│   │   ├── ChatMessage.swift               # 消息结构体（role + content
-│   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta）
-│   │   ├── ResponsesAPIRequest.swift       # Responses API 请求体构建（system → instructions 提取）
-│   │   ├── ResponsesAPIResponse.swift      # Responses API 响应模型 + 到统一类型的转换
-│   │   ├── ModelParameters.swift           # 模型采样参数（含 API 模式过滤）
-│   │   ├── ChatMessage.swift               # 消息结构体（role + content）
+│   │   ├── ModelParameters.swift           # 模型采样参数（含 thinkingBudget / reasoningEffort）
+│   │   ├── ChatMessage.swift               # 消息结构体（role + content + response reasoningContent）
+│   │   ├── TitleGenerator.swift            # 会话标题生成请求封装
 │   │   └── APIError.swift                  # 统一错误类型
 │   │
 │   ├── PromptEngine/
@@ -117,7 +114,9 @@ OpenChat/
 │           ├── ConversationRecord.swift    # GRDB Record：会话
 │           ├── MessageRecord.swift         # GRDB Record：消息
 │           ├── MemoryEntryRecord.swift     # GRDB Record：记忆条目
-│           └── APIEndpointRecord.swift     # GRDB Record：API 端点配置
+│           ├── APIEndpointRecord.swift     # GRDB Record：API 端点配置
+│           ├── EndpointModelRecord.swift   # GRDB Record：端点模型配置（apiMode / providerDialect）
+│           └── RecordCoders.swift          # Record JSON 编解码辅助
 │
 ├── Shared/
 │   ├── Extensions/
