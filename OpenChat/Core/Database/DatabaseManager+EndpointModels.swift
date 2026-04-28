@@ -62,6 +62,10 @@ extension DatabaseManager {
     /// Merge fetched models from API into the database, preserving manual entries.
     func upsertFetchedModels(endpointId: String, models: [ModelObject]) async throws {
         try await write { db in
+            guard let endpoint = try APIEndpointRecord.fetchOne(db, key: endpointId),
+                  let endpointBaseURL = URL(string: endpoint.baseURL) else {
+                return
+            }
             let existing = try EndpointModelRecord
                 .filter(Column("endpointId") == endpointId)
                 .fetchAll(db)
@@ -78,13 +82,18 @@ extension DatabaseManager {
 
             // Insert new models from API
             for model in models where !existingIds.contains(model.id) {
+                let providerDialect = APIProviderDialect.inferred(baseURL: endpointBaseURL, modelId: model.id)
                 let record = EndpointModelRecord(
                     id: UUID().uuidString,
                     endpointId: endpointId,
                     modelId: model.id,
-                    maxContextTokens: model.contextLength ?? 4096,
+                    maxContextTokens: APIProviderDialect.defaultContextTokens(
+                        baseURL: endpointBaseURL,
+                        modelId: model.id,
+                        reportedContextLength: model.contextLength
+                    ),
                     apiMode: APIMode.chatCompletions.rawValue,
-                    providerDialect: APIProviderDialect.openAICompatible.rawValue,
+                    providerDialect: providerDialect.rawValue,
                     isDefault: isFirst,
                     isManual: false,
                     createdAt: Date()
@@ -93,14 +102,24 @@ extension DatabaseManager {
                 if isFirst { isFirst = false }
             }
 
-            // Update context length for existing fetched models
+            // Refresh existing fetched models, while preserving manual overrides.
             for model in models {
-                if let contextLength = model.contextLength,
-                   var existing = try EndpointModelRecord
+                if var existing = try EndpointModelRecord
                     .filter(Column("endpointId") == endpointId && Column("modelId") == model.id)
                     .fetchOne(db),
                    !existing.isManual {
-                    existing.maxContextTokens = contextLength
+                    let providerDialect = APIProviderDialect.inferred(baseURL: endpointBaseURL, modelId: model.id)
+                    existing.providerDialectValue = providerDialect
+                    if model.contextLength != nil || providerDialect == .deepSeekV4 {
+                        existing.maxContextTokens = APIProviderDialect.defaultContextTokens(
+                            baseURL: endpointBaseURL,
+                            modelId: model.id,
+                            reportedContextLength: model.contextLength
+                        )
+                    }
+                    if existing.providerDialectValue == .deepSeekV4 {
+                        existing.apiModeValue = .chatCompletions
+                    }
                     try existing.update(db)
                 }
             }

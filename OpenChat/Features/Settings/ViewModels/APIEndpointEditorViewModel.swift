@@ -34,12 +34,14 @@ final class APIEndpointEditorViewModel {
     var newModelId = ""
     var newModelMaxContext = AppConstants.defaultMaxContextTokens
     var newModelApiMode: APIMode = .chatCompletions
+    var newModelProviderDialect: APIProviderDialect = .openAICompatible
 
     // MARK: - Edit model sheet state
     var isShowingEditModel = false
     var editingModel: EndpointModelRecord?
     var editModelMaxContext = AppConstants.defaultMaxContextTokens
     var editModelApiMode: APIMode = .chatCompletions
+    var editModelProviderDialect: APIProviderDialect = .openAICompatible
 
     init(
         databaseManager: DatabaseManager,
@@ -195,13 +197,18 @@ final class APIEndpointEditorViewModel {
     func addManualModel() async {
         guard let endpointId = editingEndpoint?.id, isAddModelValid else { return }
 
+        let resolvedApiMode: APIMode = newModelProviderDialect == .deepSeekV4 ? .chatCompletions : newModelApiMode
+        let resolvedContext = newModelProviderDialect == .deepSeekV4
+            ? max(newModelMaxContext, 1_000_000)
+            : newModelMaxContext
+
         let record = EndpointModelRecord(
             id: UUID().uuidString,
             endpointId: endpointId,
             modelId: newModelId.trimmingCharacters(in: .whitespacesAndNewlines),
-            maxContextTokens: newModelMaxContext,
-            apiMode: newModelApiMode.rawValue,
-            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            maxContextTokens: resolvedContext,
+            apiMode: resolvedApiMode.rawValue,
+            providerDialect: newModelProviderDialect.rawValue,
             isDefault: models.isEmpty,
             isManual: true,
             createdAt: Date()
@@ -218,6 +225,7 @@ final class APIEndpointEditorViewModel {
         newModelId = ""
         newModelMaxContext = AppConstants.defaultMaxContextTokens
         newModelApiMode = .chatCompletions
+        newModelProviderDialect = .openAICompatible
         isShowingAddModel = false
     }
 
@@ -250,13 +258,20 @@ final class APIEndpointEditorViewModel {
         editingModel = model
         editModelMaxContext = model.maxContextTokens
         editModelApiMode = model.apiModeValue
+        editModelProviderDialect = model.providerDialectValue
         isShowingEditModel = true
     }
 
     func saveEditedModel() async {
         guard var model = editingModel else { return }
-        model.maxContextTokens = editModelMaxContext
-        model.apiModeValue = editModelApiMode
+        model.providerDialectValue = editModelProviderDialect
+        if editModelProviderDialect == .deepSeekV4 {
+            model.apiModeValue = .chatCompletions
+            model.maxContextTokens = max(editModelMaxContext, 1_000_000)
+        } else {
+            model.apiModeValue = editModelApiMode
+            model.maxContextTokens = editModelMaxContext
+        }
         model.isManual = true
 
         do {
@@ -276,6 +291,7 @@ final class APIEndpointEditorViewModel {
         editingModel = nil
         editModelMaxContext = AppConstants.defaultMaxContextTokens
         editModelApiMode = .chatCompletions
+        editModelProviderDialect = .openAICompatible
         isShowingEditModel = false
     }
 }

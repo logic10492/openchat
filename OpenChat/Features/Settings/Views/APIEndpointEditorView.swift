@@ -114,7 +114,7 @@ struct APIEndpointEditorView: View {
                                     .background(.orange.opacity(0.15), in: Capsule())
                             }
                         }
-                        Text("\(model.maxContextTokens) tokens · \(model.apiModeValue == .responses ? "Responses" : "Chat Completions")")
+                        Text("\(model.maxContextTokens) tokens · \(model.apiModeValue == .responses ? String(localized: "Responses") : String(localized: "Chat Completions")) · \(model.providerDialectValue.displayName)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -186,10 +186,17 @@ struct APIEndpointEditorView: View {
                         .frame(maxWidth: 120)
                 }
 
+                Picker(String(localized: "Provider"), selection: bind(\.newModelProviderDialect)) {
+                    ForEach(APIProviderDialect.allCases) { dialect in
+                        Text(dialect.displayName).tag(dialect)
+                    }
+                }
+
                 Picker(String(localized: "API Mode"), selection: bind(\.newModelApiMode)) {
                     Text("Chat Completions").tag(APIMode.chatCompletions)
                     Text("Responses").tag(APIMode.responses)
                 }
+                .disabled(viewModel.newModelProviderDialect == .deepSeekV4)
             }
             .navigationTitle(String(localized: "Add Model"))
             .toolbar {
@@ -231,10 +238,17 @@ struct APIEndpointEditorView: View {
                         .frame(maxWidth: 120)
                 }
 
+                Picker(String(localized: "Provider"), selection: bind(\.editModelProviderDialect)) {
+                    ForEach(APIProviderDialect.allCases) { dialect in
+                        Text(dialect.displayName).tag(dialect)
+                    }
+                }
+
                 Picker(String(localized: "API Mode"), selection: bind(\.editModelApiMode)) {
                     Text("Chat Completions").tag(APIMode.chatCompletions)
                     Text("Responses").tag(APIMode.responses)
                 }
+                .disabled(viewModel.editModelProviderDialect == .deepSeekV4)
             }
             .navigationTitle(String(localized: "Edit Model"))
             .toolbar {

@@ -187,6 +187,66 @@ struct EndpointModelTests {
         #expect(defaultModel != nil)
     }
 
+    @Test func test_upsert_deepseek_v4_models_sets_provider_and_context() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: UUID().uuidString,
+            name: "DeepSeek",
+            baseURL: "https://api.deepseek.com",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        try await manager.saveEndpoint(endpoint)
+
+        try await manager.upsertFetchedModels(
+            endpointId: endpoint.id,
+            models: [
+                ModelObject(id: "deepseek-v4-pro", object: "model", ownedBy: "deepseek", contextLength: nil),
+                ModelObject(id: "deepseek-v4-flash", object: "model", ownedBy: "deepseek", contextLength: nil),
+            ]
+        )
+
+        let pro = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: "deepseek-v4-pro")
+        let flash = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: "deepseek-v4-flash")
+
+        #expect(pro?.providerDialectValue == .deepSeekV4)
+        #expect(pro?.apiModeValue == .chatCompletions)
+        #expect(pro?.maxContextTokens == 1_000_000)
+        #expect(flash?.providerDialectValue == .deepSeekV4)
+        #expect(flash?.maxContextTokens == 1_000_000)
+    }
+
+    @Test func test_upsert_preserves_existing_context_when_fetched_context_missing() async throws {
+        let (manager, endpoint) = try await makeEndpointAndManager()
+        let existing = EndpointModelRecord(
+            id: UUID().uuidString,
+            endpointId: endpoint.id,
+            modelId: "gpt-4o",
+            maxContextTokens: 128_000,
+            apiMode: APIMode.responses.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: false,
+            createdAt: .now
+        )
+        try await manager.saveEndpointModel(existing)
+
+        try await manager.upsertFetchedModels(
+            endpointId: endpoint.id,
+            models: [
+                ModelObject(id: "gpt-4o", object: "model", ownedBy: "openai", contextLength: nil),
+            ]
+        )
+
+        let model = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: "gpt-4o")
+        #expect(model?.maxContextTokens == 128_000)
+        #expect(model?.apiModeValue == .responses)
+        #expect(model?.providerDialectValue == .openAICompatible)
+    }
+
     @Test func test_upsert_preserves_manual_entries() async throws {
         let (manager, endpoint) = try await makeEndpointAndManager()
 
@@ -307,5 +367,51 @@ struct APIEndpointEditorViewModelTests {
         #expect(updated?.isManual == true)
         #expect(viewModel.isShowingEditModel == false)
         #expect(viewModel.editingModel == nil)
+    }
+
+    @MainActor
+    @Test func test_save_edited_model_updates_provider_dialect() async throws {
+        let (manager, endpoint, model) = try await makeEndpointAndModel()
+        let viewModel = APIEndpointEditorViewModel(
+            databaseManager: manager,
+            apiClient: APIClient(),
+            editingEndpoint: endpoint
+        )
+
+        viewModel.beginEditingModel(model)
+        viewModel.editModelProviderDialect = .deepSeekV4
+        viewModel.editModelApiMode = .chatCompletions
+        viewModel.editModelMaxContext = 1_000_000
+
+        await viewModel.saveEditedModel()
+
+        let updated = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: model.modelId)
+        #expect(updated?.providerDialectValue == .deepSeekV4)
+        #expect(updated?.apiModeValue == .chatCompletions)
+        #expect(updated?.maxContextTokens == 1_000_000)
+        #expect(updated?.isManual == true)
+    }
+
+    @MainActor
+    @Test func test_add_manual_deepseek_model_forces_chat_completions_and_context() async throws {
+        let (manager, endpoint, _) = try await makeEndpointAndModel()
+        let viewModel = APIEndpointEditorViewModel(
+            databaseManager: manager,
+            apiClient: APIClient(),
+            editingEndpoint: endpoint
+        )
+
+        viewModel.newModelId = "deepseek-v4-pro"
+        viewModel.newModelProviderDialect = .deepSeekV4
+        viewModel.newModelApiMode = .responses
+        viewModel.newModelMaxContext = 32_000
+
+        await viewModel.addManualModel()
+
+        let added = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: "deepseek-v4-pro")
+        #expect(added?.providerDialectValue == .deepSeekV4)
+        #expect(added?.apiModeValue == .chatCompletions)
+        #expect(added?.maxContextTokens == 1_000_000)
+        #expect(added?.isManual == true)
     }
 }

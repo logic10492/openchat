@@ -412,6 +412,16 @@
         }
       }
     },
+    "DeepSeek V4" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DeepSeek V4"
+          }
+        }
+      }
+    },
     "Description" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -829,6 +839,16 @@
         }
       }
     },
+    "OpenAI Compatible" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI 兼容"
+          }
+        }
+      }
+    },
     "Personality" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -880,6 +900,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提示词"
+          }
+        }
+      }
+    },
+    "Provider" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "供应商"
           }
         }
       }
