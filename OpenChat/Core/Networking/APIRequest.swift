@@ -1,6 +1,6 @@
 import Foundation
 
-struct APIRequest: Sendable {
+struct APIRequest: Codable, Sendable {
     let model: String
     let messages: [ChatMessage]
     let stream: Bool
@@ -15,6 +15,16 @@ struct APIRequest: Sendable {
 
     /// When non-nil, the model is expected to produce reasoning tokens.
     let thinkingEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case model, messages, stream, temperature, stop
+        case streamOptions = "stream_options"
+        case topP = "top_p"
+        case maxTokens = "max_tokens"
+        case maxCompletionTokens = "max_completion_tokens"
+        case frequencyPenalty = "frequency_penalty"
+        case presencePenalty = "presence_penalty"
+    }
 
     init(messages: [ChatMessage], endpoint: APIEndpointConfig, parameters: ModelParameters, stream: Bool) {
         model = endpoint.modelName
@@ -39,17 +49,21 @@ struct APIRequest: Sendable {
             maxCompletionTokens = nil
         }
     }
-}
 
-extension APIRequest: Encodable {
-    enum CodingKeys: String, CodingKey {
-        case model, messages, stream, temperature, stop
-        case streamOptions = "stream_options"
-        case topP = "top_p"
-        case maxTokens = "max_tokens"
-        case maxCompletionTokens = "max_completion_tokens"
-        case frequencyPenalty = "frequency_penalty"
-        case presencePenalty = "presence_penalty"
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        model = try container.decode(String.self, forKey: .model)
+        messages = try container.decode([ChatMessage].self, forKey: .messages)
+        stream = try container.decode(Bool.self, forKey: .stream)
+        streamOptions = try container.decodeIfPresent(StreamOptions.self, forKey: .streamOptions)
+        temperature = try container.decodeIfPresent(Double.self, forKey: .temperature)
+        topP = try container.decodeIfPresent(Double.self, forKey: .topP)
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens)
+        maxCompletionTokens = try container.decodeIfPresent(Int.self, forKey: .maxCompletionTokens)
+        frequencyPenalty = try container.decodeIfPresent(Double.self, forKey: .frequencyPenalty)
+        presencePenalty = try container.decodeIfPresent(Double.self, forKey: .presencePenalty)
+        stop = try container.decodeIfPresent([String].self, forKey: .stop)
+        thinkingEnabled = maxCompletionTokens != nil
     }
 
     func encode(to encoder: Encoder) throws {
