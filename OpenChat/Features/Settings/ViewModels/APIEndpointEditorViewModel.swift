@@ -35,6 +35,12 @@ final class APIEndpointEditorViewModel {
     var newModelMaxContext = AppConstants.defaultMaxContextTokens
     var newModelApiMode: APIMode = .chatCompletions
 
+    // MARK: - Edit model sheet state
+    var isShowingEditModel = false
+    var editingModel: EndpointModelRecord?
+    var editModelMaxContext = AppConstants.defaultMaxContextTokens
+    var editModelApiMode: APIMode = .chatCompletions
+
     init(
         databaseManager: DatabaseManager,
         apiClient: APIClient,
@@ -235,5 +241,38 @@ final class APIEndpointEditorViewModel {
         } catch {
             // ignore
         }
+    }
+
+    func beginEditingModel(_ model: EndpointModelRecord) {
+        editingModel = model
+        editModelMaxContext = model.maxContextTokens
+        editModelApiMode = model.apiModeValue
+        isShowingEditModel = true
+    }
+
+    func saveEditedModel() async {
+        guard var model = editingModel else { return }
+        model.maxContextTokens = editModelMaxContext
+        model.apiModeValue = editModelApiMode
+        model.isManual = true
+
+        do {
+            try await databaseManager.saveEndpointModel(model)
+            models = try await databaseManager.fetchEndpointModels(endpointId: model.endpointId)
+            resetEditModelForm()
+        } catch {
+            // Keep the sheet open so the user can retry.
+        }
+    }
+
+    func cancelEditingModel() {
+        resetEditModelForm()
+    }
+
+    private func resetEditModelForm() {
+        editingModel = nil
+        editModelMaxContext = AppConstants.defaultMaxContextTokens
+        editModelApiMode = .chatCompletions
+        isShowingEditModel = false
     }
 }

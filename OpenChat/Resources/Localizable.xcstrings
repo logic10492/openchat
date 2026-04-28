@@ -467,6 +467,16 @@
         }
       }
     },
+    "Edit Model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑模型"
+          }
+        }
+      }
+    },
     "Edit World Book" : {
       "extractionState" : "stale",
       "localizations" : {

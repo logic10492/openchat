@@ -71,6 +71,11 @@ struct APIEndpointEditorView: View {
             .sheet(isPresented: bind(\.isShowingAddModel)) {
                 addModelSheet
             }
+            .sheet(isPresented: bind(\.isShowingEditModel), onDismiss: {
+                viewModel.cancelEditingModel()
+            }) {
+                editModelSheet
+            }
         }
     }
 
@@ -116,6 +121,9 @@ struct APIEndpointEditorView: View {
                     Spacer()
                 }
                 .contextMenu {
+                    Button(String(localized: "Edit Model")) {
+                        viewModel.beginEditingModel(model)
+                    }
                     if !model.isDefault {
                         Button(String(localized: "Set Default")) {
                             Task { await viewModel.setDefaultModel(model.id) }
@@ -201,6 +209,50 @@ struct APIEndpointEditorView: View {
         .presentationDetents([.medium])
     }
 
+    // MARK: - Edit Model Sheet
+
+    private var editModelSheet: some View {
+        NavigationStack {
+            Form {
+                if let model = viewModel.editingModel {
+                    LabeledContent(String(localized: "Model Name")) {
+                        Text(model.modelId)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                HStack {
+                    Text(String(localized: "Max Context Tokens"))
+                    Spacer()
+                    TextField("", text: editModelMaxContextBinding)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 120)
+                }
+
+                Picker(String(localized: "API Mode"), selection: bind(\.editModelApiMode)) {
+                    Text("Chat Completions").tag(APIMode.chatCompletions)
+                    Text("Responses").tag(APIMode.responses)
+                }
+            }
+            .navigationTitle(String(localized: "Edit Model"))
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(String(localized: "Cancel")) {
+                        viewModel.cancelEditingModel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(String(localized: "Save")) {
+                        Task { await viewModel.saveEditedModel() }
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
     // MARK: - Helpers
 
     private var newModelMaxContextBinding: Binding<String> {
@@ -210,6 +262,18 @@ struct APIEndpointEditorView: View {
                 let filtered = newValue.filter(\.isWholeNumber)
                 if let value = Int(filtered) {
                     viewModel.newModelMaxContext = min(max(value, 1), 2_000_000)
+                }
+            }
+        )
+    }
+
+    private var editModelMaxContextBinding: Binding<String> {
+        Binding(
+            get: { String(viewModel.editModelMaxContext) },
+            set: { newValue in
+                let filtered = newValue.filter(\.isWholeNumber)
+                if let value = Int(filtered) {
+                    viewModel.editModelMaxContext = min(max(value, 1), 2_000_000)
                 }
             }
         )
