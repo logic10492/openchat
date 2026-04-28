@@ -69,8 +69,16 @@ struct ChatSettingsSheet: View {
                     Toggle(String(localized: "Enable Thinking"), isOn: thinkingEnabledBinding)
 
                     if viewModel.thinkingEnabled {
-                        Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
-                            Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
+                        if viewModel.selectedProviderDialect == .deepSeekV4 {
+                            Picker(String(localized: "Reasoning Effort"), selection: reasoningEffortBinding) {
+                                ForEach(ReasoningEffort.allCases) { effort in
+                                    Text(effort.displayName).tag(effort)
+                                }
+                            }
+                        } else {
+                            Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
+                                Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
+                            }
                         }
                     }
                 }
@@ -142,5 +150,10 @@ struct ChatSettingsSheet: View {
     private var thinkingBudgetBinding: Binding<Int> {
         @Bindable var viewModel = viewModel
         return $viewModel.thinkingBudget
+    }
+
+    private var reasoningEffortBinding: Binding<ReasoningEffort> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.reasoningEffort
     }
 }

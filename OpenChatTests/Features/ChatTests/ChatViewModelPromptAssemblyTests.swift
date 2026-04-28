@@ -53,6 +53,147 @@ private extension URLRequest {
 @MainActor
 @Suite("Chat prompt assembly")
 struct ChatViewModelPromptAssemblyTests {
+    @Test func test_current_parameters_preserve_reasoning_effort() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation()
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        viewModel.thinkingEnabled = true
+        viewModel.thinkingBudget = 8192
+        viewModel.reasoningEffort = ReasoningEffort.max
+
+        let parameters = viewModel.currentParameters
+
+        #expect(parameters.isThinkingEnabled == true)
+        #expect(parameters.reasoningEffort == .max)
+    }
+
+    @Test func test_selected_provider_dialect_falls_back_to_default_model_when_saved_model_is_stale() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-deepseek",
+            name: "DeepSeek",
+            baseURL: "https://api.deepseek.com",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-deepseek",
+            endpointId: endpoint.id,
+            modelId: "deepseek-v4-pro",
+            maxContextTokens: 1_000_000,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.deepSeekV4.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation()
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = "removed-model"
+
+        try await database.saveEndpoint(endpoint)
+        try await database.saveEndpointModel(model)
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.loadModelsForEndpoint()
+
+        #expect(viewModel.selectedProviderDialect == .deepSeekV4)
+    }
+
+    @Test func test_selected_provider_dialect_without_default_uses_earliest_created_model() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let older = Date(timeIntervalSince1970: 1_000)
+        let newer = Date(timeIntervalSince1970: 2_000)
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-mixed",
+            name: "Mixed",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: older,
+            updatedAt: newer
+        )
+        let runtimeFallbackModel = EndpointModelRecord(
+            id: "model-older",
+            endpointId: endpoint.id,
+            modelId: "z-local-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: false,
+            isManual: true,
+            createdAt: older
+        )
+        let sortedFirstModel = EndpointModelRecord(
+            id: "model-newer",
+            endpointId: endpoint.id,
+            modelId: "a-deepseek-v4-pro",
+            maxContextTokens: 1_000_000,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.deepSeekV4.rawValue,
+            isDefault: false,
+            isManual: true,
+            createdAt: newer
+        )
+        var conversation = TestHelpers.makeConversation()
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = "removed-model"
+
+        try await database.saveEndpoint(endpoint)
+        try await database.saveEndpointModel(runtimeFallbackModel)
+        try await database.saveEndpointModel(sortedFirstModel)
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.loadModelsForEndpoint()
+
+        #expect(viewModel.selectedProviderDialect == .openAICompatible)
+    }
+
     @Test func test_sendMessage_sends_current_input_once() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()

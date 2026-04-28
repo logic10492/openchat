@@ -211,6 +211,26 @@
         }
       }
     },
+    "Character Thinking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色思考"
+          }
+        }
+      }
+    },
+    "Character thinking…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色正在思考…"
+          }
+        }
+      }
+    },
     "Characters" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -564,6 +584,16 @@
         }
       }
     },
+    "High" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高"
+          }
+        }
+      }
+    },
     "Import" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -626,6 +656,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加载模型中…"
+          }
+        }
+      }
+    },
+    "Max" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大"
           }
         }
       }
@@ -910,6 +950,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "供应商"
+          }
+        }
+      }
+    },
+    "Reasoning Effort" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考强度"
           }
         }
       }

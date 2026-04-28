@@ -34,6 +34,7 @@ final class ChatViewModel {
     var modelMaxTokens = 1024
     var thinkingEnabled = false
     var thinkingBudget = 8192
+    var reasoningEffort: ReasoningEffort = .high
     var showDetailedStats: Bool
 
     var selectedCharacterName: String? {
@@ -84,6 +85,7 @@ final class ChatViewModel {
             modelMaxTokens = parameters.maxTokens ?? 1024
             thinkingEnabled = parameters.isThinkingEnabled
             thinkingBudget = parameters.thinkingBudget ?? 8192
+            reasoningEffort = parameters.reasoningEffort
         }
     }
 
@@ -255,6 +257,16 @@ final class ChatViewModel {
         availableEndpoints.first { $0.id == selectedEndpointID }?.name ?? String(localized: "Unconfigured")
     }
 
+    var selectedProviderDialect: APIProviderDialect {
+        if let selectedModelName,
+           let selectedModel = availableModelsForEndpoint.first(where: { $0.modelId == selectedModelName }) {
+            return selectedModel.providerDialectValue
+        }
+        return availableModelsForEndpoint.first(where: \.isDefault)?.providerDialectValue
+            ?? availableModelsForEndpoint.min(by: { $0.createdAt < $1.createdAt })?.providerDialectValue
+            ?? .openAICompatible
+    }
+
     var currentParameters: ModelParameters {
         ModelParameters(
             temperature: modelTemperature,
@@ -263,7 +275,8 @@ final class ChatViewModel {
             frequencyPenalty: 0,
             presencePenalty: 0,
             stop: nil,
-            thinkingBudget: thinkingEnabled ? thinkingBudget : nil
+            thinkingBudget: thinkingEnabled ? thinkingBudget : nil,
+            reasoningEffort: reasoningEffort
         )
     }
 }
