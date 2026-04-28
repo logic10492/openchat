@@ -200,4 +200,100 @@ struct EndpointModelTests {
         #expect(ids.contains("my-custom-model"))
         #expect(ids.contains("llama-3"))
     }
+
+    @Test func test_upsert_preserves_user_edited_model_context() async throws {
+        let (manager, endpoint) = try await makeEndpointAndManager()
+        let userEdited = EndpointModelRecord(
+            id: UUID().uuidString,
+            endpointId: endpoint.id,
+            modelId: "llama-3",
+            maxContextTokens: 32_768,
+            apiMode: APIMode.responses.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: .now
+        )
+        try await manager.saveEndpointModel(userEdited)
+
+        try await manager.upsertFetchedModels(
+            endpointId: endpoint.id,
+            models: [
+                ModelObject(id: "llama-3", object: "model", ownedBy: "meta", contextLength: 131_072)
+            ]
+        )
+
+        let model = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: "llama-3")
+        #expect(model?.maxContextTokens == 32_768)
+        #expect(model?.apiModeValue == .responses)
+        #expect(model?.isManual == true)
+    }
+}
+
+@Suite("APIEndpointEditorViewModel")
+struct APIEndpointEditorViewModelTests {
+    private func makeEndpointAndModel() async throws -> (DatabaseManager, APIEndpointRecord, EndpointModelRecord) {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: UUID().uuidString,
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: UUID().uuidString,
+            endpointId: endpoint.id,
+            modelId: "llama-3",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            isDefault: true,
+            isManual: false,
+            createdAt: now
+        )
+        try await manager.saveEndpoint(endpoint)
+        try await manager.saveEndpointModel(model)
+        return (manager, endpoint, model)
+    }
+
+    @MainActor
+    @Test func test_begin_editing_model_populates_edit_form() async throws {
+        let (manager, endpoint, model) = try await makeEndpointAndModel()
+        let viewModel = APIEndpointEditorViewModel(
+            databaseManager: manager,
+            apiClient: APIClient(),
+            editingEndpoint: endpoint
+        )
+
+        viewModel.beginEditingModel(model)
+
+        #expect(viewModel.editingModel?.id == model.id)
+        #expect(viewModel.editModelMaxContext == 4096)
+        #expect(viewModel.editModelApiMode == .chatCompletions)
+        #expect(viewModel.isShowingEditModel == true)
+    }
+
+    @MainActor
+    @Test func test_save_edited_model_updates_context_and_marks_manual_override() async throws {
+        let (manager, endpoint, model) = try await makeEndpointAndModel()
+        let viewModel = APIEndpointEditorViewModel(
+            databaseManager: manager,
+            apiClient: APIClient(),
+            editingEndpoint: endpoint
+        )
+        viewModel.beginEditingModel(model)
+        viewModel.editModelMaxContext = 65_536
+        viewModel.editModelApiMode = .responses
+
+        await viewModel.saveEditedModel()
+
+        let updated = try await manager.fetchEndpointModel(endpointId: endpoint.id, modelId: model.modelId)
+        #expect(updated?.maxContextTokens == 65_536)
+        #expect(updated?.apiModeValue == .responses)
+        #expect(updated?.isManual == true)
+        #expect(viewModel.isShowingEditModel == false)
+        #expect(viewModel.editingModel == nil)
+    }
 }
