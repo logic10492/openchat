@@ -83,3 +83,54 @@ struct DeepSeekV4RequestTests {
         #expect(json["max_tokens"] == nil)
     }
 }
+
+@Suite("DeepSeek V4 reasoning content")
+struct DeepSeekV4ReasoningContentTests {
+    @Test func test_non_streaming_response_decodes_reasoning_content() throws {
+        let json = """
+        {
+          "id": "chatcmpl-deepseek",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "reasoning_content": "I should answer from the character's point of view.",
+                "content": "I remember the old gate clearly."
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+            "completion_tokens_details": {
+              "reasoning_tokens": 8
+            }
+          }
+        }
+        """
+
+        let response = try JSONDecoder().decode(ChatCompletionResponse.self, from: Data(json.utf8))
+
+        #expect(response.choices[0].message.reasoningContent == "I should answer from the character's point of view.")
+        #expect(response.choices[0].message.content == "I remember the old gate clearly.")
+        #expect(response.usage?.completionTokensDetails?.reasoningTokens == 8)
+    }
+
+    @Test func test_request_message_omits_reasoning_content_by_default() throws {
+        let message = ChatMessage(
+            role: "assistant",
+            content: "Visible character reply.",
+            reasoningContent: "Private role-perspective thinking."
+        )
+
+        let data = try JSONEncoder().encode(message.requestMessage())
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(json["role"] as? String == "assistant")
+        #expect(json["content"] as? String == "Visible character reply.")
+        #expect(json["reasoning_content"] == nil)
+    }
+}

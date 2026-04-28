@@ -32,7 +32,7 @@ struct APIRequest: Codable, Sendable {
 
     init(messages: [ChatMessage], endpoint: APIEndpointConfig, parameters: ModelParameters, stream: Bool) {
         model = endpoint.modelName
-        self.messages = messages
+        self.messages = messages.map { $0.requestMessage() }
         self.stream = stream
         streamOptions = stream ? StreamOptions(includeUsage: true) : nil
         stop = parameters.stop

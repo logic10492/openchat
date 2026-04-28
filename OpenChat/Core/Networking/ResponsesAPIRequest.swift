@@ -22,7 +22,7 @@ struct ResponsesAPIRequest: Codable, Sendable {
             if message.role == "system" {
                 systemParts.append(message.content)
             } else {
-                nonSystemMessages.append(message)
+                nonSystemMessages.append(message.requestMessage())
             }
         }
 

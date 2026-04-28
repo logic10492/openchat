@@ -136,7 +136,7 @@ struct MessageBubbleView: View {
                     .padding(8)
             } label: {
                 Label {
-                    Text(String(localized: "Thinking"))
+                    Text(String(localized: "Character Thinking"))
                     if isStreaming && item.content.isEmpty {
                         ProgressView()
                             .controlSize(.mini)
@@ -154,7 +154,7 @@ struct MessageBubbleView: View {
             // Streaming hasn't produced content yet — may be in reasoning phase
             HStack(spacing: 6) {
                 Image(systemName: "brain")
-                Text(String(localized: "Thinking…"))
+                Text(String(localized: "Character thinking…"))
                 ProgressView()
                     .controlSize(.mini)
             }

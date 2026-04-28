@@ -85,6 +85,31 @@ struct ResponsesAPIRequestTests {
         #expect(json["presence_penalty"] == nil)
         #expect(json["stop"] == nil)
     }
+
+    @Test func test_input_omits_reasoning_content_by_default() throws {
+        let endpoint = TestHelpers.makeEndpoint(apiMode: .responses)
+        let request = ResponsesAPIRequest(
+            messages: [
+                .init(
+                    role: "assistant",
+                    content: "Visible character reply.",
+                    reasoningContent: "Private role-perspective thinking."
+                ),
+            ],
+            endpoint: endpoint,
+            parameters: ModelParameters(),
+            stream: false
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let input = try #require(json["input"] as? [[String: Any]])
+
+        #expect(input.count == 1)
+        #expect(input[0]["role"] as? String == "assistant")
+        #expect(input[0]["content"] as? String == "Visible character reply.")
+        #expect(input[0]["reasoning_content"] == nil)
+    }
 }
 
 // MARK: - ResponsesAPIResponse Tests
