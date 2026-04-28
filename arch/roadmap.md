@@ -10,7 +10,7 @@
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'`
-- 当前审计工作区通过的 Swift Testing 测试（133 个；包含审计开始前已有未提交 networking 测试改动）：
+- 当前通过的 Swift Testing 测试（133 个）：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`

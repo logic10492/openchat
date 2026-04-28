@@ -396,7 +396,7 @@ struct MessageDisplayItem: Identifiable {
   - 记忆更新提示 banner（3 秒自动消失）
   - 周期性记忆提取（每 10 条 user/assistant 消息）
   - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志
-- 该模块的核心依赖和 Chat prompt 链路已通过当前审计工作区自动化测试验证（133 tests；包含审计开始前已有未提交 networking 测试改动），其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次：
+- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证（133 tests），其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次：
   - `MemoryExtractionParsingTests`（13 tests: JSON 容错、latestMemoryDate、StreamDelta usage）
   - `APIClientTests`
   - `PromptAssemblerTests`

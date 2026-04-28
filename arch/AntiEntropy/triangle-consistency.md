@@ -15,9 +15,9 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-结果：成功。当前审计工作区 Swift Testing 报告 `133 tests in 28 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+结果：成功。Swift Testing 报告 `133 tests in 28 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20 个 Swift 测试文件、133 个 `@Test`。其中 API/Responses/reasoning 相关新增测试来自审计开始前已有未提交改动；本报告记录的是当前工作区现实，不把这些 dirty tests 归入本轮提交。
+本次审计还统计到 `OpenChatTests/` 当前有 20 个 Swift 测试文件、133 个 `@Test`。其中 API/Responses/reasoning 相关新增测试在审计开始前已经存在于工作区，并已在后续主线整理中纳入提交。
 
 ## 总体结论
 
@@ -37,7 +37,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | Memory | 基本一致 | 部分不一致 | DB/解析/Prompt 注入测试通过；EmbeddingService/VectorStore 直接覆盖不足。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；`arch/modules/settings/api-endpoint.md` 已回写当前审计工作区 133-test 基线，Settings UI/manual 覆盖仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；`arch/modules/settings/api-endpoint.md` 已回写 133-test 基线，Settings UI/manual 覆盖仍需后续验收。 |
 
 ## 关键不一致
 
@@ -154,14 +154,14 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：Task 5 已把当前审计工作区基线回写为 133 tests，并标注该基线包含审计开始前已有未提交 networking 测试改动。
+结论：Task 5 已把基线回写为 133 tests；API-client 对齐测试已在后续主线整理中纳入提交。
 
 证据：
 
-- `arch/index.md` 已回写为“当前审计工作区 133 个 Swift Testing 测试全部通过”。
-- `arch/roadmap.md` 已回写为“当前审计工作区通过的 Swift Testing 测试（133 个）”。
-- `arch/modules/memory/index.md` 已回写为当前审计工作区 133 tests，并保留 Memory 直接覆盖不足说明。
-- `arch/modules/settings/api-endpoint.md` 已回写为当前审计工作区 133 tests。
+- `arch/index.md` 已回写为“133 个 Swift Testing 测试全部通过”。
+- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（133 个）”。
+- `arch/modules/memory/index.md` 已回写为 133 tests，并保留 Memory 直接覆盖不足说明。
+- `arch/modules/settings/api-endpoint.md` 已回写为 133 tests。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
 三边判断：
@@ -172,10 +172,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前审计工作区能编译并通过全量 Swift Testing：133 tests passed；该计数包含审计开始前已有未提交 networking 测试改动。
+1. 当前工作区能编译并通过全量 Swift Testing：133 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
 3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重测试；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置、migration 约束和当前审计工作区 133-test 基线；Feature 边界漂移留待 Task 6。
+4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置、migration 约束和 133-test 基线；Feature 边界漂移留待 Task 6。
 
 ## 修复顺序状态
 
@@ -185,12 +185,12 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Memory 与 before_history 世界书顺序 | Closed：统一为 `before_history -> memory -> exampleDialogs`，PromptAssemblerTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回周期性触发、onDisappear 触发、增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为当前审计工作区 133 tests 基线，并标注 dirty-worktree 来源。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 133 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
 
 - `src-test`：新增 Chat 发送链路测试，锁定当前输入只进入 request messages 一次。
 - `arch-src`：Prompt 时间上下文统一为 `[Time] <ISO8601> [/Time]`；Prompt 段顺序统一为 `before_history -> memory -> exampleDialogs`；migration 源码不再引用 runtime Record/enum 符号。
-- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；全量基线更新为当前审计工作区 133 tests。
+- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；全量基线更新为 133 tests。
 - 分层漂移：Task 6 将单独处理，不在本次 prompt/db/doc 修复中混入跨层搬迁。

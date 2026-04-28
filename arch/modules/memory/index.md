@@ -395,7 +395,7 @@ final class MemoryListViewModel {
 - `DatabaseManagerMemoryTests`: 8 tests 覆盖 save/fetch/delete/count/ids/type/recent/conversation
 - `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
 - `MemoryExtractionParsingTests`: 13 tests 覆盖 ExtractedMemory JSON 容错解析（大小写 type、字符串 importance、缺失字段、额外字段）+ latestMemoryDate 查询 + StreamDelta usage
-- 当前审计工作区全量 `xcodebuild test` 为 133 个 Swift Testing 测试通过；该计数包含审计开始前已有未提交 networking 测试改动。Memory 直接覆盖仍以 DB、解析、Prompt 注入为主，EmbeddingService/VectorStore KNN 属于后续测试补强范围。
+- 全量 `xcodebuild test` 当前为 133 个 Swift Testing 测试通过；Memory 直接覆盖仍以 DB、解析、Prompt 注入为主，EmbeddingService/VectorStore KNN 属于后续测试补强范围。
 
 ### 2026-04-16 修复
 

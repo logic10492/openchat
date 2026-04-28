@@ -179,4 +179,4 @@ func testConnection() async {
 - 数据库迁移 `v8_endpoint_model_decoupling` — 创建 endpoint_model 表，迁移数据，conversation 新增 modelName 列
 - `ChatSettingsSheet.swift` — 对话设置中新增 Model Picker（端点切换时刷新模型列表）
 - `ChatViewModel.swift` — selectedModelName 状态 + loadModelsForEndpoint + 保存 conversation.modelName
-- 当前审计工作区全量 133 个 Swift Testing 测试通过（2026-04-27，包含审计开始前已有未提交 networking 测试改动）：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'`
+- 全量 133 个 Swift Testing 测试通过（2026-04-29）：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'`

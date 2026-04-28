@@ -28,6 +28,24 @@ struct APIClientTests {
         #expect(response.choices.first?.message.content == "hi")
     }
 
+    @Test func test_sendMessage_appends_chat_completions_to_baseURL_without_forcing_v1() async throws {
+        let responseBody = #"{"id":"abc","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":null}"#
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.url?.absoluteString == "https://api.deepseek.com/chat/completions")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let endpoint = TestHelpers.makeEndpoint(baseURL: "https://api.deepseek.com")
+        let client = APIClient(session: session)
+
+        _ = try await client.sendMessage(
+            messages: [.init(role: "user", content: "Hello")],
+            endpoint: endpoint,
+            parameters: ModelParameters()
+        )
+    }
+
     @Test func test_streamMessage_yields_deltas_from_sse() async throws {
         let payload = """
         data: {"id":"1","choices":[{"index":0,"delta":{"content":"Hel"}}]}
@@ -79,6 +97,22 @@ struct APIClientTests {
         // Sorted alphabetically by id
         #expect(models[0].id == "gpt-4o")
         #expect(models[1].id == "llama-3")
+    }
+
+    @Test func test_fetchModels_appends_models_to_baseURL_without_forcing_v1() async throws {
+        let responseBody = #"{"object":"list","data":[]}"#
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.url?.absoluteString == "https://api.deepseek.com/models")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+        let client = APIClient(session: session)
+
+        _ = try await client.fetchModels(
+            baseURL: URL(string: "https://api.deepseek.com")!,
+            apiKey: nil
+        )
     }
 
     @Test func test_fetchModels_sends_auth_header() async throws {

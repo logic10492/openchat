@@ -346,6 +346,74 @@ struct APIClientResponsesModeTests {
         #expect(deltas[2].finishReason == "stop")
     }
 
+    @Test func test_streamMessage_responses_mode_yields_reasoning_delta() async throws {
+        let payload = """
+        event: response.reasoning.delta
+        data: {"type":"response.reasoning.delta","delta":"Thinking..."}
+
+        event: response.output_text.delta
+        data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"Answer"}
+
+        event: response.completed
+        data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}
+
+        """
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.url?.absoluteString == "http://localhost:8080/v1/responses")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(payload.utf8))
+        }
+
+        let endpoint = TestHelpers.makeEndpoint(apiMode: .responses)
+        let client = APIClient(session: session)
+
+        var deltas: [StreamDelta] = []
+        for try await delta in client.streamMessage(
+            messages: [.init(role: "user", content: "Hi")],
+            endpoint: endpoint,
+            parameters: ModelParameters()
+        ) {
+            deltas.append(delta)
+        }
+
+        #expect(deltas[0].content == "")
+        #expect(deltas[0].reasoningContent == "Thinking...")
+        #expect(deltas[1].content == "Answer")
+        #expect(deltas[1].reasoningContent == nil)
+        #expect(deltas[2].finishReason == "stop")
+    }
+
+    @Test func test_sendMessage_responses_mode_appends_responses_to_baseURL_without_forcing_v1() async throws {
+        let responseBody = """
+        {
+            "id": "resp_abc",
+            "status": "completed",
+            "output": [{
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Hello"}]
+            }],
+            "usage": null
+        }
+        """
+        let session = MockURLProtocol.makeSession { request in
+            #expect(request.url?.absoluteString == "https://api.deepseek.com/responses")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(responseBody.utf8))
+        }
+
+        let endpoint = TestHelpers.makeEndpoint(baseURL: "https://api.deepseek.com", apiMode: .responses)
+        let client = APIClient(session: session)
+
+        _ = try await client.sendMessage(
+            messages: [.init(role: "user", content: "Hello")],
+            endpoint: endpoint,
+            parameters: ModelParameters()
+        )
+    }
+
     @Test func test_streamMessage_responses_mode_handles_failure() async throws {
         let payload = """
         event: response.failed

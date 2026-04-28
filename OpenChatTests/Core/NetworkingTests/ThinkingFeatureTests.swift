@@ -7,6 +7,32 @@ import Testing
 
 @Suite("APIRequest thinking mode")
 struct APIRequestThinkingTests {
+    @Test func test_decodes_chat_completion_request_payload() throws {
+        let json = """
+        {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "stream": true,
+            "stream_options": {"include_usage": true},
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "max_completion_tokens": 6144,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0
+        }
+        """
+
+        let request = try JSONDecoder().decode(APIRequest.self, from: Data(json.utf8))
+
+        #expect(request.model == "gpt-4o-mini")
+        #expect(request.messages == [ChatMessage(role: "user", content: "Hi")])
+        #expect(request.stream == true)
+        #expect(request.streamOptions?.includeUsage == true)
+        #expect(request.maxTokens == nil)
+        #expect(request.maxCompletionTokens == 6144)
+        #expect(request.thinkingEnabled == true)
+    }
+
     @Test func test_standard_mode_uses_max_tokens() throws {
         let endpoint = TestHelpers.makeEndpoint()
         let params = ModelParameters(maxTokens: 2048)

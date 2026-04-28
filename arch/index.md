@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' build`
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' test`
-- 当前审计工作区自动化测试结果：133 个 Swift Testing 测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩、Chat 发送链路当前输入去重。该计数包含审计开始前已有未提交 networking 测试改动。
+- 当前自动化测试结果：133 个 Swift Testing 测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩、Chat 发送链路当前输入去重。
 
 ## 功能需求
 
