@@ -6,13 +6,22 @@ struct APIEndpointConfig: Equatable, Sendable {
     let modelName: String
     let maxContextTokens: Int
     let apiMode: APIMode
+    let providerDialect: APIProviderDialect
 
-    init(baseURL: URL, apiKey: String?, modelName: String, maxContextTokens: Int, apiMode: APIMode = .chatCompletions) {
+    init(
+        baseURL: URL,
+        apiKey: String?,
+        modelName: String,
+        maxContextTokens: Int,
+        apiMode: APIMode = .chatCompletions,
+        providerDialect: APIProviderDialect = .openAICompatible
+    ) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.modelName = modelName
         self.maxContextTokens = maxContextTokens
         self.apiMode = apiMode
+        self.providerDialect = providerDialect
     }
 
     init(from endpoint: APIEndpointRecord, model: EndpointModelRecord) throws {
@@ -24,7 +33,8 @@ struct APIEndpointConfig: Equatable, Sendable {
             apiKey: endpoint.apiKey,
             modelName: model.modelId,
             maxContextTokens: model.maxContextTokens,
-            apiMode: model.apiModeValue
+            apiMode: model.apiModeValue,
+            providerDialect: model.providerDialectValue
         )
     }
 }

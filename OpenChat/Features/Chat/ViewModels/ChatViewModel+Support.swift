@@ -30,6 +30,7 @@ extension ChatViewModel {
                 modelId: resolvedModelName ?? "default",
                 maxContextTokens: AppConstants.defaultMaxContextTokens,
                 apiMode: APIMode.chatCompletions.rawValue,
+                providerDialect: APIProviderDialect.openAICompatible.rawValue,
                 isDefault: true,
                 isManual: true,
                 createdAt: .now

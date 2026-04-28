@@ -84,6 +84,7 @@ extension DatabaseManager {
                     modelId: model.id,
                     maxContextTokens: model.contextLength ?? 4096,
                     apiMode: APIMode.chatCompletions.rawValue,
+                    providerDialect: APIProviderDialect.openAICompatible.rawValue,
                     isDefault: isFirst,
                     isManual: false,
                     createdAt: Date()
@@ -119,6 +120,7 @@ extension DatabaseManager {
                     modelId: "default",
                     maxContextTokens: AppConstants.defaultMaxContextTokens,
                     apiMode: APIMode.chatCompletions.rawValue,
+                    providerDialect: APIProviderDialect.openAICompatible.rawValue,
                     isDefault: true,
                     isManual: true,
                     createdAt: Date()

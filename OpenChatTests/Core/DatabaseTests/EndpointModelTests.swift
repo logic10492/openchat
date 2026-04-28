@@ -30,6 +30,7 @@ struct EndpointModelTests {
             modelId: "gpt-4o",
             maxContextTokens: 128_000,
             apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: false,
             createdAt: .now
@@ -48,11 +49,13 @@ struct EndpointModelTests {
         let m1 = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "model-a",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: false, isManual: false, createdAt: .now
         )
         let m2 = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "model-b",
             maxContextTokens: 8192, apiMode: "responses",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(m1)
@@ -67,6 +70,7 @@ struct EndpointModelTests {
         let m1 = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "only-model",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: false, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(m1)
@@ -80,11 +84,13 @@ struct EndpointModelTests {
         let m1 = EndpointModelRecord(
             id: "m1", endpointId: endpoint.id, modelId: "model-a",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: false, createdAt: .now
         )
         let m2 = EndpointModelRecord(
             id: "m2", endpointId: endpoint.id, modelId: "model-b",
             maxContextTokens: 8192, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: false, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(m1)
@@ -103,6 +109,7 @@ struct EndpointModelTests {
         let model = EndpointModelRecord(
             id: "m1", endpointId: endpoint.id, modelId: "to-delete",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(model)
@@ -131,6 +138,7 @@ struct EndpointModelTests {
         let existing = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "existing",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(existing)
@@ -146,6 +154,7 @@ struct EndpointModelTests {
         let model = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "gpt-4o-mini",
             maxContextTokens: 128_000, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: false, createdAt: .now
         )
         try await manager.saveEndpointModel(model)
@@ -185,6 +194,7 @@ struct EndpointModelTests {
         let manual = EndpointModelRecord(
             id: UUID().uuidString, endpointId: endpoint.id, modelId: "my-custom-model",
             maxContextTokens: 4096, apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true, isManual: true, createdAt: .now
         )
         try await manager.saveEndpointModel(manual)
@@ -209,6 +219,7 @@ struct EndpointModelTests {
             modelId: "llama-3",
             maxContextTokens: 32_768,
             apiMode: APIMode.responses.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: true,
             createdAt: .now
@@ -249,6 +260,7 @@ struct APIEndpointEditorViewModelTests {
             modelId: "llama-3",
             maxContextTokens: 4096,
             apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: false,
             createdAt: now

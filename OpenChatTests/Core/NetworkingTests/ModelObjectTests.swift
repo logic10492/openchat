@@ -32,6 +32,7 @@ struct ModelObjectTests {
             modelId: "test-model",
             maxContextTokens: 4096,
             apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: false,
             createdAt: .now

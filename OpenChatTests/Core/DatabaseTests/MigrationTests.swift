@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import SqliteVec
 import Testing
 
 @testable import OpenChat
@@ -219,6 +220,7 @@ struct MigrationTests {
             modelId: "gpt-4o",
             maxContextTokens: 4096,
             apiMode: "chatCompletions",
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: false,
             createdAt: now
@@ -261,5 +263,71 @@ struct MigrationTests {
         }
 
         #expect(fetched?.isTitleGenerated == false)
+    }
+
+    // MARK: - v10 provider dialect
+
+    @Test func test_v10_endpoint_model_has_providerDialect_column() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "endpoint_model").map(\.name)
+        }
+
+        #expect(columns.contains("providerDialect"))
+    }
+
+    @Test func test_v10_providerDialect_defaults_to_openAICompatible() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "ep-provider-default",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: nil,
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        try await manager.saveEndpoint(endpoint)
+        try await manager.ensureDefaultModel(endpointId: endpoint.id)
+
+        let model = try await manager.fetchDefaultModel(endpointId: endpoint.id)
+        #expect(model?.providerDialect == "openAICompatible")
+    }
+
+    @Test func test_v10_backfills_existing_deepseek_v4_models() throws {
+        var configuration = Configuration()
+        configuration.prepareDatabase { db in
+            if let connection = db.sqliteConnection {
+                registerSqliteVec(connection)
+            }
+        }
+        let dbQueue = try DatabaseQueue(configuration: configuration)
+        var migrator = Migrations.makeMigrator()
+        try migrator.migrate(dbQueue, upTo: "v9_add_is_title_generated")
+
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                INSERT INTO api_endpoint (id, name, baseURL, apiKey, isDefault, createdAt, updatedAt)
+                VALUES ('ep-deepseek', 'DeepSeek', 'https://api.deepseek.com', NULL, 1, ?, ?)
+                """, arguments: [Date(), Date()])
+            try db.execute(sql: """
+                INSERT INTO endpoint_model (id, endpointId, modelId, maxContextTokens, apiMode, isDefault, isManual, createdAt)
+                VALUES ('model-deepseek-pro', 'ep-deepseek', 'deepseek-v4-pro', 4096, 'chatCompletions', 1, 1, ?)
+                """, arguments: [Date()])
+        }
+
+        try migrator.migrate(dbQueue)
+
+        let row = try dbQueue.read { db in
+            try Row.fetchOne(db, sql: """
+                SELECT providerDialect, maxContextTokens
+                FROM endpoint_model
+                WHERE id = 'model-deepseek-pro'
+                """)
+        }
+
+        #expect(row?["providerDialect"] as String? == "deepSeekV4")
+        #expect(row?["maxContextTokens"] as Int? == 1_000_000)
     }
 }

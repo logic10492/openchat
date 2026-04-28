@@ -13,14 +13,16 @@ enum TestHelpers {
         apiKey: String? = "test-key",
         modelName: String = "gpt-4o-mini",
         maxContextTokens: Int = 4096,
-        apiMode: APIMode = .chatCompletions
+        apiMode: APIMode = .chatCompletions,
+        providerDialect: APIProviderDialect = .openAICompatible
     ) -> APIEndpointConfig {
         APIEndpointConfig(
             baseURL: URL(string: baseURL)!,
             apiKey: apiKey,
             modelName: modelName,
             maxContextTokens: maxContextTokens,
-            apiMode: apiMode
+            apiMode: apiMode,
+            providerDialect: providerDialect
         )
     }
 

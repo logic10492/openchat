@@ -71,6 +71,7 @@ struct ChatViewModelPromptAssemblyTests {
             modelId: "test-model",
             maxContextTokens: 4096,
             apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: true,
             isManual: true,
             createdAt: now

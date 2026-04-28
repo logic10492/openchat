@@ -106,13 +106,15 @@ final class APIEndpointEditorViewModel {
             let modelName = defaultModel?.modelId ?? "default"
             let maxCtx = defaultModel?.maxContextTokens ?? AppConstants.defaultMaxContextTokens
             let apiMode = defaultModel?.apiModeValue ?? .chatCompletions
+            let providerDialect = defaultModel?.providerDialectValue ?? .openAICompatible
 
             let config = APIEndpointConfig(
                 baseURL: url,
                 apiKey: apiKey.nilIfBlank,
                 modelName: modelName,
                 maxContextTokens: maxCtx,
-                apiMode: apiMode
+                apiMode: apiMode,
+                providerDialect: providerDialect
             )
 
             _ = try await apiClient.sendMessage(
@@ -199,6 +201,7 @@ final class APIEndpointEditorViewModel {
             modelId: newModelId.trimmingCharacters(in: .whitespacesAndNewlines),
             maxContextTokens: newModelMaxContext,
             apiMode: newModelApiMode.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
             isDefault: models.isEmpty,
             isManual: true,
             createdAt: Date()

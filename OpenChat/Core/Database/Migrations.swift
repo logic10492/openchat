@@ -14,6 +14,8 @@ enum Migrations {
         static let endpointModelTable = "endpoint_model"
 
         static let apiModeChatCompletions = "chatCompletions"
+        static let providerDialectOpenAICompatible = "openAICompatible"
+        static let providerDialectDeepSeekV4 = "deepSeekV4"
         static let worldBookEntryBeforeHistory = "before_history"
         static let contextStrategyTruncation = "truncation"
     }
@@ -155,6 +157,22 @@ enum Migrations {
             try db.alter(table: Historical.conversationTable) { t in
                 t.add(column: "isTitleGenerated", .boolean).notNull().defaults(to: false)
             }
+        }
+        migrator.registerMigration("v10_add_provider_dialect_to_endpoint_model") { db in
+            try db.alter(table: Historical.endpointModelTable) { t in
+                t.add(column: "providerDialect", .text)
+                    .notNull()
+                    .defaults(to: Historical.providerDialectOpenAICompatible)
+            }
+            try db.execute(sql: """
+                UPDATE endpoint_model
+                SET providerDialect = ?,
+                    maxContextTokens = CASE
+                        WHEN maxContextTokens = 4096 THEN 1000000
+                        ELSE maxContextTokens
+                    END
+                WHERE lower(modelId) LIKE 'deepseek-v4-%'
+                """, arguments: [Historical.providerDialectDeepSeekV4])
         }
         return migrator
     }
