@@ -8,6 +8,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
     var presencePenalty: Double
     var stop: [String]?
     var thinkingBudget: Int?
+    var reasoningEffort: ReasoningEffort
 
     init(
         temperature: Double = 0.8,
@@ -16,7 +17,8 @@ struct ModelParameters: Codable, Equatable, Sendable {
         frequencyPenalty: Double = 0.0,
         presencePenalty: Double = 0.0,
         stop: [String]? = nil,
-        thinkingBudget: Int? = nil
+        thinkingBudget: Int? = nil,
+        reasoningEffort: ReasoningEffort = .high
     ) {
         self.temperature = temperature
         self.topP = topP
@@ -25,6 +27,23 @@ struct ModelParameters: Codable, Equatable, Sendable {
         self.presencePenalty = presencePenalty
         self.stop = stop
         self.thinkingBudget = thinkingBudget
+        self.reasoningEffort = reasoningEffort
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case temperature, topP, maxTokens, frequencyPenalty, presencePenalty, stop, thinkingBudget, reasoningEffort
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        temperature = try container.decode(Double.self, forKey: .temperature)
+        topP = try container.decode(Double.self, forKey: .topP)
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens)
+        frequencyPenalty = try container.decode(Double.self, forKey: .frequencyPenalty)
+        presencePenalty = try container.decode(Double.self, forKey: .presencePenalty)
+        stop = try container.decodeIfPresent([String].self, forKey: .stop)
+        thinkingBudget = try container.decodeIfPresent(Int.self, forKey: .thinkingBudget)
+        reasoningEffort = try container.decodeIfPresent(ReasoningEffort.self, forKey: .reasoningEffort) ?? .high
     }
 
     /// Whether thinking/reasoning mode is enabled.
@@ -42,7 +61,8 @@ struct ModelParameters: Codable, Equatable, Sendable {
                 frequencyPenalty: 0.0,
                 presencePenalty: 0.0,
                 stop: nil,
-                thinkingBudget: thinkingBudget
+                thinkingBudget: thinkingBudget,
+                reasoningEffort: reasoningEffort
             )
         }
     }

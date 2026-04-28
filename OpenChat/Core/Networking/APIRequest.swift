@@ -12,6 +12,8 @@ struct APIRequest: Codable, Sendable {
     let frequencyPenalty: Double?
     let presencePenalty: Double?
     let stop: [String]?
+    let thinking: DeepSeekThinkingConfig?
+    let reasoningEffort: String?
 
     /// When non-nil, the model is expected to produce reasoning tokens.
     let thinkingEnabled: Bool
@@ -24,6 +26,8 @@ struct APIRequest: Codable, Sendable {
         case maxCompletionTokens = "max_completion_tokens"
         case frequencyPenalty = "frequency_penalty"
         case presencePenalty = "presence_penalty"
+        case thinking
+        case reasoningEffort = "reasoning_effort"
     }
 
     init(messages: [ChatMessage], endpoint: APIEndpointConfig, parameters: ModelParameters, stream: Bool) {
@@ -31,22 +35,44 @@ struct APIRequest: Codable, Sendable {
         self.messages = messages
         self.stream = stream
         streamOptions = stream ? StreamOptions(includeUsage: true) : nil
-        topP = parameters.topP
-        frequencyPenalty = parameters.frequencyPenalty
-        presencePenalty = parameters.presencePenalty
         stop = parameters.stop
         thinkingEnabled = parameters.isThinkingEnabled
 
-        if parameters.isThinkingEnabled {
-            // Reasoning models use max_completion_tokens (includes both reasoning + visible output)
-            temperature = 1.0
-            maxTokens = nil
-            maxCompletionTokens = parameters.maxTokens.map { $0 + (parameters.thinkingBudget ?? 0) }
-                ?? parameters.thinkingBudget
-        } else {
-            temperature = parameters.temperature
+        if endpoint.providerDialect == .deepSeekV4 {
+            thinking = DeepSeekThinkingConfig(type: parameters.isThinkingEnabled ? "enabled" : "disabled")
+            reasoningEffort = parameters.isThinkingEnabled ? parameters.reasoningEffort.rawValue : nil
             maxTokens = parameters.maxTokens
             maxCompletionTokens = nil
+
+            if parameters.isThinkingEnabled {
+                temperature = nil
+                topP = nil
+                frequencyPenalty = nil
+                presencePenalty = nil
+            } else {
+                temperature = parameters.temperature
+                topP = parameters.topP
+                frequencyPenalty = parameters.frequencyPenalty
+                presencePenalty = parameters.presencePenalty
+            }
+        } else {
+            thinking = nil
+            reasoningEffort = nil
+            topP = parameters.topP
+            frequencyPenalty = parameters.frequencyPenalty
+            presencePenalty = parameters.presencePenalty
+
+            if parameters.isThinkingEnabled {
+                // Reasoning models use max_completion_tokens (includes both reasoning + visible output)
+                temperature = 1.0
+                maxTokens = nil
+                maxCompletionTokens = parameters.maxTokens.map { $0 + (parameters.thinkingBudget ?? 0) }
+                    ?? parameters.thinkingBudget
+            } else {
+                temperature = parameters.temperature
+                maxTokens = parameters.maxTokens
+                maxCompletionTokens = nil
+            }
         }
     }
 
@@ -63,7 +89,9 @@ struct APIRequest: Codable, Sendable {
         frequencyPenalty = try container.decodeIfPresent(Double.self, forKey: .frequencyPenalty)
         presencePenalty = try container.decodeIfPresent(Double.self, forKey: .presencePenalty)
         stop = try container.decodeIfPresent([String].self, forKey: .stop)
-        thinkingEnabled = maxCompletionTokens != nil
+        thinking = try container.decodeIfPresent(DeepSeekThinkingConfig.self, forKey: .thinking)
+        reasoningEffort = try container.decodeIfPresent(String.self, forKey: .reasoningEffort)
+        thinkingEnabled = thinking?.type == "enabled" || maxCompletionTokens != nil
     }
 
     func encode(to encoder: Encoder) throws {
@@ -77,14 +105,20 @@ struct APIRequest: Codable, Sendable {
         try container.encodeIfPresent(frequencyPenalty, forKey: .frequencyPenalty)
         try container.encodeIfPresent(presencePenalty, forKey: .presencePenalty)
         try container.encodeIfPresent(stop, forKey: .stop)
+        try container.encodeIfPresent(thinking, forKey: .thinking)
+        try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
 
         // Reasoning models: max_completion_tokens; standard models: max_tokens
-        if thinkingEnabled {
+        if maxCompletionTokens != nil {
             try container.encodeIfPresent(maxCompletionTokens, forKey: .maxCompletionTokens)
         } else {
             try container.encodeIfPresent(maxTokens, forKey: .maxTokens)
         }
     }
+}
+
+struct DeepSeekThinkingConfig: Codable, Sendable, Equatable {
+    let type: String
 }
 
 struct StreamOptions: Codable, Sendable {
