@@ -1,6 +1,6 @@
 # Triangle-Consistency
 
-> 审计日期：2026-04-27
+> 审计日期：2026-04-30
 > 三边：`arch-test`、`arch-src`、`src-test`
 
 ## 校验方法
@@ -12,12 +12,12 @@
 ## 已执行验证
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。Swift Testing 报告 `133 tests in 28 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+结果：成功。Swift Testing 报告 `166 tests in 34 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20 个 Swift 测试文件、133 个 `@Test`。其中 API/Responses/reasoning 相关新增测试在审计开始前已经存在于工作区，并已在后续主线整理中纳入提交。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 166 个 Swift Testing 测试。API/Responses/reasoning 相关新增测试已纳入基线；2026-04-30 Memory embedding/vector/retrieval 可靠性测试也已纳入当前基线。
 
 ## 总体结论
 
@@ -25,7 +25,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|
 | `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路当前输入重复风险已有 Feature 级测试覆盖，但仍缺少 UI 自动化测试。 |
 | `arch-src` | 局部不一致 | Prompt 时间格式、Memory 目录/触发时机、migration 约束已按当前源码回写；Feature 分层说明仍有漂移，留待 Task 6。 |
-| `arch-test` | 局部不一致 | 测试数量已回写为 133；Prompt 顺序/时间、migration 源码约束、Chat 当前输入去重已补测试，Feature/UI 分层契约仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 166；Prompt 顺序/时间、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -34,10 +34,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖 ISO8601 时间、before_history -> memory -> exampleDialogs 顺序；Chat 发送链路去重由 Feature 级测试覆盖。 |
 | ContextManager | 基本一致 | 部分不一致 | Truncation/Compression 测试通过，但 arch 的 40%链路依赖 Prompt 端到端仍需覆盖。 |
-| Memory | 基本一致 | 部分不一致 | DB/解析/Prompt 注入测试通过；EmbeddingService/VectorStore 直接覆盖不足。 |
+| Memory | 一致 | 基本一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、fallback 注入；周期阈值 / `ChatView.onDisappear` 自动触发路径仍需端到端测试；full suite 为 166 tests / 34 suites。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；`arch/modules/settings/api-endpoint.md` 已回写 133-test 基线，Settings UI/manual 覆盖仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；全局测试基线已更新为 166 tests，Settings UI/manual 覆盖仍需后续验收。 |
 
 ## 关键不一致
 
@@ -111,9 +111,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - `arch-test`：一致。
 - `src-test`：通过。
 
-### 5. Memory 文档位置和触发时机漂移
+### 5. Memory 文档位置、触发时机与向量可靠性漂移
 
-结论：Task 5 已回写 Memory 位置和周期性提取触发的当前源码现实。
+结论：2026-04-27 已回写 Memory 位置和周期性提取触发的当前源码现实；2026-04-30 已补齐 embedding/vector/retrieval 可靠性修复的 `arch-src`、`arch-test`、`src-test` 证据。
 
 证据：
 
@@ -121,16 +121,27 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - 当前源码在消息生成完成后按 `messagesSinceLastExtraction >= ChatViewModel.extractionInterval` 周期性触发，`extractionInterval == 10`。
 - `ChatView.onDisappear` 当前会调用 `triggerMemoryExtraction()`，因此离开当前聊天视图或切换对话可通过视图消失间接触发；App 进入后台 lifecycle hook 仍属于后续 UX/生命周期增强项。
 
+新增可靠性证据：
+
+- `OpenChat/Resources/Models/MultilingualE5Small.mlpackage` 与 `OpenChat/Resources/Models/tokenizer.json` 由 `scripts/generate_xcodeproj.rb` 加入 App Bundle。
+- `EmbeddingService` 使用固定 `1 x 256` CoreML 输入，读取 Float16 / Float32 `embeddings`，输出 384 维归一化向量。
+- `VectorStore` 在同一 GRDB transaction 中保存 `memory_entry + memory_embedding`；`insert(entries:)` 为协议必填方法，避免非原子默认实现。
+- `MemoryManager.retrieveMemories(...)` 在 embedding/model/vector 异常时 fallback 到近期记忆；`ChatViewModel+Support` 不再用 `try?` 静默吞掉全部记忆。
+
 测试现状：
 
 - `DatabaseManagerMemoryTests`、`MemoryExtractionParsingTests`、`PromptAssemblerTests` 覆盖 DB、JSON 容错、Prompt 注入。
-- 未看到直接覆盖 CoreML embedding 加载、sqlite-vec KNN 行为、App 进入后台 lifecycle 触发记忆提取的测试。
+- `EmbeddingServiceTests` 覆盖模型/tokenizer bundle、tokenizer 输出、CoreML 384 维归一化向量。
+- `VectorStoreTests` 覆盖 sqlite-vec KNN、角色隔离、删除同步、维度校验、单条和批量事务回滚。
+- `MemoryManagerRetrievalTests` 覆盖语义检索失败 fallback、提取向量失败不产生半索引记忆、批次失败整批回滚。
+- `ChatViewModelPromptAssemblyTests` 覆盖 fallback 记忆最终注入 API request。
+- 周期阈值与 `ChatView.onDisappear` 自动触发路径属于当前源码现实，但尚未由端到端测试锁定；该缺口已保留在 `arch/roadmap.md` Phase 6 验证标准中。
 
 三边判断：
 
 - `arch-src`：一致。
-- `arch-test`：覆盖不完整。
-- `src-test`：通过。
+- `arch-test`：Memory vector reliability 一致；自动触发路径端到端测试待补。
+- `src-test`：focused memory/prompt suite 27 tests 通过；full suite 为 166 tests / 34 suites。
 
 ### 6. 分层规则与当前 Feature 装配漂移
 
@@ -154,14 +165,14 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：Task 5 已把基线回写为 133 tests；API-client 对齐测试已在后续主线整理中纳入提交。
+结论：2026-04-30 已把基线回写为 166 tests；API-client 对齐测试和 Memory embedding/vector/retrieval 可靠性测试均纳入当前基线。
 
 证据：
 
-- `arch/index.md` 已回写为“133 个 Swift Testing 测试全部通过”。
-- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（133 个）”。
-- `arch/modules/memory/index.md` 已回写为 133 tests，并保留 Memory 直接覆盖不足说明。
-- `arch/modules/settings/api-endpoint.md` 已回写为 133 tests。
+- `arch/index.md` 已回写为“166 个 Swift Testing 测试全部通过”。
+- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（166 个）”。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval 可靠性覆盖与 166-test full suite 结果。
+- `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
 三边判断：
@@ -172,10 +183,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：133 tests passed。
+1. 当前工作区能编译并通过全量 Swift Testing：166 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
 3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重测试；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置、migration 约束和 133-test 基线；Feature 边界漂移留待 Task 6。
+4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置与 embedding/vector/retrieval 可靠性、migration 约束和 166-test 基线；Feature 边界漂移留待后续分层修复计划。
 
 ## 修复顺序状态
 
@@ -185,12 +196,12 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Memory 与 before_history 世界书顺序 | Closed：统一为 `before_history -> memory -> exampleDialogs`，PromptAssemblerTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回周期性触发、onDisappear 触发、增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 133 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 166 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
 
 - `src-test`：新增 Chat 发送链路测试，锁定当前输入只进入 request messages 一次。
 - `arch-src`：Prompt 时间上下文统一为 `[Time] <ISO8601> [/Time]`；Prompt 段顺序统一为 `before_history -> memory -> exampleDialogs`；migration 源码不再引用 runtime Record/enum 符号。
-- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；全量基线更新为 133 tests。
+- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；EmbeddingServiceTests / VectorStoreTests / MemoryManagerRetrievalTests / ChatViewModelPromptAssemblyTests 覆盖 Memory 可靠性；全量基线更新为 166 tests。
 - 分层漂移：Task 6 将单独处理，不在本次 prompt/db/doc 修复中混入跨层搬迁。

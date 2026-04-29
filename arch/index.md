@@ -25,9 +25,9 @@
 - 2026-04-14 已完成工程脚手架落地：`OpenChat.xcodeproj`、`OpenChat/` 四层目录、`OpenChatTests/`、`scripts/generate_xcodeproj.rb`
 - 当前代码已落地的核心模块包括：数据库迁移与 Record、`APIClient`/`SSEStreamParser`、`PromptAssembler`、`ContextManager`、聊天/角色卡/世界书/设置等基础 Feature
 - 已验证命令：
-  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' build`
-  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' test`
-- 当前自动化测试结果：133 个 Swift Testing 测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩、Chat 发送链路当前输入去重。
+  - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
+  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+- 当前自动化测试结果：166 个 Swift Testing 测试全部通过，覆盖数据库迁移、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与压缩、Chat 发送链路当前输入去重、Memory embedding/vector/retrieval 可靠性。
 
 ## 功能需求
 
@@ -59,8 +59,8 @@
 
 ### 4. 跨对话记忆
 - **记忆提取**：当前源码在 Chat 生成链路中每累计 10 条 user/assistant 消息后后台触发，调用 API 提取关键事件、事实、关系变化和摘要
-- **向量存储**：使用本地 CoreML 嵌入模型（MultilingualE5Small）将记忆向量化，存储在 sqlite-vec 中
-- **记忆检索**：新对话开始时拉取近期摘要，每次发送消息时语义检索相关记忆并注入 prompt
+- **向量存储**：使用 App Bundle 内的 CoreML 嵌入模型（MultilingualE5Small）和 tokenizer 将记忆向量化，`VectorStore` 在同一事务内保存 `memory_entry + memory_embedding`
+- **记忆检索**：新对话开始时拉取近期摘要，每次发送消息时语义检索相关记忆并注入 prompt；语义检索异常时 fallback 到近期记忆
 - **角色绑定**：记忆以角色卡为单位存储，同一角色的不同对话共享记忆
 
 ### 5. 时间感知
@@ -116,7 +116,7 @@
    ▼
 ChatViewModel
    │
-   ├─→ MemoryManager: 检索相关记忆（向量化当前输入 → KNN 检索）
+   ├─→ MemoryManager: 检索相关记忆（向量化当前输入 → KNN 检索；异常时 fallback 到近期记忆）
    │
    ├─→ PromptAssembler: 计算固定段 token（含记忆段 + 时间上下文）
    │
@@ -137,7 +137,7 @@ ChatViewModel
            │
            ├─→ APIClient: 调用 LLM 提取关键事件/摘要
            ├─→ EmbeddingService: 向量化记忆条目
-           └─→ VectorStore: 存储向量嵌入
+           └─→ VectorStore: 原子存储 memory_entry + memory_embedding
 ```
 
 ## 文档导航

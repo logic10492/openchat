@@ -4,13 +4,13 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-04-27）
+## 当前落地状态（2026-04-30）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
-  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17'`
-- 当前通过的 Swift Testing 测试（133 个）：
+  - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+- 当前通过的 Swift Testing 测试（166 个）覆盖：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -22,11 +22,11 @@
   - `TruncationStrategyTests`
   - `CompressionStrategyTests`
   - `DatabaseManager+MemoryTests`
-  - `ModelObject
-  - `TruncationStrategyTests`
-  - `CompressionStrategyTests`
-  - `DatabaseManager+MemoryTests`
   - `ModelObjectTests`
+  - `EmbeddingServiceTests`
+  - `VectorStoreTests`
+  - `MemoryManagerRetrievalTests`
+  - `ChatViewModelPromptAssemblyTests`
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
   - App 装配：`OpenChat/OpenChatApp.swift`、`OpenChat/App/DependencyContainer.swift`
@@ -325,16 +325,17 @@ Phase 1 (基础骨架)
 ### 产出
 
 - 角色卡归属世界书的层级导航
-- 对话结束后自动提取记忆
+- 周期阈值和视图消失时触发记忆提取入口
 - 新对话和每次发送时语义检索记忆注入 prompt
 - 记忆管理界面
 
 ### 验证标准
 
-- [ ] sqlite-vec 向量插入和 KNN 检索结果正确
-- [ ] CoreML 模型输出 384 维归一化向量
-- [ ] 对话结束后记忆被自动提取并存储
-- [ ] 新对话中相关记忆被检索并注入 prompt
+- [x] sqlite-vec 向量插入和 KNN 检索结果正确（`VectorStoreTests`）
+- [x] CoreML 模型输出 384 维归一化向量（`EmbeddingServiceTests`）
+- [x] 记忆提取执行后可原子存储；失败时不留下半索引记忆（`MemoryManagerRetrievalTests`、`VectorStoreTests`）
+- [ ] 周期阈值与 `ChatView.onDisappear` 自动触发路径有端到端测试覆盖
+- [x] 新对话和每次发送时相关记忆可检索并注入 prompt；语义检索失败时 fallback 到近期记忆（`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests`）
 - [ ] 导航流正确：世界列表 → 角色列表 → 对话
 - [ ] 记忆列表可查看/搜索/删除
 - [ ] 数据库迁移 v2/v3/v4 后数据完整性保持

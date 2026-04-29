@@ -1,0 +1,171 @@
+# Memory Vector Reliability Evidence
+
+> Generated: 2026-04-30 02:18 +0800
+> Scope: OpenChat memory embedding/vector/retrieval reliability repair
+
+## Current triad and propagation excerpts
+
+harness/2026.04.30/memory-vector-reliability/index.md:18:| arch-test | 一致 | 本轮 memory vector reliability 由 `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests` 覆盖；不声明周期阈值 / `ChatView.onDisappear` 自动触发路径已有端到端测试 |
+harness/2026.04.30/memory-vector-reliability/index.md:19:| src-test | 一致 | Focused memory/prompt suite 27 tests 通过；full `xcodebuild test` 166 tests / 34 suites 通过 |
+harness/2026.04.30/memory-vector-reliability/index.md:23:- Evidence file: `harness/2026.04.30/memory-vector-reliability/evidence.txt`
+harness/2026.04.30/memory-vector-reliability/index.md:24:- Arch writeback: `arch/AntiEntropy/propagation-audit.md`
+harness/2026.04.30/memory-vector-reliability/index.md:30:xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/PromptAssemblerTests'
+harness/2026.04.30/memory-vector-reliability/index.md:41:✔ Test run with 27 tests in 5 suites passed after 1.381 seconds.
+harness/2026.04.30/memory-vector-reliability/index.md:51:✔ Test run with 166 tests in 34 suites passed after 1.246 seconds.
+arch/roadmap.md:19:  - `PromptAssemblerTests`
+arch/roadmap.md:337:- [ ] 周期阈值与 `ChatView.onDisappear` 自动触发路径有端到端测试覆盖
+arch/AntiEntropy/triangle-consistency.md:18:结果：成功。Swift Testing 报告 `166 tests in 34 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+arch/AntiEntropy/triangle-consistency.md:37:| Memory | 一致 | 基本一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、fallback 注入；周期阈值 / `ChatView.onDisappear` 自动触发路径仍需端到端测试；full suite 为 166 tests / 34 suites。 |
+arch/AntiEntropy/triangle-consistency.md:40:| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；全局测试基线已更新为 166 tests，Settings UI/manual 覆盖仍需后续验收。 |
+arch/AntiEntropy/triangle-consistency.md:74:- `PromptAssemblerTests` 解析并断言 ISO8601 时间格式。
+arch/AntiEntropy/triangle-consistency.md:90:- `PromptAssemblerTests` 覆盖 `before_history -> memory -> exampleDialogs` 相对顺序。
+arch/AntiEntropy/triangle-consistency.md:133:- `DatabaseManagerMemoryTests`、`MemoryExtractionParsingTests`、`PromptAssemblerTests` 覆盖 DB、JSON 容错、Prompt 注入。
+arch/AntiEntropy/triangle-consistency.md:138:- 周期阈值与 `ChatView.onDisappear` 自动触发路径属于当前源码现实，但尚未由端到端测试锁定；该缺口已保留在 `arch/roadmap.md` Phase 6 验证标准中。
+arch/AntiEntropy/triangle-consistency.md:143:- `arch-test`：Memory vector reliability 一致；自动触发路径端到端测试待补。
+arch/AntiEntropy/triangle-consistency.md:144:- `src-test`：focused memory/prompt suite 27 tests 通过；full suite 为 166 tests / 34 suites。
+arch/AntiEntropy/triangle-consistency.md:168:结论：2026-04-30 已把基线回写为 166 tests；API-client 对齐测试和 Memory embedding/vector/retrieval 可靠性测试均纳入当前基线。
+arch/AntiEntropy/triangle-consistency.md:186:1. 当前工作区能编译并通过全量 Swift Testing：166 tests passed。
+arch/AntiEntropy/triangle-consistency.md:197:| 3 | 明确 Memory 与 before_history 世界书顺序 | Closed：统一为 `before_history -> memory -> exampleDialogs`，PromptAssemblerTests 覆盖。 |
+arch/AntiEntropy/triangle-consistency.md:199:| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 166 tests 基线。 |
+arch/AntiEntropy/triangle-consistency.md:206:- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；EmbeddingServiceTests / VectorStoreTests / MemoryManagerRetrievalTests / ChatViewModelPromptAssemblyTests 覆盖 Memory 可靠性；全量基线更新为 166 tests。
+arch/modules/memory/index.md:111:- **实例内 lazy 加载**：`DependencyContainer` 创建 `EmbeddingService` 实例，首次调用 `embed()` 时才加载 CoreML 模型，避免阻塞 App 启动
+arch/modules/memory/index.md:398:| DatabaseManager+Memory | `Core/Database/DatabaseManager+Memory.swift` | 8 个 CRUD 方法 |
+arch/modules/memory/index.md:417:- `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
+arch/modules/memory/index.md:423:- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；full suite 为 166 tests / 34 suites，`** TEST SUCCEEDED **`。
+arch/AntiEntropy/propagation-audit.md:190:审计模式：窄范围增量审计。OpenChat 当前没有 Magnum Agent 的 `arch/propagation-audit/` 脚本基线，因此本次使用 durable `harness/2026.04.30/memory-vector-reliability/evidence.txt` 记录静态 `rg` 证据、changed files 和 import surface；行为传播结论以源码链路为准。
+arch/AntiEntropy/propagation-audit.md:215:- Focused memory/prompt command including `PromptAssemblerTests`：27 tests / 5 suites passed，`** TEST SUCCEEDED **`。
+arch/AntiEntropy/propagation-audit.md:216:- Full suite：166 tests / 34 suites passed，`** TEST SUCCEEDED **`。
+
+## Source behavior anchors
+
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:81:                memories = try await memoryManager.retrieveMemories(
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:87:                logger.warning("Memory retrieval failed after fallback for character \(characterCardId): \(error.localizedDescription)")
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:210:                    triggerMemoryExtraction()
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:241:    func triggerMemoryExtraction() {
+OpenChat/Features/Chat/Views/ChatView.swift:62:            viewModel.triggerMemoryExtraction()
+OpenChat/Core/Memory/EmbeddingService.swift:4:final class EmbeddingService: @unchecked Sendable {
+OpenChat/Core/Memory/EmbeddingService.swift:27:            "input_ids": MLFeatureValue(multiArray: inputIDs),
+OpenChat/Core/Memory/EmbeddingService.swift:28:            "attention_mask": MLFeatureValue(multiArray: attentionMask),
+OpenChat/Core/Memory/EmbeddingService.swift:32:        guard let embeddingsValue = result.featureValue(for: "embeddings"),
+OpenChat/Core/Memory/EmbeddingService.swift:33:              let embeddingsArray = embeddingsValue.multiArrayValue else {
+OpenChat/Core/Memory/EmbeddingService.swift:37:        let embedding = try readEmbedding(embeddingsArray)
+OpenChat/Core/Memory/MemoryManager.swift:6:struct MemoryManager: Sendable {
+OpenChat/Core/Memory/MemoryManager.swift:30:    func extractMemories(from conversation: ConversationRecord) async throws -> [MemoryEntryRecord] {
+OpenChat/Core/Memory/MemoryManager.swift:80:            try await vectorStore.insert(entries: items)
+OpenChat/Core/Memory/MemoryManager.swift:94:    func retrieveMemories(
+OpenChat/Core/Memory/MemoryDependencies.swift:9:    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws
+OpenChat/Core/Memory/VectorStore.swift:4:struct VectorStore: Sendable {
+OpenChat/Core/Memory/VectorStore.swift:41:    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {
+OpenChat/Core/Memory/VectorStore.swift:76:                    AND me.embedding MATCH ?
+
+## Test anchors
+
+OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift:83:struct ChatViewModelPromptAssemblyTests {
+OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift:324:    @Test func test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() async throws {
+OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift:7:struct PromptAssemblerTests {
+OpenChatTests/Core/MemoryTests/VectorStoreTests.swift:8:struct VectorStoreTests {
+OpenChatTests/Core/MemoryTests/VectorStoreTests.swift:139:    @Test func test_insert_batch_rolls_back_all_memories_when_later_vector_insert_fails() async throws {
+OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift:96:struct MemoryManagerRetrievalTests {
+OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift:128:    @Test func test_extractMemories_rolls_back_batch_when_later_embedding_is_invalid() async throws {
+OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift:159:    @Test func test_retrieveMemories_falls_back_to_recent_memories_when_embedding_fails() async throws {
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:8:struct EmbeddingServiceTests {
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:9:    @Test func test_model_and_tokenizer_are_bundled() throws {
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:50:    @Test(.timeLimit(.minutes(2))) func test_embedding_outputs_384_finite_normalized_values() throws {
+
+## Changed files
+
+arch/AntiEntropy/index.md
+arch/AntiEntropy/propagation-audit.md
+arch/AntiEntropy/triangle-consistency.md
+arch/index.md
+arch/modules/chat.md
+arch/modules/memory/index.md
+arch/roadmap.md
+harness/2026.04.30/memory-vector-reliability/evidence.txt
+harness/2026.04.30/memory-vector-reliability/index.md
+
+## Import surface
+
+OpenChatTests/Core/MemoryTests/VectorStoreTests.swift:1:import Foundation
+OpenChatTests/Core/MemoryTests/VectorStoreTests.swift:2:import GRDB
+OpenChatTests/Core/MemoryTests/VectorStoreTests.swift:3:import Testing
+OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift:1:import Foundation
+OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift:2:import Testing
+OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift:1:import Foundation
+OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift:2:import Testing
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:1:import CoreML
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:2:import Foundation
+OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift:3:import Testing
+OpenChat/App/AppConstants.swift:1:import Foundation
+OpenChat/Core/Memory/MemoryDependencies.swift:1:import Foundation
+OpenChat/App/AppRoute.swift:1:import Foundation
+OpenChat/Core/Memory/MemoryError.swift:1:import Foundation
+OpenChat/App/AppState.swift:1:import Foundation
+OpenChat/App/AppState.swift:2:import Observation
+OpenChat/App/AppState.swift:3:import SwiftUI
+OpenChat/Core/Memory/MemoryManager.swift:1:import Foundation
+OpenChat/Core/Memory/MemoryManager.swift:2:import os.log
+OpenChat/App/DependencyContainer.swift:1:import Foundation
+OpenChat/App/DependencyContainer.swift:2:import Observation
+OpenChat/Core/Memory/EmbeddingService.swift:1:import CoreML
+OpenChat/Core/Memory/EmbeddingService.swift:2:import Foundation
+OpenChat/Features/Chat/Views/StatsBarView.swift:1:import SwiftUI
+OpenChat/Features/Chat/Views/MessageBubbleView.swift:1:import SwiftUI
+OpenChat/Features/Chat/Views/MessageActionBar.swift:1:import SwiftUI
+OpenChat/Core/Memory/XLMRobertaTokenizer.swift:1:import Foundation
+OpenChat/Features/Chat/Views/MemoryMarkerView.swift:1:import SwiftUI
+OpenChat/Features/Chat/ViewModels/ChatViewModel.swift:1:import Foundation
+OpenChat/Features/Chat/ViewModels/ChatViewModel.swift:2:import Observation
+OpenChat/Features/Chat/ViewModels/ChatViewModel.swift:3:import os
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:1:import Foundation
+OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:2:import os.log
+OpenChat/Core/Memory/VectorStore.swift:1:import Foundation
+OpenChat/Core/Memory/VectorStore.swift:2:import GRDB
+OpenChat/Features/Chat/Views/ChatSettingsSheet.swift:1:import SwiftUI
+OpenChat/Features/Chat/Models/MessageDisplayItem.swift:1:import Foundation
+OpenChat/Features/Chat/Views/ChatView.swift:1:import SwiftUI
+OpenChat/Features/Chat/Views/InputBarView.swift:1:import SwiftUI
+OpenChat/Features/Chat/Models/StreamingStats.swift:1:import Foundation
+
+## Verification transcript excerpts
+
+### Focused memory/prompt run
+
+Command:
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/PromptAssemblerTests'
+```
+
+Source log: `/tmp/openchat-memory-focused.log`
+
+```text
+✔ Test test_insert_batch_rolls_back_all_memories_when_later_vector_insert_fails() passed after 0.030 seconds.
+2026-04-30 02:13:56.290778+0800 OpenChat[50801:3403295] [Memory] Semantic memory retrieval failed; falling back to recent memories for character card-fallback: Failed to load embedding model: forced failure
+2026-04-30 02:13:56.296974+0800 OpenChat[50801:3403299] [Memory] Semantic memory retrieval failed; falling back to recent memories for character card-memory-fallback: Failed to load embedding model: forced failure
+2026-04-30 02:13:56.303277+0800 OpenChat[50801:3403295] [Memory] Memory vectorization failed for extracted memory in conversation 4F45FC32-F4DF-497C-8B5D-6948E9B5B500: Vector store error: forced batch insert failure
+2026-04-30 02:13:56.304233+0800 OpenChat[50801:3403283] [Memory] Memory vectorization failed for extracted memory in conversation 23E717ED-A837-4F79-9220-C2CFFC0CAB65: Vector store error: Invalid embedding dimension: expected 384, got 383
+✔ Test test_extractMemories_rolls_back_batch_when_later_embedding_is_invalid() passed after 0.045 seconds.
+✔ Test run with 27 tests in 5 suites passed after 1.381 seconds.
+** TEST SUCCEEDED **
+```
+
+### Full suite run
+
+Command:
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+Source log: `/tmp/openchat-memory-full.log`
+
+```text
+2026-04-30 02:14:05.386286+0800 OpenChat[51259:3404358] [Memory] Semantic memory retrieval failed; falling back to recent memories for character card-fallback: Failed to load embedding model: forced failure
+✔ Test test_insert_batch_rolls_back_all_memories_when_later_vector_insert_fails() passed after 0.239 seconds.
+2026-04-30 02:14:05.457984+0800 OpenChat[51259:3404359] [Memory] Semantic memory retrieval failed; falling back to recent memories for character card-memory-fallback: Failed to load embedding model: forced failure
+✔ Test test_extractMemories_rolls_back_batch_when_later_embedding_is_invalid() passed after 0.263 seconds.
+✔ Test test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() passed after 0.273 seconds.
+✔ Test run with 166 tests in 34 suites passed after 1.246 seconds.
+** TEST SUCCEEDED **
+```

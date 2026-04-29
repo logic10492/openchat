@@ -17,8 +17,10 @@
 
 | 文件 | 职责 |
 |---|---|
-| `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 模型加载与向量推理 |
-| `Core/Memory/VectorStore.swift` | sqlite-vec 向量 CRUD 封装（插入 / KNN 检索 / 删除） |
+| `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 模型加载、XLMRobertaTokenizer 分词与向量推理 |
+| `Core/Memory/XLMRobertaTokenizer.swift` | 读取 `tokenizer.json` 的 Unigram vocab，输出固定长度 input IDs / attention mask |
+| `Core/Memory/MemoryDependencies.swift` | `EmbeddingProvider`、`MemoryVectorStore` 协议边界，支持测试注入与批次原子写入 |
+| `Core/Memory/VectorStore.swift` | sqlite-vec 向量 CRUD 封装（原子插入 / KNN 检索 / 删除） |
 | `Core/Memory/MemoryManager.swift` | 记忆提取与检索的编排层 |
 | `Core/Memory/MemoryError.swift` | 记忆模块统一错误类型 |
 | `Core/Database/Records/MemoryEntryRecord.swift` | GRDB Record：记忆条目 |
@@ -79,10 +81,10 @@ enum MemoryType: String, Codable, Sendable {
 | 模型 | MultilingualE5Small |
 | 格式 | CoreML (.mlpackage → .mlmodelc) |
 | 输出维度 | 384 |
-| 分词器 | XLMRobertaTokenizer（`models/tokenizer.json`） |
-| 最大输入长度 | 512 tokens |
+| 分词器 | XLMRobertaTokenizer（`OpenChat/Resources/Models/tokenizer.json`） |
+| CoreML 输入长度 | 256 tokens（`input_ids` / `attention_mask` shape 为 `1 x 256`） |
 | 多语言支持 | 是（中 / 英 / 日 等 100+ 语言） |
-| 模型文件 | `models/MultilingualE5Small.mlpackage.zip` |
+| 模型文件 | `OpenChat/Resources/Models/MultilingualE5Small.mlpackage`（源码保留 `models/MultilingualE5Small.mlpackage.zip`） |
 
 ### 4.2 E5 前缀规范
 
@@ -96,19 +98,20 @@ E5 模型要求输入文本添加任务前缀以区分查询与文档：
 ### 4.3 EmbeddingService 接口
 
 ```swift
-struct EmbeddingService: Sendable {
+final class EmbeddingService: @unchecked Sendable {
     /// 将文本转换为 384 维归一化向量
     /// - text: 原始文本（不含前缀）
     /// - isQuery: true 添加 "query: " 前缀，false 添加 "passage: " 前缀
     /// - returns: 归一化的 [Float] 向量，维度 384
-    func embed(_ text: String, isQuery: Bool) async throws -> [Float]
+    func embed(_ text: String, isQuery: Bool) throws -> [Float]
 }
 ```
 
 **加载策略**：
-- **Lazy 单例**：首次调用 `embed()` 时才加载 CoreML 模型，避免阻塞 App 启动
-- **线程安全**：CoreML 推理自动选择最优计算后端（CPU / GPU / ANE）
-- **分词**：使用 `models/tokenizer.json`（XLMRobertaTokenizer），超过 512 tokens 的输入自动截断
+- **实例内 lazy 加载**：`DependencyContainer` 创建 `EmbeddingService` 实例，首次调用 `embed()` 时才加载 CoreML 模型，避免阻塞 App 启动
+- **线程安全**：`NSLock` 保护 lazy `MLModel` 与 tokenizer；模拟器使用 CPU，真机使用 CPU/GPU
+- **分词**：使用 App Bundle 内的 `tokenizer.json`（XLMRobertaTokenizer），超过 256 tokens 的输入自动截断
+- **输出读取**：当前 CoreML 输出 feature 为 `embeddings`，支持 Float16 / Float32，结果必须为 384 维并归一化
 
 ## 5. 向量存储
 
@@ -122,6 +125,12 @@ struct EmbeddingService: Sendable {
 struct VectorStore: Sendable {
     /// 插入向量嵌入
     func insert(entryId: String, embedding: [Float]) async throws
+
+    /// 同一事务中插入 memory_entry 和 memory_embedding
+    func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws
+
+    /// 同一事务中批量插入 memory_entry 和 memory_embedding；任一条失败时整批回滚
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws
 
     /// KNN 相似度检索
     /// - query: 查询向量
@@ -142,7 +151,12 @@ struct VectorStore: Sendable {
 }
 ```
 
-**检索实现**：sqlite-vec 的 KNN 查询与 `memory_entry` 表 JOIN，通过 `characterCardId` 过滤范围。
+**检索实现**：sqlite-vec 的 KNN 查询使用 `embedding MATCH ? AND k = ?`，并在 KNN 前通过 `entry_id IN (SELECT id FROM memory_entry WHERE characterCardId = ?)` 限定角色卡范围。
+
+**一致性约束**：
+- `MemoryVectorStore.insert(entries:)` 是协议必填方法，不提供顺序单条写入的默认实现。
+- 生产 `VectorStore.insert(entry:embedding:)` 与 `VectorStore.insert(entries:)` 在同一个 GRDB write transaction 内同时写入 `memory_entry` 与 `memory_embedding`。
+- 所有向量写入前校验维度必须为 `EmbeddingService.embeddingDimension == 384`；批量写入先完成所有维度校验和 blob 转换，再进入事务。
 
 ## 6. 记忆提取流程
 
@@ -168,10 +182,10 @@ extractMemories(from conversation):
     5. 构建提取 prompt（见 6.3）
     6. 调用 APIClient.sendMessage()（非流式，使用对话关联的端点）
     7. 解析 API 返回的 JSON 数组
-    8. 对每条提取出的记忆：
-       a. 创建 MemoryEntryRecord 并保存到 DB
-       b. 调用 EmbeddingService.embed(content, isQuery: false) 生成向量
-       c. 调用 VectorStore.insert() 存储向量
+    8. 对每条提取出的记忆先创建 MemoryEntryRecord，并调用 EmbeddingProvider.embed(content, isQuery: false) 生成向量
+    9. 调用 MemoryVectorStore.insert(entries:) 批量原子保存 memory_entry + memory_embedding
+       - 任一 embedding 或 vector 写入失败，本批次整体失败
+       - 不留下只有 memory_entry、没有 memory_embedding 的半索引记忆
 ```
 
 ### 6.3 提取 Prompt 模板
@@ -222,10 +236,11 @@ retrieveRecentSummary(for characterCardId, limit: 5):
 retrieveMemories(for characterCardId, query: currentInput, limit: 5):
     1. 调用 EmbeddingService.embed(query, isQuery: true) 生成查询向量
     2. 调用 VectorStore.search(query, characterCardId, limit) 执行 KNN 检索
-    3. 过滤掉 distance 超过阈值的结果（相关度过低）
-    4. 从 DB 加载对应的 MemoryEntryRecord
-    5. 与 retrieveRecentSummary() 结果合并去重
-    6. 结果传入 PromptAssembler
+    3. 若 embedding/model/vector 检索异常，记录 warning 并 fallback 到 retrieveRecentSummary()
+    4. 过滤掉 distance 超过阈值的结果（相关度过低）
+    5. 从 DB 加载对应的 MemoryEntryRecord，并按 KNN 返回的 entry_id 顺序恢复结果
+    6. 与 retrieveRecentSummary() 结果合并去重
+    7. 结果传入 PromptAssembler
 ```
 
 ### 7.3 注入方式
@@ -242,8 +257,8 @@ retrieveMemories(for characterCardId, query: currentInput, limit: 5):
 ```swift
 struct MemoryManager: Sendable {
     private let databaseManager: DatabaseManager
-    private let embeddingService: EmbeddingService
-    private let vectorStore: VectorStore
+    private let embeddingService: any EmbeddingProvider
+    private let vectorStore: any MemoryVectorStore
     private let apiClient: APIClient
 
     /// 从对话中提取记忆（后台异步调用）
@@ -284,7 +299,11 @@ enum MemoryError: LocalizedError {
 }
 ```
 
-记忆系统的所有错误**不阻断聊天主流程**。提取或检索失败时静默降级（不注入记忆），仅记录日志。
+记忆系统的错误处理遵循“聊天主流程优先，但故障可观测”：
+
+- 检索链路：`MemoryManager.retrieveMemories(...)` 捕获 embedding/model/vector 检索异常，记录 warning 并 fallback 到 `retrieveRecentSummary(...)`；只有 fallback 本身也失败时才继续向上抛出，Chat 层记录 warning 后继续生成。
+- 提取链路：`MemoryManager.extractMemories(from:)` 对同一批提取结果采用批量原子写入；embedding 或 vector 任一失败时整批失败并记录 error，不推进 `latestMemoryDate`。
+- UI 链路：提取失败会通过 Chat memory marker 反馈；检索 fallback 成功时用户发送流程继续，且 prompt 仍包含近期记忆。
 
 ## 10. 视图设计
 
@@ -348,7 +367,7 @@ final class MemoryListViewModel {
 |---|---|
 | `Core/PromptEngine` | 检索到的记忆作为 `PromptSegment.memoryEntry` 注入 prompt，token 预算上限为剩余预算 × 15% |
 | `Features/Chat` | `ChatViewModel` 在发送消息时调用 `retrieveMemories()`；每累计 10 条 user/assistant 消息后周期性调用 `extractMemories()`；`ChatView.onDisappear` 也会触发提取 |
-| `Core/Database` | `MemoryEntryRecord` CRUD + `memory_embedding` sqlite-vec 虚拟表操作 |
+| `Core/Database` | `MemoryEntryRecord` CRUD + `memory_embedding` sqlite-vec 虚拟表操作；原子写入由 `VectorStore` 的 GRDB transaction 统一编排 |
 | `Core/Networking` | 记忆提取时调用 `APIClient.sendMessage()` 请求 LLM 提取结构化记忆 |
 | `Features/CharacterCard` | 角色详情页提供记忆列表入口 |
 
@@ -358,7 +377,7 @@ final class MemoryListViewModel {
 2. **本地嵌入模型**：使用 CoreML 在设备端推理，无需网络请求，保护用户隐私
 3. **sqlite-vec**：复用已有的 SQLite 基础设施，无需引入独立的向量数据库
 4. **15% memory token 预算**：避免记忆占用过多上下文空间，保持当前对话质量
-5. **静默降级**：记忆系统故障不应影响核心聊天功能
+5. **可观测降级**：记忆系统故障不应影响核心聊天功能；语义检索失败 fallback 到近期记忆并记录日志
 6. **周期性增量提取 + 视图消失触发**：当前源码每累计 10 条 user/assistant 消息后后台提取，`ChatView.onDisappear` 也会触发提取；App 进入后台 lifecycle hook 另行规划
 
 ## 13. 实现证据
@@ -369,8 +388,10 @@ final class MemoryListViewModel {
 
 | 设计文件 | 实现位置 | 说明 |
 |---|---|---|
-| EmbeddingService | `Core/Memory/EmbeddingService.swift` | `final class: @unchecked Sendable`，NSLock 保护 lazy MLModel + XLMRobertaTokenizer |
-| VectorStore | `Core/Memory/VectorStore.swift` | sqlite-vec 封装，insert/search/delete/deleteAll |
+| EmbeddingService | `Core/Memory/EmbeddingService.swift` | `final class: @unchecked Sendable`，NSLock 保护 lazy MLModel + XLMRobertaTokenizer，固定 256 输入，输出 384 维归一化向量 |
+| XLMRobertaTokenizer | `Core/Memory/XLMRobertaTokenizer.swift` | tokenizer.json Unigram vocab 解析，compatibility normalization，固定长度 input IDs / attention mask |
+| MemoryDependencies | `Core/Memory/MemoryDependencies.swift` | `EmbeddingProvider` / `MemoryVectorStore` 协议，显式 batch insert 语义 |
+| VectorStore | `Core/Memory/VectorStore.swift` | sqlite-vec 封装，insert/search/delete/deleteAll；memory/vector 原子写入 |
 | MemoryManager | `Core/Memory/MemoryManager.swift` | struct Sendable，提取+检索编排 |
 | MemoryError | `Core/Memory/MemoryError.swift` | MemoryType enum + MemoryError enum |
 | MemoryEntryRecord | `Core/Database/Records/MemoryEntryRecord.swift` | GRDB FetchableRecord + PersistableRecord |
@@ -382,8 +403,8 @@ final class MemoryListViewModel {
 
 ### 关键集成点
 
-- `DependencyContainer` → 注入 `MemoryManager`（含 EmbeddingService + VectorStore）
-- `ChatViewModel` → 持有 `memoryManager`，发送消息时 `retrieveMemories()`，每 10 条 user/assistant 消息后周期性 `triggerMemoryExtraction()`；`ChatView.onDisappear` 也会触发提取
+- `DependencyContainer` → 注入 `MemoryManager`（含 `EmbeddingService` + `VectorStore`，经协议边界使用）
+- `ChatViewModel` → 持有 `memoryManager`，发送消息时 `retrieveMemories()`；语义检索失败时由 MemoryManager fallback 到近期记忆；每 10 条 user/assistant 消息后周期性 `triggerMemoryExtraction()`；`ChatView.onDisappear` 也会触发提取
 - `PromptAssembler` → `memories: [MemoryEntryRecord]` 参数，`makeMemoryMessageContent()` 格式化
 - `TokenBudget` → `memoryBudget`（remaining × 15%）
 - `PromptSegment` → `.timeContext(String)` + `.memoryEntry(MemoryEntryRecord)`
@@ -395,7 +416,11 @@ final class MemoryListViewModel {
 - `DatabaseManagerMemoryTests`: 8 tests 覆盖 save/fetch/delete/count/ids/type/recent/conversation
 - `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
 - `MemoryExtractionParsingTests`: 13 tests 覆盖 ExtractedMemory JSON 容错解析（大小写 type、字符串 importance、缺失字段、额外字段）+ latestMemoryDate 查询 + StreamDelta usage
-- 全量 `xcodebuild test` 当前为 133 个 Swift Testing 测试通过；Memory 直接覆盖仍以 DB、解析、Prompt 注入为主，EmbeddingService/VectorStore KNN 属于后续测试补强范围。
+- `EmbeddingServiceTests`: bundle 资源存在性、tokenizer 固定长度输出、CoreML 384 维有限归一化向量、compatibility normalization
+- `VectorStoreTests`: memory/vector 原子写入、批量事务回滚、sqlite-vec KNN 角色隔离、删除同步、维度校验
+- `MemoryManagerRetrievalTests`: 检索异常 fallback 到近期记忆；提取失败不留下半索引记忆；批次失败不推进部分记忆
+- `ChatViewModelPromptAssemblyTests`: Chat 发送链路中 fallback 记忆进入 API request；当前输入只进入 API request 一次
+- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；full suite 为 166 tests / 34 suites，`** TEST SUCCEEDED **`。
 
 ### 2026-04-16 修复
 
@@ -405,3 +430,12 @@ final class MemoryListViewModel {
 - **Conversation 数据刷新**：extractMemories 入口从 DB 重新 fetch 最新 ConversationRecord
 - **周期性提取**：每 10 条消息自动触发后台提取
 - **提取结果通知**：返回 `[MemoryEntryRecord]`，UI 显示 "已提取 N 条记忆" banner
+
+### 2026-04-30 Memory Vector Reliability 修复
+
+- **资源接线**：`OpenChat/Resources/Models/MultilingualE5Small.mlpackage` 与 `OpenChat/Resources/Models/tokenizer.json` 由 `scripts/generate_xcodeproj.rb` 加入 App Bundle，运行时通过 `Bundle.main` 读取。
+- **嵌入模型接线**：`EmbeddingService` 以 CoreML metadata 为准使用固定 `1 x 256` 的 `input_ids` / `attention_mask`，读取 Float16 / Float32 `embeddings` 输出为 384 维 Float 向量后归一化。
+- **分词器接线**：`XLMRobertaTokenizer` 读取 `tokenizer.json` 的 Unigram vocab 数组格式，执行 compatibility normalization、metaspace 预处理和固定长度 padding/truncation。
+- **向量数据库一致性**：`VectorStore.insert(entry:embedding:)` 与 `VectorStore.insert(entries:)` 在一个 GRDB write transaction 内同时保存 `memory_entry` 和 `memory_embedding`；later vector insert failure 覆盖整批回滚。
+- **KNN 角色隔离**：`VectorStore.search(query:characterCardId:limit:)` 使用 sqlite-vec `embedding MATCH ? AND k = ?`，并通过角色卡子查询限定候选记忆。
+- **检索可靠降级**：`MemoryManager.retrieveMemories(...)` 在 embedding/model/vector 检索异常时 fallback 到 `retrieveRecentSummary(...)`，Chat 生成链路不再用 `try?` 静默吞掉全部记忆。

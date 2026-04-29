@@ -182,3 +182,35 @@
 1. 明确 `AppConstants` 的归属：如果 Core 会使用，应迁移到 Core/Shared 的配置类型或通过依赖注入传入，避免 Core -> App。
 2. 决定 `Features/Support` 是否是 App shell。如果是，把 arch 规则写清；如果不是，把跨 Feature 导航上移到 App。
 3. 对 Memory 的 `EmbeddingService`/`VectorStore` 增加更直接的测试或至少文档标注当前自动化覆盖边界。
+
+## 2026-04-30 Memory Vector Reliability Incremental Audit
+
+范围：`OpenChat/Core/Memory/`、`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`、`OpenChat/App/DependencyContainer.swift`、`OpenChatTests/Core/MemoryTests/`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、`scripts/generate_xcodeproj.rb`、`OpenChat/Resources/Models/`、Memory 相关 arch 文档。
+
+审计模式：窄范围增量审计。OpenChat 当前没有 Magnum Agent 的 `arch/propagation-audit/` 脚本基线，因此本次使用 durable `harness/2026.04.30/memory-vector-reliability/evidence.txt` 记录静态 `rg` 证据、changed files 和 import surface；行为传播结论以源码链路为准。
+
+### 静态传播面
+
+- `EmbeddingService` 仍位于 `Core/Memory`，新增的 `XLMRobertaTokenizer` 只被 `EmbeddingService` 使用，没有扩大到 Feature 层。
+- `MemoryDependencies` 只定义 Core 内部协议，并由 `EmbeddingService` / `VectorStore` conform；生产注入仍由 `DependencyContainer` 完成。
+- `VectorStore` 的原子写入把 `memory_entry` 与 `memory_embedding` 放在同一 GRDB write transaction，传播面限定在 `Core/Memory` 与 `Core/Database`。
+- `ChatViewModel+Support` 只改变 memory retrieval 错误处理，不改变 `PromptAssembler`、`ContextManager`、`APIClient` 的主链路接口。
+- `scripts/generate_xcodeproj.rb` 只扩展资源识别，让 `.mlpackage` / `.mlmodelc` 与 `tokenizer.json` 进入 App Bundle；签名配置仍由脚本维持。
+
+### 行为传播结论
+
+- 写入链路从 `MemoryManager.extractMemories -> DatabaseManager.saveMemory -> VectorStore.insert(entryId:embedding:)` 收敛为 `MemoryManager.extractMemories -> EmbeddingProvider.embed -> MemoryVectorStore.insert(entries:)`，避免半索引记忆。
+- `MemoryVectorStore.insert(entries:)` 是协议必填方法，不提供非原子默认实现；生产 `VectorStore` 在所有维度校验和 blob 转换完成后进入单个 GRDB write transaction。
+- 检索链路从 Chat 层 `try?` 静默吞错，改为 `MemoryManager.retrieveMemories` 内部 fallback 到近期记忆；Chat 层只记录 fallback 仍失败的 warning。
+- Prompt 注入仍由 `PromptAssembler` 的 `memories: [MemoryEntryRecord]` 参数完成，段顺序没有改变。
+- 本次修复没有新增 Feature 间直接依赖，也没有改变 App -> Features -> Core -> Shared 的既有名义方向；实际影响集中在 `Core/Memory` 与 Chat 发送链路中的记忆检索错误处理。
+
+### 验证
+
+- `EmbeddingServiceTests`
+- `VectorStoreTests`
+- `MemoryManagerRetrievalTests`
+- `ChatViewModelPromptAssemblyTests`
+- Focused command: `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 26 tests passed，`** TEST SUCCEEDED **`。
+- Focused memory/prompt command including `PromptAssemblerTests`：27 tests / 5 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：166 tests / 34 suites passed，`** TEST SUCCEEDED **`。

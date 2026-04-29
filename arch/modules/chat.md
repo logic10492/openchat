@@ -196,8 +196,10 @@ sendMessage():
        endpoint = 从 DB 加载 conversation.apiEndpointId
 
     6.5 // 检索记忆
-       memories = await memoryManager.retrieveMemories(
-           for: characterCard.id, query: inputText)
+       memories = try await memoryManager.retrieveMemories(
+           for: characterCard.id, query: prompt)
+       // MemoryManager 内部处理 embedding/model/vector 检索异常，并 fallback 到角色近期记忆。
+       // ChatViewModel+Support 只在 fallback 也失败时记录 warning 并继续生成。
 
     7. 从 DB 读取当前会话消息后，构造 promptHistoryMessages：
        - 乐观保存的当前 user message 保留在 DB/UI 中；
@@ -395,9 +397,10 @@ struct MessageDisplayItem: Identifiable {
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
   - 记忆更新提示 banner（3 秒自动消失）
   - 周期性记忆提取（每 10 条 user/assistant 消息）
-  - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志
-- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证（133 tests），其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次：
+  - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志、语义检索失败 fallback 到近期记忆
+- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证语义检索失败时 fallback 记忆仍进入 API request：
   - `MemoryExtractionParsingTests`（13 tests: JSON 容错、latestMemoryDate、StreamDelta usage）
+  - `MemoryManagerRetrievalTests`
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
