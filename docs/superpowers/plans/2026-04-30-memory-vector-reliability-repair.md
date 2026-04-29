@@ -143,7 +143,7 @@ ruby scripts/generate_xcodeproj.rb
 Run:
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:OpenChatTests/EmbeddingServiceTests/test_model_and_tokenizer_are_bundled
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' '-only-testing:OpenChatTests/EmbeddingServiceTests/test_model_and_tokenizer_are_bundled()'
 ```
 
 Expected: FAIL because `Bundle.main.url(forResource: "MultilingualE5Small", withExtension: "mlmodelc")` or `tokenizer.json` is nil.
@@ -204,7 +204,7 @@ Expected:
 Run:
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:OpenChatTests/EmbeddingServiceTests/test_model_and_tokenizer_are_bundled
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' '-only-testing:OpenChatTests/EmbeddingServiceTests/test_model_and_tokenizer_are_bundled()'
 ```
 
 Expected: PASS.
@@ -287,7 +287,7 @@ ruby scripts/generate_xcodeproj.rb
 Run:
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests/test_current_parameters_preserve_reasoning_effort
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests/test_current_parameters_preserve_reasoning_effort()'
 ```
 
 Expected: PASS. Existing `MemoryManager(...)` call sites still compile because `EmbeddingService` and `VectorStore` conform to the protocols.
