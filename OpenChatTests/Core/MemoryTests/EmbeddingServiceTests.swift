@@ -34,6 +34,19 @@ struct EmbeddingServiceTests {
         #expect(paddingMask.allSatisfy { $0 == 0 })
     }
 
+    @Test func test_tokenizer_applies_compatibility_normalization() throws {
+        let tokenizerURL = try #require(Bundle.main.url(forResource: "tokenizer", withExtension: "json"))
+        let tokenizer = try XLMRobertaTokenizer(url: tokenizerURL)
+
+        let encoded = tokenizer.encode("①  Ⅳ", maxLength: 16)
+        let eosIndex = try #require(encoded.inputIDs.firstIndex(of: 2))
+        let contentIDs = encoded.inputIDs[..<eosIndex]
+
+        #expect(contentIDs.contains(106)) // "▁1"
+        #expect(contentIDs.contains(7_610)) // "▁IV"
+        #expect(!contentIDs.contains(3)) // "<unk>"
+    }
+
     @Test(.timeLimit(.minutes(2))) func test_embedding_outputs_384_finite_normalized_values() throws {
         let embedding = try EmbeddingService().embed("dragon forest memory", isQuery: true)
 

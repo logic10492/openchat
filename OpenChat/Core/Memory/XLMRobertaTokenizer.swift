@@ -78,7 +78,8 @@ struct XLMRobertaTokenizer: Sendable {
     }
 
     private func prepareForMetaspace(_ text: String) -> String {
-        let collapsed = text
+        let normalized = (text as NSString).precomposedStringWithCompatibilityMapping
+        let collapsed = normalized
             .replacingOccurrences(of: "\n", with: " ")
             .split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
