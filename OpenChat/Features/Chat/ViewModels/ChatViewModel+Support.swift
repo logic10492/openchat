@@ -77,11 +77,15 @@ extension ChatViewModel {
 
         var memories: [MemoryEntryRecord] = []
         if let characterCardId = characterCard?.id {
-            memories = (try? await memoryManager.retrieveMemories(
-                for: characterCardId,
-                query: prompt,
-                limit: 10
-            )) ?? []
+            do {
+                memories = try await memoryManager.retrieveMemories(
+                    for: characterCardId,
+                    query: prompt,
+                    limit: 10
+                )
+            } catch {
+                logger.warning("Memory retrieval failed after fallback for character \(characterCardId): \(error.localizedDescription)")
+            }
         }
 
         let preview = PromptAssembler.preview(

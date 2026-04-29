@@ -60,29 +60,31 @@ struct MemoryManager: Sendable {
         )
 
         let now = Date()
-        var saved: [MemoryEntryRecord] = []
-        for extracted in extractedMemories {
-            let entry = MemoryEntryRecord(
-                id: UUID().uuidString,
-                characterCardId: characterCardId,
-                sourceConversationId: current.id,
-                content: extracted.content,
-                memoryType: extracted.resolvedType.rawValue,
-                importance: extracted.resolvedImportance,
-                createdAt: now,
-                updatedAt: now
-            )
-            try await databaseManager.saveMemory(entry)
-            saved.append(entry)
-
-            do {
+        let prepared: [(entry: MemoryEntryRecord, embedding: [Float])]
+        do {
+            var items: [(entry: MemoryEntryRecord, embedding: [Float])] = []
+            for extracted in extractedMemories {
+                let entry = MemoryEntryRecord(
+                    id: UUID().uuidString,
+                    characterCardId: characterCardId,
+                    sourceConversationId: current.id,
+                    content: extracted.content,
+                    memoryType: extracted.resolvedType.rawValue,
+                    importance: extracted.resolvedImportance,
+                    createdAt: now,
+                    updatedAt: now
+                )
                 let embedding = try embeddingService.embed(entry.content, isQuery: false)
-                try await vectorStore.insert(entry: entry, embedding: embedding)
-            } catch {
-                logger.warning("Vector storage failed for memory \(entry.id): \(error.localizedDescription)")
+                items.append((entry: entry, embedding: embedding))
             }
+            try await vectorStore.insert(entries: items)
+            prepared = items
+        } catch {
+            logger.error("Memory vectorization failed for extracted memory in conversation \(current.id): \(error.localizedDescription)")
+            throw MemoryError.embeddingFailed(underlying: error)
         }
 
+        let saved = prepared.map(\.entry)
         logger.info("Extracted \(saved.count) memories from conversation \(current.id)")
         return saved
     }
@@ -94,12 +96,18 @@ struct MemoryManager: Sendable {
         query: String,
         limit: Int = 5
     ) async throws -> [MemoryEntryRecord] {
-        let queryEmbedding = try embeddingService.embed(query, isQuery: true)
-        let results = try await vectorStore.search(
-            query: queryEmbedding,
-            characterCardId: characterCardId,
-            limit: limit
-        )
+        let results: [(entryId: String, distance: Float)]
+        do {
+            let queryEmbedding = try embeddingService.embed(query, isQuery: true)
+            results = try await vectorStore.search(
+                query: queryEmbedding,
+                characterCardId: characterCardId,
+                limit: limit
+            )
+        } catch {
+            logger.warning("Semantic memory retrieval failed; falling back to recent memories for character \(characterCardId): \(error.localizedDescription)")
+            return try await retrieveRecentSummary(for: characterCardId, limit: limit)
+        }
 
         let filtered = results.filter { $0.distance < Self.distanceThreshold }
         guard !filtered.isEmpty else {
@@ -107,14 +115,17 @@ struct MemoryManager: Sendable {
         }
 
         let ids = filtered.map(\.entryId)
-        let entries = try await databaseManager.fetchMemories(ids: ids)
+        let entriesById = Dictionary(
+            uniqueKeysWithValues: try await databaseManager.fetchMemories(ids: ids).map { ($0.id, $0) }
+        )
+        let orderedEntries = ids.compactMap { entriesById[$0] }
 
         // Merge with recent summaries and deduplicate
         let summaries = try await retrieveRecentSummary(for: characterCardId, limit: 2)
-        let existingIDs = Set(entries.map(\.id))
+        let existingIDs = Set(orderedEntries.map(\.id))
         let uniqueSummaries = summaries.filter { !existingIDs.contains($0.id) }
 
-        return entries + uniqueSummaries
+        return orderedEntries + uniqueSummaries
     }
 
     func retrieveRecentSummary(

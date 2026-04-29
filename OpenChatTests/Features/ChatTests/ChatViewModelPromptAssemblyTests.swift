@@ -20,6 +20,33 @@ private final class RequestCapture: @unchecked Sendable {
     }
 }
 
+private struct ChatFailingEmbeddingProvider: EmbeddingProvider {
+    func embed(_ text: String, isQuery: Bool) throws -> [Float] {
+        throw MemoryError.modelLoadFailed(
+            underlying: NSError(
+                domain: "TestEmbedding",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "forced failure"]
+            )
+        )
+    }
+}
+
+private struct ChatEmptyVectorStore: MemoryVectorStore {
+    func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws {}
+
+    func search(
+        query: [Float],
+        characterCardId: String,
+        limit: Int
+    ) async throws -> [(entryId: String, distance: Float)] {
+        []
+    }
+
+    func delete(entryId: String) async throws {}
+    func deleteAll(characterCardId: String) async throws {}
+}
+
 private extension URLRequest {
     func openChatTestBodyData() throws -> Data {
         if let httpBody {
@@ -291,5 +318,101 @@ struct ChatViewModelPromptAssemblyTests {
             $0.role == "user" && $0.content == "What is this?"
         }
         #expect(storedCurrentInputs.count == 1)
+    }
+
+    @Test func test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-memory-fallback",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-memory-fallback",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "card-memory-fallback")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try card.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMemory(
+            TestHelpers.makeMemoryEntry(
+                id: "memory-silver-key",
+                characterCardId: card.id,
+                content: "Ava promised to remember the silver key.",
+                memoryType: .fact,
+                importance: 90
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "What did you promise?"
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(viewModel.streamTask == nil)
+        let request = try #require(capture.load())
+        #expect(request.messages.contains {
+            $0.role == "system" && $0.content.contains("Ava promised to remember the silver key.")
+        })
     }
 }

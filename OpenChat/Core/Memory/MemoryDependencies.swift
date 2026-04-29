@@ -6,6 +6,7 @@ protocol EmbeddingProvider: Sendable {
 
 protocol MemoryVectorStore: Sendable {
     func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws
     func search(
         query: [Float],
         characterCardId: String,
@@ -13,6 +14,14 @@ protocol MemoryVectorStore: Sendable {
     ) async throws -> [(entryId: String, distance: Float)]
     func delete(entryId: String) async throws
     func deleteAll(characterCardId: String) async throws
+}
+
+extension MemoryVectorStore {
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {
+        for item in entries {
+            try await insert(entry: item.entry, embedding: item.embedding)
+        }
+    }
 }
 
 extension EmbeddingService: EmbeddingProvider {}
