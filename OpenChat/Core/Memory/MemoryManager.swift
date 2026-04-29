@@ -131,12 +131,10 @@ struct MemoryManager: Sendable {
 
     func deleteMemory(id: String) async throws {
         try await vectorStore.delete(entryId: id)
-        try await databaseManager.deleteMemory(id: id)
     }
 
     func deleteAllMemories(for characterCardId: String) async throws {
         try await vectorStore.deleteAll(characterCardId: characterCardId)
-        try await databaseManager.deleteAllMemories(characterCardId: characterCardId)
     }
 
     // MARK: - Private
