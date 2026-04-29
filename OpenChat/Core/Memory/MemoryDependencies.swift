@@ -16,13 +16,5 @@ protocol MemoryVectorStore: Sendable {
     func deleteAll(characterCardId: String) async throws
 }
 
-extension MemoryVectorStore {
-    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {
-        for item in entries {
-            try await insert(entry: item.entry, embedding: item.embedding)
-        }
-    }
-}
-
 extension EmbeddingService: EmbeddingProvider {}
 extension VectorStore: MemoryVectorStore {}

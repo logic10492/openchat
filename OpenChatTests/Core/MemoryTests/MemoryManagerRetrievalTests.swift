@@ -45,6 +45,7 @@ private final class FailingSecondEmbeddingProvider: @unchecked Sendable, Embeddi
 
 private struct EmptyVectorStore: MemoryVectorStore {
     func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws {}
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {}
 
     func search(
         query: [Float],
@@ -65,6 +66,16 @@ private struct FailingInsertVectorStore: MemoryVectorStore {
                 domain: "TestVectorStore",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "forced insert failure"]
+            )
+        )
+    }
+
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {
+        throw MemoryError.vectorStoreError(
+            underlying: NSError(
+                domain: "TestVectorStore",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "forced batch insert failure"]
             )
         )
     }

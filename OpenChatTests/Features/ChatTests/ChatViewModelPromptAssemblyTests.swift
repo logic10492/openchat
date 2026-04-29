@@ -34,6 +34,7 @@ private struct ChatFailingEmbeddingProvider: EmbeddingProvider {
 
 private struct ChatEmptyVectorStore: MemoryVectorStore {
     func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws {}
+    func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws {}
 
     func search(
         query: [Float],
