@@ -26,10 +26,12 @@ RESOURCE_EXTENSIONS = %w[
   .plist
   .bundle
   .xcprivacy
+  .mlpackage
+  .mlmodelc
 ].freeze
 
 def package_like?(path)
-  path.extname == '.xcodeproj'
+  %w[.xcodeproj .mlpackage .mlmodelc].include?(path.extname)
 end
 
 def resource_file?(path)
