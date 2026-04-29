@@ -83,6 +83,7 @@
 		9BC6721296A62883667586A5 /* ResponsesAPIRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBC73AA184C22C83D1B5437 /* ResponsesAPIRequest.swift */; };
 		9F11BA4F821072357E8BC985 /* TokenBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E02B2D6F3B88C16945DD79A /* TokenBudget.swift */; };
 		A88E1F461E3F3EBD99D3EC2F /* EmbeddingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5413348D72045784D528429 /* EmbeddingService.swift */; };
+		D1ECAFE00000000000000001 /* MemoryDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0E4180000000000000001 /* MemoryDependencies.swift */; };
 		ACA9BBF1A895B35F9AAC1847 /* tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = FAE3C171C585C8A208292B08 /* tokenizer.json */; };
 		AD277536D451BFFD8E52981B /* Contents.json in Resources */ = {isa = PBXBuildFile; fileRef = 98386EEDCAB0A751EA6FEF42 /* Contents.json */; };
 		B315C3D2E0B431DEA717AC4D /* ModelObjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C86A6028D83E56C29074B31D /* ModelObjectTests.swift */; };
@@ -150,6 +151,7 @@
 		01754A3607C5E1AAEF1CCFC5 /* String+Token.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "String+Token.swift"; sourceTree = "<group>"; };
 		08E5B9711D859CF309B9F89E /* OpenChatApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenChatApp.swift; sourceTree = "<group>"; };
 		0936BF01468D26F04CFFE91F /* APIClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		0AF0E4180000000000000001 /* MemoryDependencies.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryDependencies.swift; sourceTree = "<group>"; };
 		09C345A0521AF6E626C95E72 /* TruncationStrategyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TruncationStrategyTests.swift; sourceTree = "<group>"; };
 		0B1F88BE1CF92F4A24754BA0 /* EmbeddingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmbeddingServiceTests.swift; sourceTree = "<group>"; };
 		0E02B2D6F3B88C16945DD79A /* TokenBudget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TokenBudget.swift; sourceTree = "<group>"; };
@@ -418,6 +420,7 @@
 			isa = PBXGroup;
 			children = (
 				C5413348D72045784D528429 /* EmbeddingService.swift */,
+				0AF0E4180000000000000001 /* MemoryDependencies.swift */,
 				E7E15B2F5166DF6B68B70D39 /* MemoryError.swift */,
 				13849D842B327A7EA18755F1 /* MemoryManager.swift */,
 				A3BDCEE7DB141AD8720D35C0 /* VectorStore.swift */,
@@ -999,6 +1002,7 @@
 				270EB8ECBE276160EDBC29D8 /* WorldBookEntryRecord.swift in Sources */,
 				83C86141FDD2A1AA09FE0382 /* WorldBookRecord.swift in Sources */,
 				A88E1F461E3F3EBD99D3EC2F /* EmbeddingService.swift in Sources */,
+				D1ECAFE00000000000000001 /* MemoryDependencies.swift in Sources */,
 				261CF472867A340ADCBADDDE /* MemoryError.swift in Sources */,
 				DB7FF3114E7843AE487E7C62 /* MemoryManager.swift in Sources */,
 				C05FB799766BEF9E896F167A /* VectorStore.swift in Sources */,

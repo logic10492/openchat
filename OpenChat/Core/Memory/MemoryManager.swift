@@ -5,8 +5,8 @@ private let logger = Logger(subsystem: "com.openchat", category: "Memory")
 
 struct MemoryManager: Sendable {
     private let databaseManager: DatabaseManager
-    private let embeddingService: EmbeddingService
-    private let vectorStore: VectorStore
+    private let embeddingService: any EmbeddingProvider
+    private let vectorStore: any MemoryVectorStore
     private let apiClient: APIClient
 
     private static let minimumMessagesForExtraction = 4
@@ -14,8 +14,8 @@ struct MemoryManager: Sendable {
 
     init(
         databaseManager: DatabaseManager,
-        embeddingService: EmbeddingService,
-        vectorStore: VectorStore,
+        embeddingService: any EmbeddingProvider,
+        vectorStore: any MemoryVectorStore,
         apiClient: APIClient
     ) {
         self.databaseManager = databaseManager
@@ -77,7 +77,7 @@ struct MemoryManager: Sendable {
 
             do {
                 let embedding = try embeddingService.embed(entry.content, isQuery: false)
-                try await vectorStore.insert(entryId: entry.id, embedding: embedding)
+                try await vectorStore.insert(entry: entry, embedding: embedding)
             } catch {
                 logger.warning("Vector storage failed for memory \(entry.id): \(error.localizedDescription)")
             }

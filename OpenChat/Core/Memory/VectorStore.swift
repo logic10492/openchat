@@ -18,6 +18,10 @@ struct VectorStore: Sendable {
         }
     }
 
+    func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws {
+        try await insert(entryId: entry.id, embedding: embedding)
+    }
+
     func search(
         query: [Float],
         characterCardId: String,
