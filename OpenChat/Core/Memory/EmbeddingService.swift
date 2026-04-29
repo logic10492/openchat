@@ -3,7 +3,7 @@ import Foundation
 
 final class EmbeddingService: @unchecked Sendable {
     static let embeddingDimension = 384
-    private static let maxTokenLength = 512
+    private static let modelInputLength = 256
 
     private let lock = NSLock()
     private var model: MLModel?
@@ -12,17 +12,15 @@ final class EmbeddingService: @unchecked Sendable {
     func embed(_ text: String, isQuery: Bool) throws -> [Float] {
         let prefixed = isQuery ? "query: \(text)" : "passage: \(text)"
         let tokenizer = try loadTokenizer()
-        let encoded = tokenizer.encode(prefixed, maxLength: Self.maxTokenLength)
+        let encoded = tokenizer.encode(prefixed, maxLength: Self.modelInputLength)
 
         let model = try loadModel()
-        let inputIDs = try MLMultiArray(shape: [1, encoded.inputIDs.count as NSNumber], dataType: .int32)
-        let attentionMask = try MLMultiArray(shape: [1, encoded.attentionMask.count as NSNumber], dataType: .int32)
+        let inputIDs = try MLMultiArray(shape: [1, Self.modelInputLength as NSNumber], dataType: .int32)
+        let attentionMask = try MLMultiArray(shape: [1, Self.modelInputLength as NSNumber], dataType: .int32)
 
-        for (i, id) in encoded.inputIDs.enumerated() {
-            inputIDs[[0, i as NSNumber]] = NSNumber(value: id)
-        }
-        for (i, mask) in encoded.attentionMask.enumerated() {
-            attentionMask[[0, i as NSNumber]] = NSNumber(value: mask)
+        for index in 0..<Self.modelInputLength {
+            inputIDs[[0, index as NSNumber]] = NSNumber(value: encoded.inputIDs[index])
+            attentionMask[[0, index as NSNumber]] = NSNumber(value: encoded.attentionMask[index])
         }
 
         let provider = try MLDictionaryFeatureProvider(dictionary: [
@@ -36,11 +34,15 @@ final class EmbeddingService: @unchecked Sendable {
             throw MemoryError.embeddingFailed(underlying: MemoryError.invalidExtractionResponse)
         }
 
-        let count = embeddingsArray.count
-        var embedding = [Float](repeating: 0, count: count)
-        let ptr = embeddingsArray.dataPointer.bindMemory(to: Float.self, capacity: count)
-        for i in 0..<count {
-            embedding[i] = ptr[i]
+        let embedding = try readEmbedding(embeddingsArray)
+        guard embedding.count == Self.embeddingDimension else {
+            throw MemoryError.embeddingFailed(
+                underlying: NSError(
+                    domain: "EmbeddingService",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "Unexpected embedding dimension \(embedding.count)"]
+                )
+            )
         }
 
         return normalize(embedding)
@@ -58,7 +60,11 @@ final class EmbeddingService: @unchecked Sendable {
         }
         do {
             let config = MLModelConfiguration()
+            #if targetEnvironment(simulator)
+            config.computeUnits = .cpuOnly
+            #else
             config.computeUnits = .cpuAndGPU
+            #endif
             let loaded = try MLModel(contentsOf: url, configuration: config)
             model = loaded
             return loaded
@@ -86,121 +92,28 @@ final class EmbeddingService: @unchecked Sendable {
         }
     }
 
+    private func readEmbedding(_ array: MLMultiArray) throws -> [Float] {
+        switch array.dataType {
+        case .float16:
+            let pointer = array.dataPointer.bindMemory(to: Float16.self, capacity: array.count)
+            return (0..<array.count).map { Float(pointer[$0]) }
+        case .float32:
+            let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: array.count)
+            return (0..<array.count).map { pointer[$0] }
+        default:
+            throw MemoryError.embeddingFailed(
+                underlying: NSError(
+                    domain: "EmbeddingService",
+                    code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "Unsupported embedding output type \(array.dataType.rawValue)"]
+                )
+            )
+        }
+    }
+
     private func normalize(_ vector: [Float]) -> [Float] {
         let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
         guard norm > 0 else { return vector }
         return vector.map { $0 / norm }
-    }
-}
-
-// MARK: - XLMRobertaTokenizer
-
-struct XLMRobertaTokenizer: Sendable {
-    private let vocab: [String: Int]
-    private let merges: [(String, String)]
-    private let bosTokenID: Int32
-    private let eosTokenID: Int32
-    private let padTokenID: Int32
-    private let unkTokenID: Int32
-
-    struct EncodedInput: Sendable {
-        let inputIDs: [Int32]
-        let attentionMask: [Int32]
-    }
-
-    init(url: URL) throws {
-        let data = try Data(contentsOf: url)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-
-        let model = json["model"] as? [String: Any] ?? [:]
-        let vocabList = model["vocab"] as? [String: Int] ?? [:]
-        self.vocab = vocabList
-
-        let mergeStrings = model["merges"] as? [String] ?? []
-        self.merges = mergeStrings.compactMap { merge in
-            let parts = merge.split(separator: " ", maxSplits: 1)
-            guard parts.count == 2 else { return nil }
-            return (String(parts[0]), String(parts[1]))
-        }
-
-        self.bosTokenID = 0   // <s>
-        self.eosTokenID = 2   // </s>
-        self.padTokenID = 1   // <pad>
-        self.unkTokenID = 3   // <unk>
-    }
-
-    func encode(_ text: String, maxLength: Int) -> EncodedInput {
-        let tokens = tokenize(text)
-        let tokenIDs = tokens.map { vocab[$0] ?? Int(unkTokenID) }
-
-        // Truncate to maxLength - 2 (for BOS/EOS)
-        let maxContentLength = maxLength - 2
-        let truncated = Array(tokenIDs.prefix(maxContentLength))
-
-        var inputIDs: [Int32] = [bosTokenID]
-        inputIDs.append(contentsOf: truncated.map { Int32($0) })
-        inputIDs.append(eosTokenID)
-
-        let attentionMask = [Int32](repeating: 1, count: inputIDs.count)
-        return EncodedInput(inputIDs: inputIDs, attentionMask: attentionMask)
-    }
-
-    private func tokenize(_ text: String) -> [String] {
-        // SentencePiece-style: split into words by spaces, prefix with ▁
-        let words = text.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        var allTokens: [String] = []
-
-        for (index, word) in words.enumerated() {
-            let prefix = index == 0 ? "▁" : "▁"
-            let prefixed = prefix + word
-            let subTokens = bpe(prefixed)
-            allTokens.append(contentsOf: subTokens)
-        }
-
-        return allTokens
-    }
-
-    private func bpe(_ word: String) -> [String] {
-        var symbols = word.map { String($0) }
-        guard symbols.count > 1 else { return symbols }
-
-        // Build merge priority lookup
-        var mergeRank: [String: Int] = [:]
-        for (i, (a, b)) in merges.enumerated() {
-            mergeRank["\(a) \(b)"] = i
-        }
-
-        while symbols.count > 1 {
-            var bestPair: (Int, String)?
-            for i in 0..<(symbols.count - 1) {
-                let key = "\(symbols[i]) \(symbols[i + 1])"
-                if let rank = mergeRank[key] {
-                    if bestPair == nil || rank < bestPair!.0 {
-                        bestPair = (rank, key)
-                    }
-                }
-            }
-
-            guard let (_, pair) = bestPair else { break }
-            let parts = pair.split(separator: " ", maxSplits: 1)
-            let first = String(parts[0])
-            let second = String(parts[1])
-            let merged = first + second
-
-            var newSymbols: [String] = []
-            var i = 0
-            while i < symbols.count {
-                if i < symbols.count - 1 && symbols[i] == first && symbols[i + 1] == second {
-                    newSymbols.append(merged)
-                    i += 2
-                } else {
-                    newSymbols.append(symbols[i])
-                    i += 1
-                }
-            }
-            symbols = newSymbols
-        }
-
-        return symbols
     }
 }
