@@ -109,6 +109,33 @@ struct VectorStoreTests {
         #expect(vectorCount == 0)
     }
 
+    @Test func test_insert_rolls_back_memory_when_vector_insert_fails() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let store = VectorStore(databaseManager: manager)
+        let card = TestHelpers.makeCharacterCard(id: "card-a")
+        try await insertCards([card], into: manager)
+        let entry = TestHelpers.makeMemoryEntry(id: "memory-a", characterCardId: card.id)
+
+        try await store.insert(entryId: entry.id, embedding: makeEmbedding(firstValue: 0.5))
+
+        do {
+            try await store.insert(entry: entry, embedding: makeEmbedding(firstValue: 0.8))
+            Issue.record("Expected duplicate vector insert to throw")
+        } catch let error as MemoryError {
+            guard case .vectorStoreError = error else {
+                Issue.record("Expected MemoryError.vectorStoreError, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("Expected MemoryError.vectorStoreError, got \(error)")
+        }
+
+        let memoryCount = try await manager.fetchMemoryCount(characterCardId: card.id)
+        let vectorCount = try await vectorRowCount(entryId: entry.id, in: manager)
+        #expect(memoryCount == 0)
+        #expect(vectorCount == 1)
+    }
+
     private func insertCards(_ cards: [CharacterCardRecord], into manager: DatabaseManager) async throws {
         try await manager.write { db in
             for card in cards {
