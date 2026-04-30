@@ -340,9 +340,11 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(viewModel.streamTask == nil)
         let request = try #require(capture.load())
         let currentInputMessages = request.messages.filter {
-            $0.role == "user" && $0.content == "What is this?"
+            $0.role == "user" && $0.content.contains("What is this?")
         }
         #expect(currentInputMessages.count == 1)
+        let currentTurn = try #require(currentInputMessages.first)
+        #expect(currentTurn.content.contains("[Time] "))
 
         let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
         let storedCurrentInputs = storedMessages.filter {
@@ -445,6 +447,120 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(request.messages.contains {
             $0.role == "system" && $0.content.contains("Ava promised to remember the silver key.")
         })
+    }
+
+    @Test func test_sendMessage_orders_four_layer_prompt_in_api_request() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-four-layer",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-four-layer",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "card-four-layer")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try card.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMessage(
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "assistant",
+                content: "Previous assistant turn.",
+                sortOrder: 1
+            )
+        )
+        try await databaseManager.saveMemory(
+            TestHelpers.makeMemoryEntry(
+                id: "memory-four-layer",
+                characterCardId: card.id,
+                content: "Ava remembers the brass lantern.",
+                memoryType: .fact,
+                importance: 90
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "CURRENT_INPUT_UNIQUE_TEXT"
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(viewModel.streamTask == nil)
+        let request = try #require(capture.load())
+        let messages = request.messages
+        let historyIndex = try #require(messages.firstIndex { $0.content.contains("Previous assistant turn") || $0.content.contains("[Previously]") })
+        let exampleIndex = try #require(messages.firstIndex { $0.content.contains("[Example Dialogs]") })
+        let memoryIndex = try #require(messages.firstIndex { $0.content.contains("[Memories]") })
+        let currentTurnIndex = try #require(messages.firstIndex { $0.content.contains("CURRENT_INPUT_UNIQUE_TEXT") })
+
+        #expect(historyIndex < exampleIndex)
+        #expect(exampleIndex < memoryIndex)
+        #expect(memoryIndex < currentTurnIndex)
+        #expect(currentTurnIndex == messages.indices.last)
+        #expect(messages[currentTurnIndex].role == "user")
+        #expect(messages[currentTurnIndex].content.contains("[Time] "))
+        #expect(messages.filter { $0.role == "user" && $0.content.contains("CURRENT_INPUT_UNIQUE_TEXT") }.count == 1)
     }
 
     @Test func test_editMessage_deletesAffectedCompressionCheckpoints() async throws {

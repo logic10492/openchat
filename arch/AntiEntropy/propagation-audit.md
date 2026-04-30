@@ -112,19 +112,19 @@
 
 链路：
 
-`PromptAssembler.preview` 计算固定段与预算 -> `ContextManager.prepareHistory` 按策略处理历史 -> `PromptAssembler.assemble` 输出最终 `[ChatMessage]`。
+`PromptAssembler.preview` 计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens -> `ContextManager.prepareHistory` 处理 Stable Conversation State -> `PromptAssembler.assemble` 输出四层顺序。
 
 关键证据：
 
 - 两阶段调用由 `ChatViewModel+Support` 串联：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:81`、`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:92`、`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:98`
-- `PromptAssembler.preview` 使用 40% 总预算：`OpenChat/Core/PromptEngine/PromptAssembler.swift:14`
+- `PromptAssembler.preview` 使用 40% 总预算并输出 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`：`OpenChat/Core/PromptEngine/PromptAssembler.swift:14`
 - `TokenBudget` 分配 example/worldBook/memory/history：`OpenChat/Core/PromptEngine/TokenBudget.swift:18`
 - `CompressionStrategy` 失败后由 `ContextManager` fallback 到 truncation：`OpenChat/Core/ContextManager/ContextManager.swift:26`
 
-结论：主链路可运行且有测试覆盖；Task 5 已把 Prompt 时间格式与段顺序回写到 arch，并保留 Chat 当前输入去重修复证据。
+结论：主链路可运行且有测试覆盖；2026-04-30 已把 Prompt 四层顺序回写到 arch，并保留 Chat 当前输入去重修复证据。
 
-- arch 多处声明时间上下文为 `[Time] ISO 8601 含时区 [/Time]`，源码 `PromptAssembler.makeTimeContext()` 当前输出 `[Time] <ISO8601> [/Time]`。
-- arch 声明 before_history 世界书条目在记忆前，源码当前顺序为 `before_history -> memory -> exampleDialogs`。
+- 时间上下文为 `[Time] ISO 8601 含时区 [/Time]`，源码 `PromptAssembler.makeTimeContext()` 生成该片段，并由 `makeCurrentTurnContent(...)` 放入最后一条 Current Turn user message。
+- 世界书 position 字段不再拆分最终 prompt 位置；当前轮命中条目统一进入 `[World Book Entries]` block，位于 `[Example Dialogs]` 之后、`[Memories]` 之前。
 
 > 修复写回：`docs/superpowers/plans/2026-04-27-triangle-consistency-repair.md` Task 1 已通过 Feature 级测试和 `promptHistoryMessages` 过滤修复当前输入重复注入风险。
 
@@ -213,7 +213,7 @@
 - `ChatViewModelPromptAssemblyTests`
 - Focused command: `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 26 tests passed，`** TEST SUCCEEDED **`。
 - Focused memory/prompt command including `PromptAssemblerTests`：27 tests / 5 suites passed，`** TEST SUCCEEDED **`。
-- Full suite：该轮审计时为 166 tests / 34 suites passed，`** TEST SUCCEEDED **`；最新 compression mode 审计已更新为 192 tests / 41 suites。
+- Full suite：该轮审计时为 166 tests / 34 suites passed，`** TEST SUCCEEDED **`；最新 Prompt 四层顺序审计已更新为 197 tests / 41 suites。
 
 ## 2026-04-30 Checkpoint Compression Incremental Audit
 
@@ -260,14 +260,14 @@
 
 - `arch-src`：`arch/data-model.md`、`arch/modules/context-manager.md`、`.github/instructions/context-manager.instructions.md` 已写回 checkpoint schema、Codex 风格阈值语义、复用/失效/fallback 行为。
 - `arch-test`：新增 migration/database/context/chat 测试覆盖 v11 表、checkpoint CRUD、source hash、policy、summarizer、compactor、复用和编辑/删除失效。
-- `src-test`：focused suites 与 full suite 均通过，当前基线为 192 tests / 41 suites。
+- `src-test`：focused suites 与 full suite 均通过，当前基线为 197 tests / 41 suites。
 
 ### 验证
 
 - Context focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CompressionPolicyTests -only-testing:OpenChatTests/CompressionSourceHasherTests -only-testing:OpenChatTests/PreparedHistoryTests -only-testing:OpenChatTests/CompressionSummarizerTests -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests`，结果 14 tests / 6 suites passed，`** TEST SUCCEEDED **`。
 - Database focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/CompressionCheckpointDatabaseTests`，结果 24 tests / 2 suites passed，`** TEST SUCCEEDED **`。
 - Chat/prompt focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests -only-testing:OpenChatTests/PromptAssemblerTests`，结果 16 tests / 2 suites passed，`** TEST SUCCEEDED **`。
-- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 192 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 197 tests / 41 suites passed，`** TEST SUCCEEDED **`。
 
 ## 2026-04-30 Compression Mode Threshold Incremental Audit
 
@@ -298,4 +298,46 @@
 
 - `arch-src`：`arch/modules/context-manager.md`、`arch/data-model.md`、`arch/modules/settings/context-strategy.md`、`.github/instructions/context-manager.instructions.md` 已写回 compression mode、v12 schema、阈值公式和 checkpoint 阈值匹配复用规则。
 - `arch-test`：`CompressionPolicyTests`、`MigrationTests`、`CompressionCheckpointReuseTests`、`ChatViewModelPromptAssemblyTests` 覆盖阈值公式、v12 默认值、模式切换不复用旧 checkpoint、设置持久化。
-- `src-test`：focused compression mode suite 39 tests / 4 suites passed；full suite 192 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+- `src-test`：focused compression mode suite 39 tests / 4 suites passed；当前 full suite 197 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+
+## 2026-04-30 Prompt Four-Layer Assembly Incremental Audit
+
+范围：`OpenChat/Core/PromptEngine/PromptAssemblyModels.swift`、`PromptAssembler.swift`、`PromptSegment.swift`、`OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、Prompt/AntiEntropy/roadmap 相关文档。
+
+审计模式：窄范围增量审计。OpenChat 当前没有 Magnum Agent 的静态 import 图脚本，本轮沿用 AntiEntropy 方法：`git diff --name-only` / `rg '^import '` / Swift 文件计数确认传播面，源码链路确认行为传播，focused/full tests 确认 `src-test`。
+
+### 静态传播面
+
+- App Swift files：106。
+- Test Swift files：31。
+- Production Swift 改动限定在 `Core/PromptEngine` 3 个文件。
+- Test Swift 改动限定在 `PromptAssemblerTests` 与 `ChatViewModelPromptAssemblyTests`。
+- 未新增 Swift import 依赖；变更后的 PromptEngine production 文件仍只显式 `import Foundation`。
+- 未修改 `ChatViewModel+Support.swift` 生产调用链、数据库 migration、签名配置或 Xcode project。
+- Feature 层新增覆盖只在测试文件中，不扩大生产 Feature 依赖面。
+
+### 行为传播链路
+
+主链路仍为：
+
+`ChatViewModel+Support.generateResponse -> PromptAssembler.preview -> ContextManager.prepareHistory -> PromptAssembler.assemble -> APIClient.streamMessage`
+
+结论：
+
+- `PromptAssemblyPreview` 从单一 `messagesBeforeHistory` 改为 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`。
+- `PromptAssembler.preview(...)` 生成 Stable Identity、Current-Turn Context、Current Turn，并用这些不可裁剪段计算 `fixedTokens`。
+- `ContextManager.prepareHistory(...)` 继续只接收过滤后的 history 和 `fixedTokens`，负责 Stable Conversation State 的剔除/压缩结果。
+- `PromptAssembler.assemble(...)` 输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+- 世界书 position 字段保留为旧数据兼容字段；当前轮命中条目统一进入 `[World Book Entries]` block。
+- 示例对话统一进入 `[Example Dialogs]` block；记忆统一进入 `[Memories]` block；时间上下文进入最后一条 Current Turn user message。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/prompt-assembly.md`、`.github/instructions/prompt-engine.instructions.md`、`arch/index.md`、`arch/modules/chat.md`、`arch/modules/world-book.md`、`arch/modules/memory/index.md`、`arch/data-model.md` 已同步四层顺序、labeled blocks、world book position 兼容和 time-in-current-turn。
+- `arch-test`：`PromptAssemblerTests` 覆盖四层顺序、preview 四层结构、world book position 兼容、labeled blocks、time-in-current-turn；`ChatViewModelPromptAssemblyTests` 覆盖真实 API request 的 history -> example -> memory -> current turn 顺序和当前输入去重。
+- `src-test`：focused prompt suite 13 tests passed；focused chat prompt suite 9 tests passed；combined prompt/chat suite 22 tests passed；full suite 197 tests / 41 suites passed。
+
+### Durable Evidence
+
+- `harness/2026.04.30/prompt-four-layer-assembly/index.md`
+- `harness/2026.04.30/prompt-four-layer-assembly/evidence.txt`

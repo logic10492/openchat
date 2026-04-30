@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前自动化测试结果：192 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重、Memory embedding/vector/retrieval 可靠性。
+- 当前自动化测试结果：197 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval 可靠性。
 
 ## 功能需求
 
@@ -45,17 +45,13 @@
 - **策略可选**：每个会话可独立选择剔除或压缩策略；压缩策略下可选择标准模式（40%）或高智能模式（25% effective window × 90%）
 
 ### 3. Prompt 拼装
-按以下顺序拼装发送给模型的 messages：
-1. 角色卡 System Prompt
-2. 世界书条目（position=after_system）
-3. 角色描述（personality / appearance / physique / speechStyle / backstory）
-4. 场景设定（scenario）
-5. 时间上下文（ISO 8601 当前时间，始终注入）
-6. 世界书条目（position=before_history）
-7. 跨对话记忆（经语义检索匹配的记忆条目）
-8. 示例对话（example dialogs）
-9. 最近会话历史（经上下文管理处理）
-10. 当前用户输入
+按四层顺序拼装发送给模型的 messages：
+1. Stable Identity：角色卡 System Prompt、角色描述、场景设定、slowPlot directive
+2. Stable Conversation State：压缩 checkpoint 摘要和 checkpoint 后历史，或剔除策略保留的最近历史
+3. Current-Turn Context：`[Example Dialogs]`、`[World Book Entries]`、`[Memories]` 三类 labeled system block
+4. Current Turn：最后一条 user message，内容为当前用户输入 + `[Time] <ISO8601> [/Time]`
+
+`WorldBookEntryPosition.after_system` / `.before_history` 保留为旧数据兼容字段，不再决定最终 prompt 位置。
 
 ### 4. 跨对话记忆
 - **记忆提取**：当前源码在 Chat 生成链路中每累计 10 条 user/assistant 消息后后台触发，调用 API 提取关键事件、事实、关系变化和摘要
@@ -64,7 +60,7 @@
 - **角色绑定**：记忆以角色卡为单位存储，同一角色的不同对话共享记忆
 
 ### 5. 时间感知
-- 每次 prompt 拼装时自动注入当前时间（ISO 8601 含时区）
+- 每次 prompt 拼装时自动把当前时间（ISO 8601 含时区）注入最后一条 Current Turn user message
 - 格式：`[Time] 2026-04-15T14:30:00+08:00 [/Time]`
 - 始终启用，不可关闭
 - 帮助 LLM 感知时间流逝，提升角色扮演沉浸感

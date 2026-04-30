@@ -82,12 +82,12 @@ struct KeywordMatcher {
 
 ### 4.3 注入位置
 
-条目的 `position` 字段控制注入位置：
+条目的 `position` 字段保留为既有数据兼容字段，不再控制最终 prompt 注入位置。当前实现会把所有当前轮命中的世界书条目按 priority 降序合并进 Current-Turn Context 的 `[World Book Entries]` system block。
 
 | position 值 | 注入位置 | 典型用途 |
 |---|---|---|
-| `after_system` | system prompt 之后、角色描述之前 | 世界观基础设定 |
-| `before_history` | 时间上下文之后、跨对话记忆和示例对话之前 | 当前场景相关的动态知识 |
+| `after_system` | 兼容旧数据；最终仍进入 `[World Book Entries]` block | 世界观基础设定 |
+| `before_history` | 兼容旧数据；最终仍进入 `[World Book Entries]` block | 当前场景相关的动态知识 |
 
 ### 4.4 token 预算
 

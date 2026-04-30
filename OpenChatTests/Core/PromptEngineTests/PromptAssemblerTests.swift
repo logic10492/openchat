@@ -5,41 +5,114 @@ import Testing
 
 @Suite("Prompt assembler")
 struct PromptAssemblerTests {
-    @Test func test_preview_orders_segments_correctly() throws {
-        let conversation = TestHelpers.makeConversation()
+    @Test func test_assemble_orders_four_layers() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: true)
         let card = TestHelpers.makeCharacterCard()
         let book = TestHelpers.makeWorldBook(isEnabled: true)
-        let afterEntry = TestHelpers.makeWorldBookEntry(worldBookId: book.id, title: "After", keywords: ["dragon"], priority: 90, position: .afterSystem, content: "After system note.")
-        let beforeEntry = TestHelpers.makeWorldBookEntry(worldBookId: book.id, title: "Before", keywords: ["dragon"], priority: 80, position: .beforeHistory, content: "Before history note.")
-        let memory = TestHelpers.makeMemoryEntry(characterCardId: card.id, content: "Hero remembers the dragon map.", memoryType: .event)
+        let highPriorityEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: book.id,
+            title: "High",
+            keywords: ["dragon"],
+            priority: 90,
+            position: .beforeHistory,
+            content: "High priority dragon note."
+        )
+        let lowPriorityEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: book.id,
+            title: "Low",
+            keywords: ["dragon"],
+            priority: 10,
+            position: .afterSystem,
+            content: "Low priority dragon note."
+        )
+        let memory = TestHelpers.makeMemoryEntry(
+            characterCardId: card.id,
+            content: "Hero remembers the dragon map.",
+            memoryType: .event
+        )
+        let processedHistory = [
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "system",
+                content: "[Previously]\nThe party entered the old city.",
+                sortOrder: 1
+            ),
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "assistant",
+                content: "Previous assistant reply.",
+                sortOrder: 2
+            ),
+        ]
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: book,
+            worldBookEntries: [lowPriorityEntry, highPriorityEntry],
+            memories: [memory],
+            recentMessages: [
+                TestHelpers.makeMessage(
+                    conversationId: conversation.id,
+                    role: "assistant",
+                    content: "A dragon is nearby.",
+                    sortOrder: 2
+                )
+            ],
+            processedHistory: processedHistory,
+            currentInput: "What do I see near the dragon?",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
+        )
+
+        let messages = result.messages
+        let baseSystemIndex = try #require(messages.firstIndex { $0.content.contains("You are") })
+        let characterIndex = try #require(messages.firstIndex { $0.content.contains("Character:") })
+        let scenarioIndex = try #require(messages.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") })
+        let slowPlotIndex = try #require(messages.firstIndex { $0.content.contains("场景维持者") })
+        let compressedIndex = try #require(messages.firstIndex { $0.content.contains("[Previously]") })
+        let historyIndex = try #require(messages.firstIndex { $0.content == "Previous assistant reply." })
+        let exampleIndex = try #require(messages.firstIndex { $0.content.contains("[Example Dialogs]") })
+        let worldBookIndex = try #require(messages.firstIndex { $0.content.contains("[World Book Entries]") })
+        let memoryIndex = try #require(messages.firstIndex { $0.content.contains("[Memories]") })
+        let currentTurnIndex = try #require(messages.firstIndex { $0.content.contains("What do I see near the dragon?") })
+
+        #expect(baseSystemIndex < characterIndex)
+        #expect(characterIndex < scenarioIndex)
+        #expect(scenarioIndex < slowPlotIndex)
+        #expect(slowPlotIndex < compressedIndex)
+        #expect(compressedIndex < historyIndex)
+        #expect(historyIndex < exampleIndex)
+        #expect(exampleIndex < worldBookIndex)
+        #expect(worldBookIndex < memoryIndex)
+        #expect(memoryIndex < currentTurnIndex)
+        #expect(currentTurnIndex == messages.indices.last)
+        #expect(messages[currentTurnIndex].role == "user")
+        #expect(messages[currentTurnIndex].content.contains("[Time] "))
+    }
+
+    @Test func test_preview_exposes_four_layer_parts() throws {
+        let conversation = TestHelpers.makeConversation()
+        let card = TestHelpers.makeCharacterCard()
 
         let preview = PromptAssembler.preview(
             conversation: conversation,
             characterCard: card,
-            worldBook: book,
-            worldBookEntries: [afterEntry, beforeEntry],
-            memories: [memory],
-            recentMessages: [TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "Old reply", sortOrder: 1)],
-            currentInput: "dragon",
-            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 1000)
         )
 
-        #expect(preview.messagesBeforeHistory.count >= 5)
-        #expect(preview.messagesBeforeHistory[0].content.contains("You are"))
-        #expect(preview.messagesBeforeHistory[1].content.contains("After system note."))
-        #expect(preview.messagesBeforeHistory[2].content.contains("Character:"))
-        #expect(preview.messagesBeforeHistory[3].content.localizedCaseInsensitiveContains("tavern"))
-        #expect(preview.messagesBeforeHistory[4].content.contains("场景维持者"))
-        #expect(preview.messagesBeforeHistory.contains(where: { $0.content.contains("Before history note.") }))
-        let beforeIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content.contains("Before history note.") })
-        let memoryIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content.contains("Hero remembers the dragon map.") })
-        let exampleIndex = try #require(preview.messagesBeforeHistory.firstIndex { $0.content == "Hello" })
-        #expect(beforeIndex < memoryIndex)
-        #expect(memoryIndex < exampleIndex)
-        #expect(preview.triggeredEntries.count == 2)
+        #expect(preview.stableIdentityMessages.first?.role == "system")
+        #expect(preview.stableIdentityMessages.first?.content.contains("You are") == true)
+        #expect(preview.currentTurnContextMessages.contains { $0.content.contains("[Example Dialogs]") })
+        #expect(preview.currentTurnMessage.role == "user")
+        #expect(preview.currentTurnMessage.content.contains("hello"))
+        #expect(preview.currentTurnMessage.content.contains("[Time] "))
     }
 
-    @Test func test_preview_includes_time_context() throws {
+    @Test func test_preview_current_turn_includes_time_context() throws {
         let conversation = TestHelpers.makeConversation()
         let preview = PromptAssembler.preview(
             conversation: conversation,
@@ -51,12 +124,20 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 1000)
         )
 
-        let timeContext = try #require(preview.messagesBeforeHistory.first { $0.content.hasPrefix("[Time] ") })
-        #expect(timeContext.content.hasSuffix(" [/Time]"))
+        let currentTurn = preview.currentTurnMessage
+        #expect(currentTurn.role == "user")
+        #expect(currentTurn.content.hasPrefix("hello"))
+        #expect(currentTurn.content.contains("[Time] "))
+        #expect(currentTurn.content.hasSuffix(" [/Time]"))
 
-        let timestamp = timeContext.content
-            .replacing("[Time] ", with: "")
-            .replacing(" [/Time]", with: "")
+        let timestamp = try #require(
+            currentTurn.content
+                .components(separatedBy: "[Time] ")
+                .last?
+                .replacing("[Time] ", with: "")
+                .replacing(" [/Time]", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         #expect(ISO8601DateFormatter().date(from: timestamp) != nil)
         #expect(preview.tokenUsage.timeContext > 0)
     }
@@ -78,8 +159,10 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
         )
 
-        let memoryMessages = preview.messagesBeforeHistory.filter { $0.content.contains("[Memory") }
-        #expect(memoryMessages.count == 2)
+        let memoryBlock = try #require(preview.currentTurnContextMessages.first { $0.content.contains("[Memories]") })
+        #expect(memoryBlock.role == "system")
+        #expect(memoryBlock.content.contains("Hero saved village."))
+        #expect(memoryBlock.content.contains("Sky is green in this world."))
         #expect(preview.tokenUsage.memories > 0)
     }
 
@@ -101,10 +184,95 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
         )
 
-        #expect(result.messages.contains(where: { $0.content.contains("[Memory") }))
-        #expect(result.messages.contains(where: { $0.content.hasPrefix("[Time] ") && $0.content.hasSuffix(" [/Time]") }))
+        #expect(result.messages.contains(where: { $0.content.contains("[Memories]") }))
+        let currentTurn = try #require(result.messages.last)
+        #expect(currentTurn.content.contains("[Time] "))
+        #expect(currentTurn.content.hasSuffix(" [/Time]"))
         #expect(result.tokenUsage.timeContext > 0)
         #expect(result.tokenUsage.memories > 0)
+    }
+
+    @Test func test_world_book_positions_do_not_split_final_context_block() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard()
+        let book = TestHelpers.makeWorldBook(isEnabled: true)
+        let afterEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: book.id,
+            title: "After",
+            keywords: ["dragon"],
+            priority: 10,
+            position: .afterSystem,
+            content: "After system note."
+        )
+        let beforeEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: book.id,
+            title: "Before",
+            keywords: ["dragon"],
+            priority: 90,
+            position: .beforeHistory,
+            content: "Before history note."
+        )
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: book,
+            worldBookEntries: [afterEntry, beforeEntry],
+            recentMessages: [],
+            processedHistory: [],
+            currentInput: "dragon",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
+        )
+
+        let worldBookMessage = try #require(result.messages.first { $0.content.contains("[World Book Entries]") })
+        #expect(worldBookMessage.role == "system")
+        #expect(worldBookMessage.content.contains("Before history note."))
+        #expect(worldBookMessage.content.contains("After system note."))
+        #expect(worldBookMessage.content.range(of: "Before history note.")!.lowerBound < worldBookMessage.content.range(of: "After system note.")!.lowerBound)
+    }
+
+    @Test func test_example_dialogs_are_labeled_system_block() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard()
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            processedHistory: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
+        )
+
+        let exampleBlock = try #require(result.messages.first { $0.content.contains("[Example Dialogs]") })
+        #expect(exampleBlock.role == "system")
+        #expect(exampleBlock.content.contains("User: Hello"))
+        #expect(exampleBlock.content.contains("Assistant: Hello there."))
+        #expect(!result.messages.contains { $0.role == "user" && $0.content == "Hello" })
+        #expect(!result.messages.contains { $0.role == "assistant" && $0.content == "Hello there." })
+    }
+
+    @Test func test_time_context_is_inside_current_turn_message() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: nil,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            processedHistory: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 1000)
+        )
+
+        let last = try #require(result.messages.last)
+        #expect(last.role == "user")
+        #expect(last.content.hasPrefix("hello"))
+        #expect(last.content.contains("[Time] "))
+        #expect(result.messages.filter { $0.content.hasPrefix("[Time] ") }.isEmpty)
     }
 
     @Test func test_token_budget_allocates_memory_budget() throws {
@@ -145,17 +313,14 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
         )
 
-        let slowPlotIndex = preview.messagesBeforeHistory.firstIndex { $0.content.contains("场景维持者") }
-        let scenarioIndex = preview.messagesBeforeHistory.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") }
-        let timeIndex = preview.messagesBeforeHistory.firstIndex { $0.content.hasPrefix("[Time] ") }
+        let slowPlotIndex = preview.stableIdentityMessages.firstIndex { $0.content.contains("场景维持者") }
+        let scenarioIndex = preview.stableIdentityMessages.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") }
 
         #expect(slowPlotIndex != nil)
         if let si = scenarioIndex, let spi = slowPlotIndex {
             #expect(spi == si + 1)
         }
-        if let spi = slowPlotIndex, let ti = timeIndex {
-            #expect(ti == spi + 1)
-        }
+        #expect(preview.currentTurnMessage.content.contains("[Time] "))
         #expect(preview.tokenUsage.slowPlotDirective > 0)
     }
 
@@ -172,7 +337,7 @@ struct PromptAssemblerTests {
             endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
         )
 
-        let hasSlowPlot = preview.messagesBeforeHistory.contains { $0.content.contains("场景维持者") }
+        let hasSlowPlot = preview.stableIdentityMessages.contains { $0.content.contains("场景维持者") }
         #expect(!hasSlowPlot)
         #expect(preview.tokenUsage.slowPlotDirective == 0)
     }

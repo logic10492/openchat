@@ -167,7 +167,7 @@ struct WorldBookRecord: Codable, FetchableRecord, PersistableRecord {
 | keywords | TEXT | NOT NULL | 触发关键词（JSON 数组，如 `["精灵","elf","耳朵"]`） |
 | priority | INTEGER | NOT NULL, DEFAULT 50 | 注入优先级（0-100，越大越优先） |
 | isEnabled | INTEGER | NOT NULL, DEFAULT 1 | 是否启用 |
-| position | TEXT | NOT NULL, DEFAULT 'before_history' | 注入位置：`before_history` / `after_system` |
+| position | TEXT | NOT NULL, DEFAULT 'before_history' | 旧注入位置兼容字段：`before_history` / `after_system`；当前 PromptAssembler 最终统一注入 `[World Book Entries]` block |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 |
 
@@ -184,7 +184,7 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
     var keywords: String             // JSON: ["精灵","elf"]
     var priority: Int
     var isEnabled: Bool
-    var position: String             // "before_history" | "after_system"
+    var position: String             // compatibility: "before_history" | "after_system"
     var createdAt: Date
     var updatedAt: Date
 

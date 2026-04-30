@@ -17,17 +17,10 @@ struct PromptAssembler {
         let characterDescription = buildCharacterDescription(characterCard)
         let scenario = makeScenario(conversation: conversation, characterCard: characterCard)
         let timeContext = makeTimeContext()
-        let afterSystemEntries = makeTriggeredEntries(
+        let triggeredWorldBookEntries = makeTriggeredEntries(
             worldBook: worldBook,
             entries: worldBookEntries,
-            contextText: contextText,
-            position: .afterSystem
-        )
-        let beforeHistoryEntries = makeTriggeredEntries(
-            worldBook: worldBook,
-            entries: worldBookEntries,
-            contextText: contextText,
-            position: .beforeHistory
+            contextText: contextText
         )
         let exampleDialogs = makeExampleDialogs(characterCard: characterCard)
 
@@ -37,17 +30,22 @@ struct PromptAssembler {
         let slowPlotMessage: ChatMessage? = conversation.slowPlotMode
             ? ChatMessage(role: "system", content: AppConstants.slowPlotModePrompt)
             : nil
-        let timeContextMessage = ChatMessage(role: "system", content: timeContext)
+        let stableIdentityMessages = [
+            systemMessage,
+            characterMessage,
+            scenarioMessage,
+            slowPlotMessage,
+        ].compactMap { $0 }
         let currentInputMessage = ChatMessage(role: "user", content: currentInput)
+        let currentTurnMessage = ChatMessage(
+            role: "user",
+            content: makeCurrentTurnContent(currentInput: currentInput, timeContext: timeContext)
+        )
 
         let fixedTokens =
-            TokenCounter.count(message: systemMessage) +
-            (characterMessage.map { TokenCounter.count(message: $0) } ?? 0) +
-            (scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0) +
-            (slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0) +
-            TokenCounter.count(message: timeContextMessage) +
-            (currentInput.isEmpty ? 0 : TokenCounter.count(message: currentInputMessage))
-        let worldBookTokens = (afterSystemEntries + beforeHistoryEntries).reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
+            stableIdentityMessages.reduce(0) { $0 + TokenCounter.count(message: $1) } +
+            TokenCounter.count(message: currentTurnMessage)
+        let worldBookTokens = triggeredWorldBookEntries.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
         let memoryTokens = memories.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent($1))) }
         let exampleTokens = exampleDialogs.reduce(0) { $0 + TokenCounter.count(message: $1) }
         let tokenBudget = TokenBudget.calculate(
@@ -58,32 +56,23 @@ struct PromptAssembler {
             memoryTokens: memoryTokens
         )
 
-        let trimmedWorldBookEntries = trim(entries: afterSystemEntries + beforeHistoryEntries, within: tokenBudget.worldBookBudget)
-        let trimmedAfterSystemEntries = trimmedWorldBookEntries.filter { $0.positionValue == .afterSystem }
-        let trimmedBeforeHistoryEntries = trimmedWorldBookEntries.filter { $0.positionValue == .beforeHistory }
-        let trimmedMemories = trim(memories: memories, within: tokenBudget.memoryBudget)
         let trimmedExampleDialogs = trim(messages: exampleDialogs, within: tokenBudget.exampleDialogsBudget)
+        let trimmedWorldBookEntries = trim(entries: triggeredWorldBookEntries, within: tokenBudget.worldBookBudget)
+        let trimmedMemories = trim(memories: memories, within: tokenBudget.memoryBudget)
 
-        var messagesBeforeHistory: [ChatMessage] = [systemMessage]
-        messagesBeforeHistory.append(contentsOf: trimmedAfterSystemEntries.map { ChatMessage(role: "system", content: makeWorldBookMessageContent($0)) })
-        if let characterMessage {
-            messagesBeforeHistory.append(characterMessage)
-        }
-        if let scenarioMessage {
-            messagesBeforeHistory.append(scenarioMessage)
-        }
-        if let slowPlotMessage {
-            messagesBeforeHistory.append(slowPlotMessage)
-        }
-        messagesBeforeHistory.append(timeContextMessage)
-        messagesBeforeHistory.append(contentsOf: trimmedBeforeHistoryEntries.map { ChatMessage(role: "system", content: makeWorldBookMessageContent($0)) })
-        if !trimmedMemories.isEmpty {
-            messagesBeforeHistory.append(contentsOf: trimmedMemories.map { ChatMessage(role: "system", content: makeMemoryMessageContent($0)) })
-        }
-        messagesBeforeHistory.append(contentsOf: trimmedExampleDialogs)
+        let exampleDialogsBlock = makeExampleDialogsBlock(trimmedExampleDialogs)
+        let worldBookBlock = makeWorldBookBlock(trimmedWorldBookEntries)
+        let memoryBlock = makeMemoryBlock(trimmedMemories)
+        let currentTurnContextMessages = [
+            exampleDialogsBlock,
+            worldBookBlock,
+            memoryBlock,
+        ].compactMap { $0 }
 
-        let actualFixedTokens = messagesBeforeHistory.reduce(0) { $0 + TokenCounter.count(message: $1) }
-            + TokenCounter.count(message: currentInputMessage)
+        let actualFixedTokens =
+            stableIdentityMessages.reduce(0) { $0 + TokenCounter.count(message: $1) } +
+            currentTurnContextMessages.reduce(0) { $0 + TokenCounter.count(message: $1) } +
+            TokenCounter.count(message: currentTurnMessage)
         let historyBudget = max(totalBudget - actualFixedTokens, 0)
 
         let tokenUsage = TokenUsageReport(
@@ -92,10 +81,10 @@ struct PromptAssembler {
             characterDescription: characterMessage.map { TokenCounter.count(message: $0) } ?? 0,
             scenario: scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0,
             slowPlotDirective: slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0,
-            timeContext: TokenCounter.count(message: timeContextMessage),
-            worldBookEntries: trimmedWorldBookEntries.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) },
-            memories: trimmedMemories.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent($1))) },
-            exampleDialogs: trimmedExampleDialogs.reduce(0) { $0 + TokenCounter.count(message: $1) },
+            timeContext: TokenCounter.count(timeContext),
+            worldBookEntries: worldBookBlock.map { TokenCounter.count(message: $0) } ?? 0,
+            memories: memoryBlock.map { TokenCounter.count(message: $0) } ?? 0,
+            exampleDialogs: exampleDialogsBlock.map { TokenCounter.count(message: $0) } ?? 0,
             history: 0,
             currentInput: TokenCounter.count(message: currentInputMessage),
             totalUsed: actualFixedTokens,
@@ -103,7 +92,9 @@ struct PromptAssembler {
         )
 
         return PromptAssemblyPreview(
-            messagesBeforeHistory: messagesBeforeHistory,
+            stableIdentityMessages: stableIdentityMessages,
+            currentTurnContextMessages: currentTurnContextMessages,
+            currentTurnMessage: currentTurnMessage,
             fixedTokens: actualFixedTokens,
             historyBudget: historyBudget,
             tokenUsage: tokenUsage,
@@ -133,9 +124,10 @@ struct PromptAssembler {
             endpoint: endpoint
         )
 
-        var messages = context.messagesBeforeHistory
+        var messages = context.stableIdentityMessages
         messages.append(contentsOf: processedHistory.map(\.chatMessage))
-        messages.append(ChatMessage(role: "user", content: currentInput))
+        messages.append(contentsOf: context.currentTurnContextMessages)
+        messages.append(context.currentTurnMessage)
 
         let historyTokens = processedHistory.reduce(0) { $0 + TokenCounter.count(message: $1) }
         let totalUsed = context.tokenUsage.totalUsed + historyTokens
@@ -190,6 +182,34 @@ struct PromptAssembler {
         "[Memory — \(entry.memoryType)]\n\(entry.content)"
     }
 
+    private static func makeExampleDialogsBlock(_ messages: [ChatMessage]) -> ChatMessage? {
+        guard !messages.isEmpty else { return nil }
+        let bodyLines: [String] = messages.map { message in
+            let label = message.role == "assistant" ? "Assistant" : "User"
+            return "\(label): \(message.content)"
+        }
+        let body = bodyLines.joined(separator: "\n")
+        return ChatMessage(role: "system", content: "[Example Dialogs]\n\(body)\n[/Example Dialogs]")
+    }
+
+    private static func makeWorldBookBlock(_ entries: [WorldBookEntryRecord]) -> ChatMessage? {
+        guard !entries.isEmpty else { return nil }
+        let body = entries.map { makeWorldBookMessageContent($0) }.joined(separator: "\n\n")
+        return ChatMessage(role: "system", content: "[World Book Entries]\n\(body)\n[/World Book Entries]")
+    }
+
+    private static func makeMemoryBlock(_ memories: [MemoryEntryRecord]) -> ChatMessage? {
+        guard !memories.isEmpty else { return nil }
+        let body = memories.map { makeMemoryMessageContent($0) }.joined(separator: "\n\n")
+        return ChatMessage(role: "system", content: "[Memories]\n\(body)\n[/Memories]")
+    }
+
+    private static func makeCurrentTurnContent(currentInput: String, timeContext: String) -> String {
+        let trimmedInput = currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return timeContext }
+        return "\(trimmedInput)\n\n\(timeContext)"
+    }
+
     private static func makeTimeContext() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -218,11 +238,10 @@ struct PromptAssembler {
     private static func makeTriggeredEntries(
         worldBook: WorldBookRecord?,
         entries: [WorldBookEntryRecord],
-        contextText: String,
-        position: WorldBookEntryPosition
+        contextText: String
     ) -> [WorldBookEntryRecord] {
         guard worldBook?.isEnabled ?? false else { return [] }
-        return KeywordMatcher.triggeredEntries(entries, contextText: contextText, position: position)
+        return KeywordMatcher.triggeredEntries(entries, contextText: contextText)
     }
 
     private static func makeExampleDialogs(characterCard: CharacterCardRecord?) -> [ChatMessage] {
@@ -236,7 +255,7 @@ struct PromptAssembler {
     }
 
     private static func trim(entries: [WorldBookEntryRecord], within budget: Int) -> [WorldBookEntryRecord] {
-        guard budget > 0 else { return [] }
+        guard !entries.isEmpty else { return [] }
         var result: [WorldBookEntryRecord] = []
         var used = 0
         for entry in entries {
@@ -249,7 +268,7 @@ struct PromptAssembler {
     }
 
     private static func trim(messages: [ChatMessage], within budget: Int) -> [ChatMessage] {
-        guard budget > 0 else { return [] }
+        guard !messages.isEmpty else { return [] }
         var result: [ChatMessage] = []
         var used = 0
         for message in messages {
@@ -262,7 +281,7 @@ struct PromptAssembler {
     }
 
     private static func trim(memories: [MemoryEntryRecord], within budget: Int) -> [MemoryEntryRecord] {
-        guard budget > 0 else { return [] }
+        guard !memories.isEmpty else { return [] }
         var result: [MemoryEntryRecord] = []
         var used = 0
         for entry in memories.sorted(by: { $0.importance > $1.importance }) {

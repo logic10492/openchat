@@ -293,4 +293,4 @@ Produce a durable handoff summary that will replace older transcript items.
   - `harness/2026.04.30/checkpoint-compression/evidence.txt`
   - `arch/AntiEntropy/propagation-audit.md#2026-04-30-compression-mode-threshold-incremental-audit`
   - Focused compression mode suite：39 tests / 4 suites passed。
-  - Full suite：192 tests / 41 suites passed。
+  - Full suite：197 tests / 41 suites passed。

@@ -1,0 +1,71 @@
+Commands and results
+====================
+
+Red test
+--------
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/PromptAssemblerTests/test_assemble_orders_four_layers -only-testing:OpenChatTests/PromptAssemblerTests/test_preview_exposes_four_layer_parts
+
+Result: failed before implementation as expected.
+Key failure:
+- Value of type 'PromptAssemblyPreview' has no member 'stableIdentityMessages'
+- Value of type 'PromptAssemblyPreview' has no member 'currentTurnContextMessages'
+- Value of type 'PromptAssemblyPreview' has no member 'currentTurnMessage'
+
+Focused prompt suite
+--------------------
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/PromptAssemblerTests
+
+Result: 13 tests in 1 suite passed, ** TEST SUCCEEDED **.
+
+Focused chat prompt suite
+-------------------------
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests
+
+Result: 9 tests in 1 suite passed, ** TEST SUCCEEDED **.
+
+Combined prompt/chat suite
+--------------------------
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/PromptAssemblerTests -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests
+
+Result: 22 tests in 2 suites passed, ** TEST SUCCEEDED **.
+
+Full suite
+----------
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result: 197 tests in 41 suites passed, ** TEST SUCCEEDED **.
+
+Static audit commands
+---------------------
+git diff --name-only -- OpenChat OpenChatTests arch .github/instructions
+
+Changed source/test/doc files:
+- .github/instructions/prompt-engine.instructions.md
+- OpenChat/Core/PromptEngine/PromptAssembler.swift
+- OpenChat/Core/PromptEngine/PromptAssemblyModels.swift
+- OpenChat/Core/PromptEngine/PromptSegment.swift
+- OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift
+- OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift
+- arch/AntiEntropy/index.md
+- arch/AntiEntropy/propagation-audit.md
+- arch/AntiEntropy/triangle-consistency.md
+- arch/data-model.md
+- arch/index.md
+- arch/modules/chat.md
+- arch/modules/context-manager.md
+- arch/modules/memory/index.md
+- arch/modules/prompt-assembly.md
+- arch/modules/world-book.md
+- arch/roadmap.md
+
+find OpenChat -name '*.swift' -type f | wc -l
+Result: 106
+
+find OpenChatTests -name '*.swift' -type f | wc -l
+Result: 31
+
+rg -n '^import ' OpenChat/Core/PromptEngine OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift
+Result: changed production PromptEngine files still only explicitly import Foundation; test files import Foundation and Testing.
+
+git diff --check -- OpenChat/Core/PromptEngine OpenChatTests/Core/PromptEngineTests OpenChatTests/Features/ChatTests arch/modules/prompt-assembly.md .github/instructions/prompt-engine.instructions.md arch/AntiEntropy/triangle-consistency.md arch/AntiEntropy/propagation-audit.md arch/roadmap.md arch/index.md arch/modules/memory/index.md arch/modules/world-book.md arch/data-model.md arch/modules/chat.md
+Result: no output.

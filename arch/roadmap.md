@@ -10,7 +10,7 @@
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前通过的 Swift Testing 测试（192 个）覆盖：
+- 当前通过的 Swift Testing 测试（197 个）覆盖：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -153,7 +153,7 @@
 
 - [ ] 可创建/编辑/删除角色卡
 - [ ] 角色卡各字段正确注入到 API 请求的 messages 中
-- [ ] 示例对话正确以 user/assistant 交替形式注入
+- [ ] 示例对话正确以 `[Example Dialogs]` labeled system block 注入
 - [ ] 导入/导出功能正常
 - [ ] 切换角色卡后对话风格明显改变
 
@@ -171,7 +171,7 @@
 4. 实现 `WorldBookImportView` + `WorldBookImportFormat` 导入解析器
 5. 实现 `KeywordMatcher`：关键词匹配算法
 6. 扩展 `PromptAssembler`：
-   - 世界书条目动态注入（按 position 分 after_system / before_history）
+   - 世界书条目动态注入（`after_system` / `before_history` 作为旧数据兼容字段，最终统一进入 `[World Book Entries]` block）
    - 按 priority 排序注入
 7. 会话创建/设置中选择世界书
 8. `ChatSettingsSheet` 基础版本
@@ -187,7 +187,7 @@
 - [ ] 可创建世界书并添加条目
 - [ ] 关键词匹配正确触发条目注入（CJK + 英文）
 - [ ] 按 priority 排序注入
-- [ ] position 控制注入位置正确
+- [ ] 旧 position 字段不拆分最终位置，命中条目统一进入 `[World Book Entries]` block
 - [ ] 粘贴导入正确解析 Markdown 格式
 - [ ] 启用/禁用开关即时生效
 
@@ -324,7 +324,7 @@ Phase 1 (基础骨架)
 7. 实现 `EmbeddingService`：CoreML 推理 + XLMRobertaTokenizer 分词，输出 384 维归一化向量
 8. 实现 `VectorStore`：sqlite-vec 向量 CRUD 封装（插入 / KNN 检索 / 删除）
 9. 实现 `MemoryManager`：记忆提取（调用 API 提取结构化事件）+ 语义检索编排
-10. 更新 `PromptSegment` + `PromptAssembler`：新增 `.timeContext` 和 `.memoryEntry` 段，记忆 token 预算上限为剩余预算的 15%
+10. 更新 `PromptSegment` + `PromptAssembler`：记忆作为 `[Memories]` block 注入 Current-Turn Context，时间上下文并入 `.currentTurn`，记忆 token 预算上限为剩余预算的 15%
 11. 更新 `ChatViewModel`：发送消息时检索记忆、离开对话时触发记忆提取
 12. 实现 `MemoryListView` + `MemoryListViewModel`：按角色查看/删除记忆
 13. 更新 `DependencyContainer`：注入 `MemoryManager`、`EmbeddingService`、`VectorStore`

@@ -245,12 +245,12 @@ retrieveMemories(for characterCardId, query: currentInput, limit: 5):
 
 ### 7.3 注入方式
 
-检索到的记忆作为 `PromptSegment.memoryEntry(MemoryEntryRecord)` 注入 prompt：
-- **位置**：世界书条目（before_history）之后、示例对话之前
+检索到的记忆作为 Current-Turn Context 的 `[Memories]` labeled system block 注入 prompt：
+- **位置**：Stable Conversation State 之后，`[Example Dialogs]` 与 `[World Book Entries]` 之后，最后一条 Current Turn user message 之前
 - **role**: `"system"`
-- **priority**: 85（高于 exampleDialog:75，低于世界书条目最大值）
+- **priority**: 85（高于 exampleDialogsBlock:75，低于世界书条目最大值）
 - **token 预算**: 上限为剩余预算 × 15%
-- **格式**: 每条记忆作为独立的 system 消息注入
+- **格式**: 多条记忆合并进一条 `[Memories] ... [/Memories]` system message
 
 ## 8. MemoryManager 接口
 
@@ -407,20 +407,20 @@ final class MemoryListViewModel {
 - `ChatViewModel` → 持有 `memoryManager`，发送消息时 `retrieveMemories()`；语义检索失败时由 MemoryManager fallback 到近期记忆；每 10 条 user/assistant 消息后周期性 `triggerMemoryExtraction()`；`ChatView.onDisappear` 也会触发提取
 - `PromptAssembler` → `memories: [MemoryEntryRecord]` 参数，`makeMemoryMessageContent()` 格式化
 - `TokenBudget` → `memoryBudget`（remaining × 15%）
-- `PromptSegment` → `.timeContext(String)` + `.memoryEntry(MemoryEntryRecord)`
+- `PromptSegment` → `.memoryEntry(MemoryEntryRecord)` + `.exampleDialogsBlock(String)` + `.currentTurn(String)`
 - `CharacterCardDetailView` → Memory section 显示计数 + NavigationLink 到 MemoryListView
 
 ### 测试覆盖
 
 - `MigrationTests`: v4 表创建 + 列验证 + CASCADE 删除（3 tests）
 - `DatabaseManagerMemoryTests`: 8 tests 覆盖 save/fetch/delete/count/ids/type/recent/conversation
-- `PromptAssemblerTests`: timeContext 注入 + memory 注入 + assemble 集成 + TokenBudget 分配 + 格式验证（5 tests）
+- `PromptAssemblerTests`: 四层顺序、labeled context blocks、time-in-current-turn、memory 注入、assemble 集成、TokenBudget 分配与格式验证
 - `MemoryExtractionParsingTests`: 13 tests 覆盖 ExtractedMemory JSON 容错解析（大小写 type、字符串 importance、缺失字段、额外字段）+ latestMemoryDate 查询 + StreamDelta usage
 - `EmbeddingServiceTests`: bundle 资源存在性、tokenizer 固定长度输出、CoreML 384 维有限归一化向量、compatibility normalization
 - `VectorStoreTests`: memory/vector 原子写入、批量事务回滚、sqlite-vec KNN 角色隔离、删除同步、维度校验
 - `MemoryManagerRetrievalTests`: 检索异常 fallback 到近期记忆；提取失败不留下半索引记忆；批次失败不推进部分记忆
-- `ChatViewModelPromptAssemblyTests`: Chat 发送链路中 fallback 记忆进入 API request；当前输入只进入 API request 一次
-- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；full suite 为 192 tests / 41 suites，`** TEST SUCCEEDED **`。
+- `ChatViewModelPromptAssemblyTests`: Chat 发送链路中 fallback 记忆进入 API request；当前输入只进入 API request 一次；API request 保持四层顺序
+- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；当前 full suite 为 197 tests / 41 suites，`** TEST SUCCEEDED **`。
 
 ### 2026-04-16 修复
 

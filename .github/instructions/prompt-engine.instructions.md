@@ -6,24 +6,27 @@ applyTo: "**/PromptEngine/**/*.swift"
 
 ## 拼装顺序（不可更改）
 
-发送给 API 的 `messages` 数组严格按以下顺序:
+发送给 API 的 `messages` 数组严格按以下四层顺序:
 
-1. `system`: 角色卡 System Prompt（或默认模板）
-2. `system`: 世界书条目（position=after_system，按 priority 降序）
-3. `system`: 角色描述（personality + appearance + physique + speechStyle + backstory 拼接）
-4. `system`: 场景设定（会话 customScenario 优先于角色卡 scenario）
-5. `system`: 世界书条目（position=before_history，按 priority 降序）
-6. `user/assistant`: 示例对话（交替排列）
-7. `user/assistant`: 历史消息（经 ContextManager 处理后）
-8. `user`: 当前用户输入
+1. Stable Identity: base system prompt, character description, scenario, slowPlot directive
+2. Stable Conversation State: compressed context, checkpoint 后 history
+3. Current-Turn Context: example dialogs block, world book entries block, memories block
+4. Current Turn: current user input + `[Time] <ISO8601> [/Time]`
+
+其中：
+- 示例对话必须以 `[Example Dialogs]` labeled `system` block 注入，不作为真实 `user/assistant` 历史。
+- 世界书条目必须统一进入 `[World Book Entries]` block；`after_system` / `before_history` 只作为旧数据兼容字段，不决定最终位置。
+- 记忆必须统一进入 `[Memories]` block。
+- 时间上下文必须跟随当前输入放在最后一条 `user` message 内，不再作为独立 `system` message。
 
 ## Token 预算
 
 - 总预算 = `endpoint.maxContextTokens × 0.40`
-- 固定段（system prompt、角色描述、场景、当前输入）按实际 token 计算，不可压缩
+- 固定段（Stable Identity、Current-Turn Context、Current Turn）按实际 token 计算，不可压缩
 - 示例对话上限 = 剩余预算 × 25%
 - 世界书上限 = 剩余预算 × 35%
-- 历史消息 = 剩余预算 - 示例实际 - 世界书实际
+- 记忆上限 = 剩余预算 × 15%
+- 历史消息 = 剩余预算 - 示例实际 - 世界书实际 - 记忆实际
 - token 紧张时优先裁剪示例对话，其次世界书低优先级条目
 
 ## Token 计数

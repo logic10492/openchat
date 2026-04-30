@@ -6,19 +6,16 @@ enum PromptSegment {
     case characterDescription(String)
     case scenario(String)
     case slowPlotDirective(String)
-    case timeContext(String)
     case memoryEntry(MemoryEntryRecord)
-    case exampleDialog(ChatMessage)
+    case exampleDialogsBlock(String)
     case historyMessage(MessageRecord)
-    case currentInput(String)
+    case currentTurn(String)
 
     var role: String {
         switch self {
-        case .exampleDialog(let message):
-            message.role
         case .historyMessage(let message):
             message.role
-        case .currentInput:
+        case .currentTurn:
             "user"
         default:
             "system"
@@ -28,14 +25,12 @@ enum PromptSegment {
     var content: String {
         switch self {
         case .systemPrompt(let value), .characterDescription(let value),
-             .scenario(let value), .slowPlotDirective(let value), .timeContext(let value), .currentInput(let value):
+             .scenario(let value), .slowPlotDirective(let value), .exampleDialogsBlock(let value), .currentTurn(let value):
             value
         case .worldBookEntry(let entry):
             entry.content
         case .memoryEntry(let entry):
             entry.content
-        case .exampleDialog(let message):
-            message.content
         case .historyMessage(let message):
             message.content
         }
@@ -47,13 +42,13 @@ enum PromptSegment {
 
     var priority: Int {
         switch self {
-        case .systemPrompt, .characterDescription, .scenario, .slowPlotDirective, .timeContext, .currentInput:
+        case .systemPrompt, .characterDescription, .scenario, .slowPlotDirective, .currentTurn:
             .max
         case .worldBookEntry(let entry):
             entry.priority
         case .memoryEntry:
             85
-        case .exampleDialog:
+        case .exampleDialogsBlock:
             75
         case .historyMessage:
             50
@@ -62,7 +57,7 @@ enum PromptSegment {
 
     var isRequired: Bool {
         switch self {
-        case .systemPrompt, .timeContext, .currentInput:
+        case .systemPrompt, .currentTurn:
             true
         default:
             false

@@ -4,12 +4,12 @@
     "%@" : {
 
     },
-    "%@ tokens · %@" : {
+    "%@ tokens · %@ · %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ tokens · %2$@"
+            "value" : "%1$@ tokens · %2$@ · %3$@"
           }
         }
       }
@@ -212,6 +212,7 @@
       }
     },
     "Character Thinking" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -222,6 +223,7 @@
       }
     },
     "Character thinking…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -290,6 +292,7 @@
       }
     },
     "Compression Mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -409,6 +412,17 @@
         }
       }
     },
+    "DeepSeek V4" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DeepSeek V4"
+          }
+        }
+      }
+    },
     "Default" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -438,16 +452,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除"
-          }
-        }
-      }
-    },
-    "DeepSeek V4" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DeepSeek V4"
           }
         }
       }
@@ -508,6 +512,7 @@
       }
     },
     "Edit Model" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -595,11 +600,23 @@
       }
     },
     "High" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "高"
+          }
+        }
+      }
+    },
+    "High Intelligence" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高智能"
           }
         }
       }
@@ -671,6 +688,7 @@
       }
     },
     "Max" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -878,6 +896,17 @@
         }
       }
     },
+    "OpenAI Compatible" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI 兼容"
+          }
+        }
+      }
+    },
     "OpenChat" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -885,16 +914,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OpenChat"
-          }
-        }
-      }
-    },
-    "OpenAI Compatible" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OpenAI 兼容"
           }
         }
       }
@@ -955,6 +974,7 @@
       }
     },
     "Provider" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -965,6 +985,7 @@
       }
     },
     "Reasoning Effort" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1076,16 +1097,6 @@
         }
       }
     },
-    "High Intelligence" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高智能"
-          }
-        }
-      }
-    },
     "Speech Style" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1093,6 +1104,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话风格"
+          }
+        }
+      }
+    },
+    "Standard" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准"
           }
         }
       }
@@ -1148,16 +1170,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标签（逗号分隔）"
-          }
-        }
-      }
-    },
-    "Standard" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标准"
           }
         }
       }

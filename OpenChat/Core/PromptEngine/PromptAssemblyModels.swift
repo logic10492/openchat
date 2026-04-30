@@ -1,7 +1,9 @@
 import Foundation
 
 struct PromptAssemblyPreview: Sendable {
-    let messagesBeforeHistory: [ChatMessage]
+    let stableIdentityMessages: [ChatMessage]
+    let currentTurnContextMessages: [ChatMessage]
+    let currentTurnMessage: ChatMessage
     let fixedTokens: Int
     let historyBudget: Int
     let tokenUsage: TokenUsageReport

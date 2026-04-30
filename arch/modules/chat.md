@@ -206,11 +206,11 @@ sendMessage():
        - prompt history 中排除本轮 current input record；
        - 重新生成/编辑时排除与 currentInput 对应的最后一条 user record。
 
-    8. PromptAssembler.preview(...) 使用 promptHistoryMessages 计算固定段 token。
+    8. PromptAssembler.preview(...) 使用 promptHistoryMessages 计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens。
 
     9. ContextManager.prepareHistory(messages:promptHistoryMessages, ...)
        只处理过滤后的历史，再由 PromptAssembler.assemble(...)
-       在末尾追加一次 currentInput。
+       输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
        tokenUsage = result.tokenUsage
 
     10. // 创建空的 assistantMessage 占位
