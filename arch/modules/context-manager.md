@@ -17,7 +17,12 @@
 | `ContextManager.swift` | 主调度器，根据会话配置选择策略，返回处理后的历史消息 |
 | `ContextStrategy.swift` | 策略协议定义 + 枚举 |
 | `TruncationStrategy.swift` | 对话剔除策略实现 |
-| `CompressionStrategy.swift` | 对话压缩策略实现 |
+| `CompressionPolicy.swift` | 计算 OpenChat 40% 预算、Codex 风格 effective compact window 与自动压缩阈值 |
+| `CompressionSourceHasher.swift` | 对 checkpoint 覆盖的消息范围生成 SHA256 source hash |
+| `PreparedHistory.swift` | 表达 `compressed context + checkpoint 后 message history`，并提供旧 PromptAssembler 兼容出口 |
+| `CompressionSummarizer.swift` | 包装 API 压缩提示词，不直接访问数据库 |
+| `CheckpointCompactor.swift` | 复用有效 checkpoint，选择新压缩范围，保存 checkpoint |
+| `CompressionStrategy.swift` | 历史兼容类型；当前主链路已迁移到 checkpoint compactor |
 
 ## 3. 核心设计
 
@@ -64,6 +69,14 @@ struct ContextManager {
         endpoint: APIEndpointConfig,
         fixedTokens: Int
     ) async throws -> [MessageRecord]
+
+    /// 返回结构化 checkpoint 历史，供后续 PromptAssembler 结构化改造使用。
+    func prepareContextHistory(
+        messages allMessages: [MessageRecord],
+        conversation: ConversationRecord,
+        endpoint: APIEndpointConfig,
+        fixedTokens: Int
+    ) async throws -> PreparedHistory
 }
 ```
 
@@ -98,94 +111,64 @@ function truncate(allMessages, tokenBudget):
 - **始终保留最后一轮完整对话**：如果最新的 user + assistant 消息对超出预算，仍然保留（允许小幅超预算），但触发警告
 - **压缩消息标记**：被剔除的消息仍保留在数据库中，不会被物理删除。仅在发送给 API 时不包含
 
-## 5. 对话压缩策略 (Compression)
+## 5. Checkpoint Compression
 
 ### 5.1 适用场景
 
 - 内容适合发送给公开 API 模型（如 OpenAI API）
 - 用户希望保留更多上下文语义信息
-- 可以接受稍慢的响应速度（需要额外一次 API 调用）
+- 可以接受在超过阈值时额外一次 API 调用
+- 希望旧历史压缩结果可跨轮次持续复用
 
 ### 5.2 算法
 
-```
-function compress(allMessages, tokenBudget):
-    totalTokens = sum(TokenCounter.count(msg) for msg in allMessages)
-
-    if totalTokens <= tokenBudget:
-        return allMessages  // 未超预算，无需处理
-
-    // 将消息分为两部分
-    recentMessages = []
-    olderMessages = []
-    recentTokens = 0
-
-    // 从最新开始，保留尽量多的最近消息（占预算的 70%）
-    recentBudget = tokenBudget * 0.70
-    for msg in allMessages.reversed():
-        tokens = TokenCounter.count(msg.content)
-        if recentTokens + tokens > recentBudget:
-            break
-        recentMessages.insert(msg, at: 0)
-        recentTokens += tokens
-
-    // 剩余消息为需要压缩的旧消息
-    olderMessages = allMessages[0 ..< allMessages.count - recentMessages.count]
-
-    if olderMessages.isEmpty:
-        return recentMessages
-
-    // 调用外部 API 压缩旧消息
-    compressionBudget = tokenBudget - recentTokens
-    summary = await compressViaAPI(olderMessages, compressionBudget)
-
-    // 构建压缩消息
-    summaryMessage = MessageRecord(
-        role: "system",
-        content: "[Previously: \(summary)]",
-        isCompressed: true,
-        originalContent: olderMessages.map { $0.content }.joined(separator: "\n")
-    )
-
-    return [summaryMessage] + recentMessages
-```
-
-### 5.3 压缩 API 调用
-
-```swift
-struct CompressionStrategy: ContextStrategyProtocol {
-    let apiClient: APIClient
-    let compressionEndpoint: APIEndpointConfig  // 用于压缩的 API 端点（可与聊天端点不同）
-
-    /// 调用外部 API 压缩旧消息
-    private func compressViaAPI(
-        messages: [MessageRecord],
-        maxTokens: Int
-    ) async throws -> String
-}
-```
-
-**压缩用的 system prompt**：
+当前实现采用 Codex 风格的压缩 checkpoint：
 
 ```
-Summarize the following conversation concisely, preserving key facts, character actions,
-emotional states, and plot developments. Keep the summary under {{maxTokens}} tokens.
-Focus on information that would be important for continuing the conversation.
-Do not add any commentary or analysis.
+function prepareCheckpointHistory(allMessages, fixedTokens):
+    policy = CompressionPolicy(endpoint)
+    latest = latestValidCheckpoint(conversationId, allMessages)
+    checkpointEnd = latest?.sourceEndSortOrder ?? 0
+    afterCheckpoint = allMessages where sortOrder > checkpointEnd
+    activeTokens = fixedTokens + latest.summaryTokenCount + tokenCount(afterCheckpoint)
+
+    if activeTokens <= policy.autoCompactTokenLimit:
+        return latest.summary + afterCheckpoint
+
+    recentMessages = newest messages after checkpoint, up to 70% of history budget
+    messagesToCompress = older messages after checkpoint and before recentMessages
+
+    if messagesToCompress is too small:
+        return truncation fallback without saving checkpoint
+
+    summary = CompressionSummarizer(previousSummary: latest.summary, messagesToCompress)
+    checkpoint = save conversation_compression_checkpoint
+    return checkpoint.summary + messages after checkpoint.sourceEndSortOrder
 ```
 
-### 5.4 压缩端点选择
+### 5.3 阈值
 
-- 默认使用会话绑定的 `apiEndpoint`
-- 若用户在设置中配置了专用的"压缩用端点"，则优先使用
-- 设计意图：用户可以将聊天指向本地模型，压缩指向云端模型（速度更快、质量更好）
+- OpenChat 仍保持 `endpoint.maxContextTokens × 0.40` 硬上限。
+- checkpoint 自动压缩阈值为 `min(promptTokenBudget, effectiveCompactWindowTokens × 0.90)`。
+- `gpt-5.5` 系列模型虽然可配置为 1M 上下文，但压缩阈值按 Codex 事实窗口 `258_000 × 0.90 = 232_200` 计算，并继续受 OpenChat `maxContextTokens × 0.40` 硬上限约束。
+
+### 5.4 压缩 API 调用
+
+`CompressionSummarizer` 使用聊天端点调用 API。压缩提示词固定以 `CONTEXT CHECKPOINT COMPACTION` 标记，并要求生成 durable handoff summary，保留事实、角色决定、关系状态、情绪状态、剧情状态、未解决约定和用户偏好。
+
+```
+You are performing a CONTEXT CHECKPOINT COMPACTION for an ongoing roleplay conversation.
+Produce a durable handoff summary that will replace older transcript items.
+```
 
 ### 5.5 压缩结果持久化
 
 压缩完成后：
-1. 将压缩摘要存为一条新的 `MessageRecord`（`role: "system"`, `isCompressed: true`）
-2. 被压缩的原始消息设置 `originalContent` 保留原文
-3. 数据库中保留完整历史，UI 中可展开查看原始内容
+1. 保存一条 `conversation_compression_checkpoint`，记录覆盖范围、source hash、摘要、模型和阈值参数。
+2. 不删除、不替换原始 `message`。
+3. 本轮 prompt 通过 `PreparedHistory.messagesForLegacyPrompt(conversationId:)` 临时生成 `role: "system"` / `isCompressed: true` 的 `[Previously]\n{summary}` 消息，拼接 checkpoint 后真实历史。
+4. 编辑或删除被 checkpoint 覆盖的消息时，`ChatViewModel` 删除受影响 checkpoint，避免 stale summary。
+5. 压缩失败时 fallback 到 `TruncationStrategy`，不写入半成品 checkpoint。
 
 ## 6. 与 PromptEngine 的协作流程
 
@@ -199,9 +182,9 @@ Do not add any commentary or analysis.
 │  ContextManager.prepareHistory()                       │
 │  1. 从 DB 加载会话全部消息                              │
 │  2. 计算固定段 token（由调用方传入 fixedTokens）        │
-│  3. 计算历史预算 = totalBudget - fixedTokens            │
-│  4. 根据 conversation.contextStrategy 选择策略          │
-│  5. 执行策略，返回处理后的 [MessageRecord]               │
+│  3. 通过 CompressionPolicy 计算历史预算与压缩阈值        │
+│  4. compression 策略优先复用有效 checkpoint              │
+│  5. 必要时生成新 checkpoint，返回兼容 [MessageRecord]    │
 └──────────┬────────────────────────────────────────────┘
            │
            ▼
@@ -222,8 +205,8 @@ Do not add any commentary or analysis.
 
 1. ChatViewModel 先计算固定段 token（system prompt、角色描述、场景、世界书、用户输入）
 2. 将 fixedTokens 传给 ContextManager
-3. ContextManager 计算 `historyBudget = endpoint.maxContextTokens * 0.40 - fixedTokens`
-4. 执行选定策略，返回适配预算的历史消息
+3. ContextManager 通过 `CompressionPolicy.historyBudget(fixedTokens:)` 计算历史预算
+4. 执行选定策略，压缩策略返回 `compressed context + checkpoint 后 message history`
 5. PromptAssembler 接收历史消息进行最终拼装
 
 > 注意：步骤 1 中需要先做一次世界书关键词匹配来确定触发的条目，才能计算固定段 token。因此实际实现中，PromptAssembler 和 ContextManager 需要一个两阶段调用：
@@ -256,8 +239,8 @@ Do not add any commentary or analysis.
 
 1. **40% 上下文比例**：这是一个保守策略，确保模型有足够的"生成空间"和"注意力专注度"。特别是小模型（7B-13B），过长上下文会显著降低生成质量
 2. **两阶段调用**：虽然略增复杂度，但保证世界书动态注入与历史预算计算的准确性
-3. **压缩结果持久化**：避免反复调用压缩 API，同一段旧消息只压缩一次
-4. **保留原始内容**：用户可以随时查看被压缩的原始对话，保证透明性
+3. **checkpoint 持久化**：避免每轮重复压缩，同一段旧消息只压缩一次，并跨后续请求复用
+4. **保留原始内容**：checkpoint 不删除原始消息，后续编辑/删除历史时通过 checkpoint invalidation 保证摘要不会过期
 5. **独立压缩端点**：允许用户为压缩使用不同的（通常更便宜/更快的）API 端点
 
 ## 实现证据（2026-04-14）

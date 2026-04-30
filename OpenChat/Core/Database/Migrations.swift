@@ -12,6 +12,7 @@ enum Migrations {
         static let memoryEntryTable = "memory_entry"
         static let memoryEmbeddingTable = "memory_embedding"
         static let endpointModelTable = "endpoint_model"
+        static let compressionCheckpointTable = "conversation_compression_checkpoint"
 
         static let apiModeChatCompletions = "chatCompletions"
         static let providerDialectOpenAICompatible = "openAICompatible"
@@ -173,6 +174,38 @@ enum Migrations {
                     END
                 WHERE lower(modelId) LIKE 'deepseek-v4-%'
                 """, arguments: [Historical.providerDialectDeepSeekV4])
+        }
+        migrator.registerMigration("v11_create_compression_checkpoints") { db in
+            try db.create(table: Historical.compressionCheckpointTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("conversationId", .text).notNull()
+                    .references(Historical.conversationTable, onDelete: .cascade)
+                t.column("parentCheckpointId", .text)
+                    .references(Historical.compressionCheckpointTable, onDelete: .setNull)
+                t.column("sourceStartSortOrder", .integer).notNull()
+                t.column("sourceEndSortOrder", .integer).notNull()
+                t.column("sourceHash", .text).notNull()
+                t.column("summary", .text).notNull()
+                t.column("summaryTokenCount", .integer).notNull()
+                t.column("endpointId", .text)
+                    .references(Historical.apiEndpointTable, onDelete: .setNull)
+                t.column("modelName", .text).notNull()
+                t.column("modelMaxContextTokens", .integer).notNull()
+                t.column("effectiveCompactWindowTokens", .integer).notNull()
+                t.column("autoCompactTokenLimit", .integer).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.uniqueKey(["conversationId", "sourceStartSortOrder", "sourceEndSortOrder", "sourceHash"])
+            }
+            try db.create(
+                index: "idx_compression_checkpoint_conversationId",
+                on: Historical.compressionCheckpointTable,
+                columns: ["conversationId"]
+            )
+            try db.create(
+                index: "idx_compression_checkpoint_sourceEnd",
+                on: Historical.compressionCheckpointTable,
+                columns: ["conversationId", "sourceEndSortOrder"]
+            )
         }
         return migrator
     }

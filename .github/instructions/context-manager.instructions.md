@@ -1,5 +1,5 @@
 ---
-description: "Use when working with context management, truncation strategy, compression strategy, or the ContextManager type. Covers the 40% budget rule, FIFO truncation, API-based compression, and strategy selection."
+description: "Use when working with context management, truncation strategy, checkpoint compression, or the ContextManager type. Covers the 40% budget rule, FIFO truncation, persisted compression checkpoints, and strategy selection."
 applyTo: "**/ContextManager/**/*.swift"
 ---
 # 上下文管理规范
@@ -26,15 +26,18 @@ protocol ContextStrategyProtocol {
 - 始终保留最后一轮完整的 user + assistant 对（允许小幅超预算）
 - 被剔除的消息仅不发送给 API，**不从数据库删除**
 
-## 对话压缩 (CompressionStrategy)
+## 对话压缩 (Checkpoint Compression)
 
-- 最近消息占预算的 70%（保持近期上下文完整）
-- 旧消息调用外部 API 压缩为摘要
-- 压缩后生成一条 `role: "system"` 的消息: `[Previously: {summary}]`
-- 压缩消息设置 `isCompressed: true`，保留 `originalContent`
-- **同一段旧消息只压缩一次**（检查是否已有压缩记录）
-- 压缩端点可与聊天端点不同（用户在设置中配置）
-- 压缩用的 system prompt 格式固定，参见 `arch/modules/context-manager.md`
+- 压缩不是每轮临时摘要；只有超过 `CompressionPolicy.autoCompactTokenLimit` 时才生成 checkpoint
+- `autoCompactTokenLimit = min(endpoint.maxContextTokens × 0.40, effectiveCompactWindowTokens × 0.90)`
+- `gpt-5.5` 系列的 `effectiveCompactWindowTokens` 固定按 Codex 参考值 `258_000` 计算，因此默认压缩阈值为 `232_200`
+- checkpoint 存储于 `conversation_compression_checkpoint`
+- checkpoint 必须记录 `sourceStartSortOrder`、`sourceEndSortOrder`、`sourceHash`、`summary`、`createdAt`、`endpointId`、`modelName`
+- 同一段旧消息只压缩一次；后续请求复用最近有效 checkpoint
+- 生成新 checkpoint 时只压缩上一个 checkpoint 之后的旧历史段，并将旧 summary 合并进新 summary
+- 本轮 prompt 使用 `compressed context + checkpoint 后 message history`
+- 压缩成功后才保存 checkpoint；压缩失败时 fallback 到剔除策略，不写入 checkpoint
+- 编辑或删除已被 checkpoint 覆盖的消息时，必须删除受影响 checkpoint
 
 ## 策略选择
 
@@ -45,6 +48,6 @@ protocol ContextStrategyProtocol {
 ## 约束
 
 - ContextManager 不直接访问 PromptAssembler（避免循环依赖）
-- ContextManager 接收 `fixedTokens` 参数，计算 `historyBudget = totalBudget - fixedTokens`
+- ContextManager 接收 `fixedTokens` 参数，通过 `CompressionPolicy.historyBudget(fixedTokens:)` 计算历史预算
 - 压缩调用是异步的，可能较慢，调用方需要向用户展示加载状态
 - 压缩失败时 fallback 到剔除策略，不阻塞发送流程

@@ -156,4 +156,38 @@ enum TestHelpers {
             updatedAt: TestDateFactory.now()
         )
     }
+
+    static func makeCompressionCheckpoint(
+        conversationId: String,
+        id: String = UUID().uuidString,
+        parentCheckpointId: String? = nil,
+        sourceStartSortOrder: Int = 1,
+        sourceEndSortOrder: Int = 2,
+        sourceHash: String = "hash",
+        summary: String = "summary",
+        summaryTokenCount: Int = 1,
+        endpointId: String? = nil,
+        modelName: String = "gpt-4o-mini",
+        modelMaxContextTokens: Int = 4096,
+        effectiveCompactWindowTokens: Int = 4096,
+        autoCompactTokenLimit: Int = 1638,
+        createdAt: Date = Date(timeIntervalSince1970: 1)
+    ) -> CompressionCheckpointRecord {
+        CompressionCheckpointRecord(
+            id: id,
+            conversationId: conversationId,
+            parentCheckpointId: parentCheckpointId,
+            sourceStartSortOrder: sourceStartSortOrder,
+            sourceEndSortOrder: sourceEndSortOrder,
+            sourceHash: sourceHash,
+            summary: summary,
+            summaryTokenCount: summaryTokenCount,
+            endpointId: endpointId,
+            modelName: modelName,
+            modelMaxContextTokens: modelMaxContextTokens,
+            effectiveCompactWindowTokens: effectiveCompactWindowTokens,
+            autoCompactTokenLimit: autoCompactTokenLimit,
+            createdAt: createdAt
+        )
+    }
 }

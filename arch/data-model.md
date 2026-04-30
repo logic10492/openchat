@@ -231,6 +231,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     static let characterCard = belongsTo(CharacterCardRecord.self)
     static let apiEndpoint = belongsTo(APIEndpointRecord.self)
     static let messages = hasMany(MessageRecord.self)
+    static let compressionCheckpoints = hasMany(CompressionCheckpointRecord.self)
 }
 ```
 
@@ -272,6 +273,62 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord {
 
     // 普通 prompt 历史不回传 reasoningContent。
     var chatMessage: ChatMessage { ChatMessage(role: role, content: content) }
+}
+```
+
+---
+
+### 6b. conversation_compression_checkpoint — 会话压缩检查点
+
+存储 Codex 风格的持久化上下文压缩 checkpoint。checkpoint 不替换或删除原始 `message` 记录；prompt 侧读取最近有效 checkpoint，并拼接 checkpoint 后的真实 message history。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| conversationId | TEXT | NOT NULL, FK → conversation.id | 所属会话 |
+| parentCheckpointId | TEXT | FK → conversation_compression_checkpoint.id | 上一个 checkpoint，可空 |
+| sourceStartSortOrder | INTEGER | NOT NULL | 本摘要覆盖的首条消息 sortOrder |
+| sourceEndSortOrder | INTEGER | NOT NULL | 本摘要覆盖的末条消息 sortOrder |
+| sourceHash | TEXT | NOT NULL | 覆盖消息内容的 SHA256 hash |
+| summary | TEXT | NOT NULL | 压缩摘要 |
+| summaryTokenCount | INTEGER | NOT NULL | 摘要估算 token |
+| endpointId | TEXT | FK → api_endpoint.id, ON DELETE SET NULL | 生成摘要使用的端点 |
+| modelName | TEXT | NOT NULL | 生成摘要使用的模型 |
+| modelMaxContextTokens | INTEGER | NOT NULL | 生成时模型声明上下文 |
+| effectiveCompactWindowTokens | INTEGER | NOT NULL | 生成时采用的事实压缩窗口 |
+| autoCompactTokenLimit | INTEGER | NOT NULL | 生成时采用的自动压缩阈值 |
+| createdAt | TEXT | NOT NULL | ISO 8601 |
+
+**外键**：
+- `conversationId` → `conversation(id)` ON DELETE CASCADE
+- `parentCheckpointId` → `conversation_compression_checkpoint(id)` ON DELETE SET NULL
+- `endpointId` → `api_endpoint(id)` ON DELETE SET NULL
+
+**约束**：
+- 唯一约束：`UNIQUE(conversationId, sourceStartSortOrder, sourceEndSortOrder, sourceHash)`
+- 索引：`idx_compression_checkpoint_conversationId`
+- 索引：`idx_compression_checkpoint_sourceEnd(conversationId, sourceEndSortOrder)`
+
+**Swift Record**:
+```swift
+struct CompressionCheckpointRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "conversation_compression_checkpoint"
+    var id: String
+    var conversationId: String
+    var parentCheckpointId: String?
+    var sourceStartSortOrder: Int
+    var sourceEndSortOrder: Int
+    var sourceHash: String
+    var summary: String
+    var summaryTokenCount: Int
+    var endpointId: String?
+    var modelName: String
+    var modelMaxContextTokens: Int
+    var effectiveCompactWindowTokens: Int
+    var autoCompactTokenLimit: Int
+    var createdAt: Date
+
+    static let conversation = belongsTo(ConversationRecord.self)
 }
 ```
 
@@ -329,6 +386,7 @@ world_book 1 ──── 0..* world_book_entry
 character_card 1 ──── 0..* memory_entry
 conversation 1 ──── 0..* memory_entry
 conversation 1 ──── 0..* message
+conversation 1 ──── 0..* conversation_compression_checkpoint
 ```
 
 关系说明：
@@ -339,8 +397,11 @@ conversation 1 ──── 0..* message
 - 一个 `world_book` 包含多个 `world_book_entry`
 - 一个 `character_card` 关联多条 `memory_entry`（跨对话记忆）
 - 一个 `conversation` 包含多条 `message`
+- 一个 `conversation` 包含多条 `conversation_compression_checkpoint`，用于复用旧历史压缩摘要
 - 一个 `conversation` 可关联多条 `memory_entry`（记忆来源）
 - 删除 `conversation` 时级联删除其所有 `message`
+- 删除 `conversation` 时级联删除其所有 `conversation_compression_checkpoint`
+- 删除 `api_endpoint` 时，关联 `conversation_compression_checkpoint` 的 `endpointId` 置 NULL
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
 - 删除 `character_card` 时级联删除其所有 `memory_entry`
 - 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
@@ -617,6 +678,45 @@ migrator.registerMigration("v10_add_provider_dialect_to_endpoint_model") { db in
 }
 ```
 
+### v11_create_compression_checkpoints
+
+新增 `conversation_compression_checkpoint` 表，保存持久化压缩 checkpoint。该迁移只追加新表和索引，不修改既有 `message` 表；原始消息仍完整保留。
+
+```swift
+migrator.registerMigration("v11_create_compression_checkpoints") { db in
+    try db.create(table: Historical.compressionCheckpointTable) { t in
+        t.column("id", .text).notNull().primaryKey()
+        t.column("conversationId", .text).notNull()
+            .references(Historical.conversationTable, onDelete: .cascade)
+        t.column("parentCheckpointId", .text)
+            .references(Historical.compressionCheckpointTable, onDelete: .setNull)
+        t.column("sourceStartSortOrder", .integer).notNull()
+        t.column("sourceEndSortOrder", .integer).notNull()
+        t.column("sourceHash", .text).notNull()
+        t.column("summary", .text).notNull()
+        t.column("summaryTokenCount", .integer).notNull()
+        t.column("endpointId", .text)
+            .references(Historical.apiEndpointTable, onDelete: .setNull)
+        t.column("modelName", .text).notNull()
+        t.column("modelMaxContextTokens", .integer).notNull()
+        t.column("effectiveCompactWindowTokens", .integer).notNull()
+        t.column("autoCompactTokenLimit", .integer).notNull()
+        t.column("createdAt", .datetime).notNull()
+        t.uniqueKey(["conversationId", "sourceStartSortOrder", "sourceEndSortOrder", "sourceHash"])
+    }
+    try db.create(
+        index: "idx_compression_checkpoint_conversationId",
+        on: Historical.compressionCheckpointTable,
+        columns: ["conversationId"]
+    )
+    try db.create(
+        index: "idx_compression_checkpoint_sourceEnd",
+        on: Historical.compressionCheckpointTable,
+        columns: ["conversationId", "sourceEndSortOrder"]
+    )
+}
+```
+
 ---
 
 ## 数据库初始化
@@ -643,5 +743,5 @@ final class DatabaseManager {
 2. **时间戳使用 ISO 8601 TEXT**：可读性好，GRDB 原生支持 Date ↔ TEXT 转换
 3. **JSON 字段（exampleDialogs / keywords / tags / modelParameters）**：使用 TEXT 列存储 JSON 字符串，Swift 侧通过 Codable 解析。不使用独立关联表，减少表数量和查询复杂度
 4. **avatar 使用 BLOB**：角色卡头像通常较小（< 500KB），直接内嵌数据库简化文件管理
-5. **消息保留 originalContent**：压缩消息时保留原文，允许用户回溯查看
+5. **checkpoint 不替换原始消息**：上下文压缩摘要保存在 `conversation_compression_checkpoint`，原始 `message` 不删除、不改写，编辑或删除历史时删除受影响 checkpoint
 6. **sortOrder 而非时间排序**：消息编辑/插入/重新生成时，时间戳不能保证顺序正确，使用显式 sortOrder 更可靠

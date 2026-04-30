@@ -30,20 +30,58 @@ struct ContextManager {
         endpoint: APIEndpointConfig,
         fixedTokens: Int
     ) async throws -> [MessageRecord] {
-        let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
-        let historyBudget = max(totalBudget - fixedTokens, 0)
+        let prepared = try await prepareContextHistory(
+            messages: allMessages,
+            conversation: conversation,
+            endpoint: endpoint,
+            fixedTokens: fixedTokens
+        )
+        return prepared.messagesForLegacyPrompt(conversationId: conversation.id)
+    }
+
+    func prepareContextHistory(
+        messages allMessages: [MessageRecord],
+        conversation: ConversationRecord,
+        endpoint: APIEndpointConfig,
+        fixedTokens: Int
+    ) async throws -> PreparedHistory {
+        let policy = CompressionPolicy(endpoint: endpoint)
+        let historyBudget = policy.historyBudget(fixedTokens: fixedTokens)
 
         switch conversation.contextStrategyValue {
         case .truncation:
-            return try await TruncationStrategy().process(allMessages: allMessages, tokenBudget: historyBudget)
+            let history = try await TruncationStrategy().process(
+                allMessages: allMessages,
+                tokenBudget: historyBudget
+            )
+            return PreparedHistory(
+                compressedContext: nil,
+                messageHistory: history,
+                didCreateCheckpoint: false,
+                didFallbackToTruncation: false
+            )
         case .compression:
             do {
-                return try await CompressionStrategy(apiClient: apiClient, endpoint: endpoint).process(
+                return try await CheckpointCompactor(
+                    databaseManager: databaseManager,
+                    apiClient: apiClient
+                ).prepare(
+                    allMessages: allMessages,
+                    conversation: conversation,
+                    endpoint: endpoint,
+                    fixedTokens: fixedTokens
+                )
+            } catch {
+                let history = try await TruncationStrategy().process(
                     allMessages: allMessages,
                     tokenBudget: historyBudget
                 )
-            } catch {
-                return try await TruncationStrategy().process(allMessages: allMessages, tokenBudget: historyBudget)
+                return PreparedHistory(
+                    compressedContext: nil,
+                    messageHistory: history,
+                    didCreateCheckpoint: false,
+                    didFallbackToTruncation: true
+                )
             }
         }
     }

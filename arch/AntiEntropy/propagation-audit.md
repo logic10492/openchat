@@ -213,4 +213,58 @@
 - `ChatViewModelPromptAssemblyTests`
 - Focused command: `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 26 tests passed，`** TEST SUCCEEDED **`。
 - Focused memory/prompt command including `PromptAssemblerTests`：27 tests / 5 suites passed，`** TEST SUCCEEDED **`。
-- Full suite：166 tests / 34 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：该轮审计时为 166 tests / 34 suites passed，`** TEST SUCCEEDED **`；最新 checkpoint compression 审计已更新为 187 tests / 41 suites。
+
+## 2026-04-30 Checkpoint Compression Incremental Audit
+
+范围：`OpenChat/Core/Database/Records/CompressionCheckpointRecord.swift`、`OpenChat/Core/Database/DatabaseManager+CompressionCheckpoints.swift`、`OpenChat/Core/Database/Migrations.swift`、`OpenChat/Core/ContextManager/CompressionPolicy.swift`、`CompressionSourceHasher.swift`、`PreparedHistory.swift`、`CompressionSummarizer.swift`、`CheckpointCompactor.swift`、`ContextManager.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`、checkpoint 相关测试和 arch 文档。
+
+审计模式：窄范围增量审计。OpenChat 当前没有 Magnum Agent 的 `arch/propagation-audit/` 脚本基线，本次沿用本文件的 AntiEntropy 审计方法：`git status` / `rg` / 文件统计确认传播面，源码链路确认行为传播，测试结果确认 `src-test`。
+
+### 静态传播面
+
+- 当前变更新增的 production 类型限定在 `Core/Database` 与 `Core/ContextManager`，外加 `ChatViewModel` 的历史编辑/删除失效调用。
+- `DatabaseManager+CompressionCheckpoints` 只暴露 checkpoint CRUD、受影响 checkpoint 删除、按 sortOrder 范围读取 messages；未把数据库细节传播到 View 层。
+- `CheckpointCompactor` 依赖 `DatabaseManager`、`APIClient`、`TokenCounter` 和 `CompressionSummarizer`，保持在 Core 内；没有新增 Feature -> Feature 或 Shared -> Core 依赖。
+- `ChatViewModel` 只在 `editMessage` / `deleteMessage` 中调用 `deleteCompressionCheckpoints(conversationId:sourceEndAtOrAfter:)`，避免 stale summary；不直接读写 checkpoint record。
+- `ruby scripts/generate_xcodeproj.rb` 已重新生成 project，使新增 Swift 文件进入 target；签名值仍由脚本维持。
+
+本轮静态计数：
+
+- App Swift files: 105
+- Test Swift files: 31
+- Context Swift files: 10
+- Database Swift files: 19
+
+### 行为传播链路
+
+主链路：
+
+`ChatViewModel+Support.generateResponse -> PromptAssembler.preview -> ContextManager.prepareContextHistory -> CheckpointCompactor -> DatabaseManager+CompressionCheckpoints / CompressionSummarizer(APIClient) -> PreparedHistory.messagesForLegacyPrompt -> PromptAssembler.assemble`
+
+结论：
+
+- `ContextManager.prepareHistory(...)` 保持旧返回类型，内部委托 `prepareContextHistory(...)`；旧 `PromptAssembler` 入口继续接收 `[MessageRecord]`。
+- `.compression` 策略先复用有效 checkpoint；低于阈值不调用网络；高于阈值只压缩 checkpoint 后的旧历史段。
+- checkpoint 保存以 source hash 校验为边界；root checkpoint 校验完整源消息 hash，链式 checkpoint 校验 parent hash + delta messages。
+- summarizer 成功后才保存 `conversation_compression_checkpoint`；summarizer 或网络失败 fallback truncation，不写半成品。
+- 原始 `message` 不删除、不改写；checkpoint 作为派生缓存，由编辑/删除历史触发失效。
+
+### Database 传播
+
+- `v11_create_compression_checkpoints` 只追加 `conversation_compression_checkpoint` 表和索引，不修改旧 migration。
+- `conversationId` 删除级联到 checkpoint；`parentCheckpointId` 删除置空；`endpointId` 删除置空。
+- `ConversationRecord.compressionCheckpoints` 建立 has-many 关系，但 Feature 层不直接使用该关系。
+
+### 三边一致性
+
+- `arch-src`：`arch/data-model.md`、`arch/modules/context-manager.md`、`.github/instructions/context-manager.instructions.md` 已写回 checkpoint schema、Codex 风格阈值语义、复用/失效/fallback 行为。
+- `arch-test`：新增 migration/database/context/chat 测试覆盖 v11 表、checkpoint CRUD、source hash、policy、summarizer、compactor、复用和编辑/删除失效。
+- `src-test`：focused suites 与 full suite 均通过，当前基线为 187 tests / 41 suites。
+
+### 验证
+
+- Context focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CompressionPolicyTests -only-testing:OpenChatTests/CompressionSourceHasherTests -only-testing:OpenChatTests/PreparedHistoryTests -only-testing:OpenChatTests/CompressionSummarizerTests -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests`，结果 14 tests / 6 suites passed，`** TEST SUCCEEDED **`。
+- Database focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/CompressionCheckpointDatabaseTests`，结果 24 tests / 2 suites passed，`** TEST SUCCEEDED **`。
+- Chat/prompt focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests -only-testing:OpenChatTests/PromptAssemblerTests`，结果 16 tests / 2 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 187 tests / 41 suites passed，`** TEST SUCCEEDED **`。

@@ -216,6 +216,10 @@ final class ChatViewModel {
             target.content = newContent
             target.tokenCount = TokenCounter.count(newContent)
             try await databaseManager.saveMessage(target)
+            try await databaseManager.deleteCompressionCheckpoints(
+                conversationId: conversation.id,
+                sourceEndAtOrAfter: target.sortOrder
+            )
             try await databaseManager.deleteMessages(
                 conversationId: conversation.id,
                 afterSortOrder: target.sortOrder
@@ -229,6 +233,14 @@ final class ChatViewModel {
 
     func deleteMessage(_ messageId: String) async {
         do {
+            let records = try await databaseManager.fetchMessages(conversationId: conversation.id)
+            let deletedSortOrder = records.first(where: { $0.id == messageId })?.sortOrder
+            if let deletedSortOrder {
+                try await databaseManager.deleteCompressionCheckpoints(
+                    conversationId: conversation.id,
+                    sourceEndAtOrAfter: deletedSortOrder
+                )
+            }
             try await databaseManager.deleteMessage(id: messageId)
             await loadMessages()
         } catch {

@@ -330,4 +330,70 @@ struct MigrationTests {
         #expect(row?["providerDialect"] as String? == "deepSeekV4")
         #expect(row?["maxContextTokens"] as Int? == 1_000_000)
     }
+
+    // MARK: - v11 compression checkpoints
+
+    @Test func test_v11_creates_compression_checkpoint_table() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+
+        #expect(tableNames.contains("conversation_compression_checkpoint"))
+    }
+
+    @Test func test_v11_compression_checkpoint_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "conversation_compression_checkpoint").map(\.name)
+        }
+
+        #expect(columns.contains("id"))
+        #expect(columns.contains("conversationId"))
+        #expect(columns.contains("parentCheckpointId"))
+        #expect(columns.contains("sourceStartSortOrder"))
+        #expect(columns.contains("sourceEndSortOrder"))
+        #expect(columns.contains("sourceHash"))
+        #expect(columns.contains("summary"))
+        #expect(columns.contains("summaryTokenCount"))
+        #expect(columns.contains("endpointId"))
+        #expect(columns.contains("modelName"))
+        #expect(columns.contains("modelMaxContextTokens"))
+        #expect(columns.contains("effectiveCompactWindowTokens"))
+        #expect(columns.contains("autoCompactTokenLimit"))
+        #expect(columns.contains("createdAt"))
+    }
+
+    @Test func test_v11_compression_checkpoint_cascade_on_conversation_delete() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "conv-checkpoint")
+        let checkpoint = CompressionCheckpointRecord(
+            id: "checkpoint-1",
+            conversationId: conversation.id,
+            parentCheckpointId: nil,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 2,
+            sourceHash: "hash",
+            summary: "summary",
+            summaryTokenCount: 1,
+            endpointId: nil,
+            modelName: "gpt-4o-mini",
+            modelMaxContextTokens: 4096,
+            effectiveCompactWindowTokens: 4096,
+            autoCompactTokenLimit: 1638,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+
+        try await manager.write { db in
+            try conversation.insert(db)
+            try checkpoint.insert(db)
+            try ConversationRecord.deleteOne(db, key: conversation.id)
+        }
+
+        let count = try await manager.read { db in
+            try CompressionCheckpointRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
 }

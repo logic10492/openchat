@@ -1,0 +1,96 @@
+# Evidence: checkpoint compression
+
+Date: 2026-04-30
+Worktree: /Users/fukujusou/.config/superpowers/worktrees/openchat/codex-style-compression-checkpoints
+Branch: feature/codex-style-compression-checkpoints
+
+## Static propagation surface
+
+Commands:
+
+```
+git status --short --branch
+find OpenChat -name '*.swift' | wc -l
+find OpenChatTests -name '*.swift' | wc -l
+find OpenChat/Core/ContextManager -name '*.swift' | wc -l
+find OpenChat/Core/Database -name '*.swift' | wc -l
+rg -n "CompressionCheckpoint|CheckpointCompactor|CompressionPolicy|PreparedHistory|deleteCompressionCheckpoints|conversation_compression_checkpoint|autoCompactTokenLimit|prepareContextHistory" OpenChat OpenChatTests arch .github -g '!OpenChat/Resources/Models/**'
+```
+
+Observed counts:
+
+```
+App Swift files: 105
+Test Swift files: 31
+Context Swift files: 10
+Database Swift files: 19
+```
+
+Key propagation facts:
+
+- New production files are confined to `OpenChat/Core/Database` and `OpenChat/Core/ContextManager`.
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` only invalidates checkpoint cache after edit/delete history operations.
+- No new Feature-to-Feature dependency was introduced by checkpoint compression.
+- No Shared-to-Core dependency was introduced by checkpoint compression.
+
+## Focused verification
+
+Context:
+
+```
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CompressionPolicyTests -only-testing:OpenChatTests/CompressionSourceHasherTests -only-testing:OpenChatTests/PreparedHistoryTests -only-testing:OpenChatTests/CompressionSummarizerTests -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests
+```
+
+Result:
+
+```
+Test run with 14 tests in 6 suites passed
+** TEST SUCCEEDED **
+```
+
+Database:
+
+```
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/CompressionCheckpointDatabaseTests
+```
+
+Result:
+
+```
+Test run with 24 tests in 2 suites passed
+** TEST SUCCEEDED **
+```
+
+Chat/prompt:
+
+```
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests -only-testing:OpenChatTests/PromptAssemblerTests
+```
+
+Result:
+
+```
+Test run with 16 tests in 2 suites passed
+** TEST SUCCEEDED **
+```
+
+## Full verification
+
+Command:
+
+```
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+Result:
+
+```
+Test run with 187 tests in 41 suites passed
+** TEST SUCCEEDED **
+```
+
+## Propagation audit writeback
+
+- `arch/AntiEntropy/propagation-audit.md` has a new `2026-04-30 Checkpoint Compression Incremental Audit` section.
+- `arch/AntiEntropy/triangle-consistency.md` records checkpoint compression arch-src / arch-test / src-test alignment.
+- `arch/AntiEntropy/index.md` now points to this harness folder and the 187-test current baseline.

@@ -15,9 +15,9 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。Swift Testing 报告 `166 tests in 34 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+结果：成功。Swift Testing 报告 `187 tests in 41 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 166 个 Swift Testing 测试。API/Responses/reasoning 相关新增测试已纳入基线；2026-04-30 Memory embedding/vector/retrieval 可靠性测试也已纳入当前基线。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 187 个 Swift Testing 测试。API/Responses/reasoning 相关新增测试已纳入基线；2026-04-30 Memory embedding/vector/retrieval 可靠性测试也已纳入当前基线。
 
 ## 总体结论
 
@@ -25,7 +25,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|
 | `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路当前输入重复风险已有 Feature 级测试覆盖，但仍缺少 UI 自动化测试。 |
 | `arch-src` | 局部不一致 | Prompt 时间格式、Memory 目录/触发时机、migration 约束已按当前源码回写；Feature 分层说明仍有漂移，留待 Task 6。 |
-| `arch-test` | 基本一致 | 测试数量已回写为 166；Prompt 顺序/时间、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 187；Prompt 顺序/时间、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -33,11 +33,11 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|---|
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖 ISO8601 时间、before_history -> memory -> exampleDialogs 顺序；Chat 发送链路去重由 Feature 级测试覆盖。 |
-| ContextManager | 基本一致 | 部分不一致 | Truncation/Compression 测试通过，但 arch 的 40%链路依赖 Prompt 端到端仍需覆盖。 |
-| Memory | 一致 | 基本一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、fallback 注入；周期阈值 / `ChatView.onDisappear` 自动触发路径仍需端到端测试；full suite 为 166 tests / 34 suites。 |
+| ContextManager | 一致 | 一致 | Truncation、CompressionPolicy、source hash、PreparedHistory、CompressionSummarizer、CheckpointCompactor、checkpoint reuse 与 fallback 均有测试覆盖；Prompt 端到端仍通过 Chat 发送链路测试间接覆盖。 |
+| Memory | 一致 | 基本一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`ChatViewModelPromptAssemblyTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、fallback 注入；周期阈值 / `ChatView.onDisappear` 自动触发路径仍需端到端测试；full suite 为 187 tests / 41 suites。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；全局测试基线已更新为 166 tests，Settings UI/manual 覆盖仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models 测试通过；全局测试基线已更新为 187 tests，Settings UI/manual 覆盖仍需后续验收。 |
 
 ## 关键不一致
 
@@ -141,7 +141,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 - `arch-src`：一致。
 - `arch-test`：Memory vector reliability 一致；自动触发路径端到端测试待补。
-- `src-test`：focused memory/prompt suite 27 tests 通过；full suite 为 166 tests / 34 suites。
+- `src-test`：focused memory/prompt suite 27 tests 通过；full suite 为 187 tests / 41 suites。
 
 ### 6. 分层规则与当前 Feature 装配漂移
 
@@ -165,13 +165,13 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：2026-04-30 已把基线回写为 166 tests；API-client 对齐测试和 Memory embedding/vector/retrieval 可靠性测试均纳入当前基线。
+结论：2026-04-30 已把基线回写为 187 tests；API-client 对齐测试和 Memory embedding/vector/retrieval 可靠性测试均纳入当前基线。
 
 证据：
 
-- `arch/index.md` 已回写为“166 个 Swift Testing 测试全部通过”。
-- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（166 个）”。
-- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval 可靠性覆盖与 166-test full suite 结果。
+- `arch/index.md` 已回写为“187 个 Swift Testing 测试全部通过”。
+- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（187 个）”。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval 可靠性覆盖与 187-test full suite 结果。
 - `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
@@ -183,10 +183,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：166 tests passed。
+1. 当前工作区能编译并通过全量 Swift Testing：187 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
-3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重测试；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置与 embedding/vector/retrieval 可靠性、migration 约束和 166-test 基线；Feature 边界漂移留待后续分层修复计划。
+3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重与 checkpoint invalidation 测试；仍缺少 UI 自动化覆盖。
+4. arch 已回写 Prompt 时间格式、记忆顺序、Memory 位置与 embedding/vector/retrieval 可靠性、migration 约束、checkpoint compression 语义和 187-test 基线；Feature 边界漂移留待后续分层修复计划。
 
 ## 修复顺序状态
 
@@ -196,12 +196,38 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Memory 与 before_history 世界书顺序 | Closed：统一为 `before_history -> memory -> exampleDialogs`，PromptAssemblerTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回周期性触发、onDisappear 触发、增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 166 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 187 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
 
 - `src-test`：新增 Chat 发送链路测试，锁定当前输入只进入 request messages 一次。
 - `arch-src`：Prompt 时间上下文统一为 `[Time] <ISO8601> [/Time]`；Prompt 段顺序统一为 `before_history -> memory -> exampleDialogs`；migration 源码不再引用 runtime Record/enum 符号。
-- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；EmbeddingServiceTests / VectorStoreTests / MemoryManagerRetrievalTests / ChatViewModelPromptAssemblyTests 覆盖 Memory 可靠性；全量基线更新为 166 tests。
+- `arch-test`：PromptAssemblerTests 覆盖 ISO8601 和 memory/world-book 相对顺序；MigrationTests 覆盖 migration 源码约束；EmbeddingServiceTests / VectorStoreTests / MemoryManagerRetrievalTests / ChatViewModelPromptAssemblyTests 覆盖 Memory 可靠性；全量基线更新为 187 tests。
 - 分层漂移：Task 6 将单独处理，不在本次 prompt/db/doc 修复中混入跨层搬迁。
+
+## Checkpoint Compression 三边一致性写回（2026-04-30）
+
+范围：`OpenChat/Core/Database/*Compression*`、`OpenChat/Core/ContextManager/*Compression*`、`OpenChat/Core/ContextManager/CheckpointCompactor.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`、`OpenChatTests/Core/ContextManagerTests/*`、`OpenChatTests/Core/DatabaseTests/CompressionCheckpointDatabaseTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、`arch/modules/context-manager.md`、`arch/data-model.md`。
+
+### arch-src
+
+- `arch/data-model.md` 已新增 `conversation_compression_checkpoint` 表，字段与 `CompressionCheckpointRecord`、`v11_create_compression_checkpoints` 一致。
+- `arch/modules/context-manager.md` 已从“每轮临时摘要”改为 checkpoint compression：复用有效 checkpoint，超过 `CompressionPolicy.autoCompactTokenLimit` 才压缩，成功后保存，失败 fallback truncation。
+- `.github/instructions/context-manager.instructions.md` 已同步 `gpt-5.5` effective compact window、90% 阈值、checkpoint invalidation 和不写半成品规则。
+
+### arch-test
+
+- `MigrationTests` 覆盖 v11 表存在、列集合、conversation delete cascade。
+- `CompressionCheckpointDatabaseTests` 覆盖 latest checkpoint 查询和受影响 checkpoint 删除。
+- `CompressionPolicyTests` 覆盖 `gpt-5.5` 258k effective window、OpenChat 40% cap、大上下文非 GPT-5.5 阈值。
+- `CompressionSourceHasherTests`、`PreparedHistoryTests`、`CompressionSummarizerTests` 覆盖 source hash、旧 PromptAssembler 兼容出口和 checkpoint summarizer request。
+- `CheckpointCompactorTests` 与 `CompressionCheckpointReuseTests` 覆盖低于阈值不调用网络、超过阈值保存 checkpoint、复用 checkpoint、压缩失败 fallback 且不保存 checkpoint。
+- `ChatViewModelPromptAssemblyTests` 覆盖编辑/删除消息时删除受影响 checkpoint。
+
+### src-test
+
+- Focused context/database/chat checkpoint suite 已通过：
+  `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests -only-testing:OpenChatTests/CompressionStrategyTests`
+- Chat prompt suite 已通过：`xcodebuild test ... -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests`，7 tests passed。
+- Full suite 当前基线：187 tests / 41 suites，`** TEST SUCCEEDED **`。

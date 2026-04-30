@@ -416,4 +416,84 @@ struct ChatViewModelPromptAssemblyTests {
             $0.role == "system" && $0.content.contains("Ava promised to remember the silver key.")
         })
     }
+
+    @Test func test_editMessage_deletesAffectedCompressionCheckpoints() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "edit-checkpoint", contextStrategy: .compression)
+        let user = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "old user", sortOrder: 1)
+        let assistant = TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "old assistant", sortOrder: 2)
+        let checkpoint = TestHelpers.makeCompressionCheckpoint(
+            conversationId: conversation.id,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 2,
+            sourceHash: CompressionSourceHasher.hash(messages: [user, assistant]),
+            summary: "old summary"
+        )
+        try await databaseManager.write { db in
+            try conversation.insert(db)
+            try user.insert(db)
+            try assistant.insert(db)
+            try checkpoint.insert(db)
+        }
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.editMessage(user.id, newContent: "edited user")
+
+        let checkpoints = try await databaseManager.fetchCompressionCheckpoints(conversationId: conversation.id)
+        #expect(checkpoints.isEmpty)
+    }
+
+    @Test func test_deleteMessage_deletesAffectedCompressionCheckpoints() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "delete-checkpoint", contextStrategy: .compression)
+        let user = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "old user", sortOrder: 1)
+        let assistant = TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "old assistant", sortOrder: 2)
+        let checkpoint = TestHelpers.makeCompressionCheckpoint(
+            conversationId: conversation.id,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 2,
+            sourceHash: CompressionSourceHasher.hash(messages: [user, assistant]),
+            summary: "old summary"
+        )
+        try await databaseManager.write { db in
+            try conversation.insert(db)
+            try user.insert(db)
+            try assistant.insert(db)
+            try checkpoint.insert(db)
+        }
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.deleteMessage(user.id)
+
+        let checkpoints = try await databaseManager.fetchCompressionCheckpoints(conversationId: conversation.id)
+        #expect(checkpoints.isEmpty)
+    }
 }
