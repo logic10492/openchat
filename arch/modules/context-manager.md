@@ -187,17 +187,18 @@ Produce a durable handoff summary that will replace older transcript items.
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  ChatViewModel: 用户发送消息                           │
+│  ChatViewModel+Support.generateResponse()              │
+│  先调用 PromptAssembler.preview() 计算 fixedTokens      │
 └──────────┬────────────────────────────────────────────┘
            │
            ▼
 ┌───────────────────────────────────────────────────────┐
-│  ContextManager.prepareHistory()                       │
+│  ContextManager.prepareHistory(messages:...)           │
 │  1. 从 DB 加载会话全部消息                              │
-│  2. 计算固定段 token（由调用方传入 fixedTokens）        │
-│  3. 通过 CompressionPolicy 计算历史预算与压缩阈值        │
+│  2. 接收 preview.fixedTokens                            │
+│  3. 按 conversation.contextStrategy 选择策略             │
 │  4. compression 策略优先复用有效 checkpoint              │
-│  5. 必要时生成新 checkpoint，返回兼容 [MessageRecord]    │
+│  5. 必要时生成新 checkpoint，返回 processedHistory        │
 └──────────┬────────────────────────────────────────────┘
            │
            ▼
@@ -268,3 +269,28 @@ Produce a durable handoff summary that will replace older transcript items.
   - `OpenChatTests/Core/ContextManagerTests/TruncationStrategyTests.swift`
   - `OpenChatTests/Core/ContextManagerTests/CompressionStrategyTests.swift`
 - 当前实现已对齐两阶段调用链：`PromptAssembler.preview(...)` 先计算固定段，再由 `ContextManager.prepareHistory(...)` 处理历史消息，最后完成最终拼装
+
+## 实现证据（2026-04-30）
+
+- 当前主链路：
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 调用 `PromptAssembler.preview(...)` 计算 `fixedTokens`，再调用 `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)`，最后将 `processedHistory` 传入 `PromptAssembler.assemble(...)`。
+  - `OpenChat/Core/ContextManager/ContextManager.swift` — 根据 `conversation.contextStrategyValue` 选择 truncation 或 checkpoint compression；`prepareHistory(...)` 保持旧 `[MessageRecord]` 兼容出口。
+  - `OpenChat/Core/ContextManager/CheckpointCompactor.swift` — 复用有效 checkpoint，超过阈值时压缩 checkpoint 后的旧历史段；复用时校验 source hash 和生成时阈值。
+  - `OpenChat/Core/ContextManager/CompressionPolicy.swift` / `CompressionMode.swift` — 根据 `conversation.compressionMode` 计算 standard / highIntelligence 阈值。
+  - `OpenChat/Core/ContextManager/PreparedHistory.swift` — 将 checkpoint summary 转成旧 PromptAssembler 可接收的 `[Previously]` system 消息。
+- 持久化证据：
+  - `OpenChat/Core/Database/Migrations.swift` — `v11_create_compression_checkpoints` 与 `v12_add_compression_mode_to_conversation`。
+  - `OpenChat/Core/Database/Records/ConversationRecord.swift` — `contextStrategyValue`、`compressionModeValue` 和 checkpoint 关系。
+  - `OpenChat/Core/Database/DatabaseManager+CompressionCheckpoints.swift` — checkpoint 保存、读取、失效。
+- 已验证测试：
+  - `OpenChatTests/Core/ContextManagerTests/CompressionPolicyTests.swift`
+  - `OpenChatTests/Core/ContextManagerTests/CheckpointCompactorTests.swift`
+  - `OpenChatTests/Core/ContextManagerTests/CompressionCheckpointReuseTests.swift`
+  - `OpenChatTests/Core/DatabaseTests/CompressionCheckpointDatabaseTests.swift`
+  - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
+  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`
+- 验证记录：
+  - `harness/2026.04.30/checkpoint-compression/evidence.txt`
+  - `arch/AntiEntropy/propagation-audit.md#2026-04-30-compression-mode-threshold-incremental-audit`
+  - Focused compression mode suite：39 tests / 4 suites passed。
+  - Full suite：192 tests / 41 suites passed。

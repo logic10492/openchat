@@ -143,11 +143,25 @@ struct TokenBudget {
 
 ```swift
 struct PromptAssembler {
+    /// 预计算固定段、动态世界书/记忆/示例对话、fixedTokens 与 historyBudget。
+    /// ChatViewModel 会先用该结果调用 ContextManager 处理历史消息。
+    static func preview(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        worldBook: WorldBookRecord?,
+        worldBookEntries: [WorldBookEntryRecord],
+        memories: [MemoryEntryRecord],
+        recentMessages: [MessageRecord],
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> PromptAssemblyPreview
+
     /// 拼装完整的 messages 数组
     /// - conversation: 当前会话记录
     /// - characterCard: 绑定的角色卡（可选）
     /// - worldBook: 绑定的世界书（可选）
-    /// - recentMessages: 经 ContextManager 处理后的历史消息
+    /// - recentMessages: 用于世界书关键词触发和 preview 预算的候选历史；不包含本轮当前输入
+    /// - processedHistory: ContextManager 返回的剔除/压缩后历史
     /// - currentInput: 用户当前输入
     /// - endpoint: API 端点配置（提供 maxContextTokens）
     /// - returns: 拼装好的 ChatMessage 数组 + token 使用统计
@@ -158,9 +172,18 @@ struct PromptAssembler {
         worldBookEntries: [WorldBookEntryRecord],
         memories: [MemoryEntryRecord],
         recentMessages: [MessageRecord],
+        processedHistory: [MessageRecord],
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> AssemblyResult
+}
+
+struct PromptAssemblyPreview {
+    let messagesBeforeHistory: [ChatMessage]
+    let fixedTokens: Int
+    let historyBudget: Int
+    let tokenUsage: TokenUsageReport
+    let triggeredEntries: [String]
 }
 
 struct AssemblyResult {
@@ -252,7 +275,7 @@ struct TokenCounter {
 ## 6. 拼装流程伪代码
 
 ```
-function assemble(conversation, characterCard, worldBook, entries, memories, history, input, endpoint):
+function preview(conversation, characterCard, worldBook, entries, memories, history, input, endpoint):
     totalBudget = endpoint.maxContextTokens * 0.40
     segments = []
 
@@ -308,32 +331,32 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
     // 9. 计算 token 预算
     budget = TokenBudget.calculate(totalBudget, segments, ...)
 
-    // 10. 历史消息（从最近到最远，直到预算耗尽）
-    remainingTokens = budget.historyMaxTokens
-    for msg in history.reversed():
-        tokens = TokenCounter.count(msg)
-        if remainingTokens - tokens < 0: break
-        segments.insert(.historyMessage(msg), atCorrectPosition)
-        remainingTokens -= tokens
+    // 10. 返回 history 处理前的固定段与 fixedTokens
+    return PromptAssemblyPreview(messagesBeforeHistory, fixedTokens, historyBudget)
 
-    // 11. 当前用户输入
-    segments.append(.currentInput(input))
+function assemble(preview, processedHistory, input):
+    segments = preview.messagesBeforeHistory
+    append processedHistory as historyMessage
+    append current user input
 
-    // 12. 裁剪超预算的世界书/记忆/示例对话
-    trimOverBudgetSegments(segments, budget)
-
-    // 13. 转换为 [ChatMessage]
+    // 转换为 [ChatMessage] 并更新 TokenUsageReport.history / totalUsed
     return segments.map { $0.toChatMessage() }
 ```
+
+实际发送链路由 `ChatViewModel+Support.generateResponse(...)` 串联：
+
+1. `PromptAssembler.preview(...)` 计算固定段、动态段裁剪结果、`fixedTokens` 和初始 token usage。
+2. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 使用 `fixedTokens` 处理历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
+3. `PromptAssembler.assemble(... processedHistory: ...)` 拼接 `messagesBeforeHistory + processedHistory + currentInput`，并更新最终 `TokenUsageReport`。
 
 ## 7. 与其他模块的交互
 
 | 交互对象 | 交互方式 |
 |---|---|
 | `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、MemoryEntryRecord、ConversationRecord |
-| `Core/ContextManager` | ContextManager 先处理历史消息（剔除/压缩），再传入 PromptAssembler |
+| `Core/ContextManager` | PromptAssembler.preview 先计算 fixedTokens；ContextManager 据此处理历史消息（剔除/压缩）；PromptAssembler.assemble 接收 processedHistory |
 | `Core/Memory` | MemoryManager 检索记忆后传入 PromptAssembler |
-| `Features/Chat` | ChatViewModel 在发送消息时调用 PromptAssembler.assemble() |
+| `Features/Chat` | ChatViewModel 在发送消息时调用 `PromptAssembler.preview(...)` 和 `PromptAssembler.assemble(...)` |
 | `Shared/Extensions` | 使用 String+Token 扩展的 token 计数方法 |
 
 ## 8. 设计决策
@@ -361,3 +384,23 @@ function assemble(conversation, characterCard, worldBook, entries, memories, his
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
 - 当前实现已具备角色卡字段注入、世界书关键词触发、固定段预估与历史预算协作的基础能力，可支撑聊天主链路运行
+
+## 实现证据（更新于 2026-04-30）
+
+- 当前主链路：
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `PromptAssembler.preview(...) -> ContextManager.prepareHistory(...) -> PromptAssembler.assemble(... processedHistory:)`。
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(...)` 计算 `messagesBeforeHistory`、`fixedTokens`、`historyBudget`、`TokenUsageReport` 与触发的世界书条目；`assemble(...)` 拼接 `processedHistory` 和当前用户输入。
+  - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — `PromptAssemblyPreview` / `AssemblyResult` / `TokenUsageReport` 为当前 prompt 链路的返回结构。
+  - `OpenChat/Core/ContextManager/PreparedHistory.swift` — compression checkpoint 通过旧兼容出口变成 PromptAssembler 可消费的历史消息。
+- 当前实现描述：
+  - 世界书触发上下文使用 `recentMessages.suffix(5) + currentInput`，其中 `recentMessages` 会排除本轮刚持久化的用户输入，避免当前输入重复进入历史与 final user message。
+  - `preview(...)` 中的 `before_history` 世界书条目位于 memory 前，memory 位于 example dialogs 前。
+  - `assemble(...)` 只接收 ContextManager 已处理的 `processedHistory`，不会自行截断或压缩历史。
+- 已验证测试：
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift` — 覆盖段顺序、ISO8601 时间、memory 注入、slowPlotDirective、token budget 和 `assemble(... processedHistory:)`。
+  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` — 覆盖真实发送链路中当前输入只发送一次、memory fallback 注入、checkpoint invalidation、compression mode 持久化。
+  - `OpenChatTests/Core/ContextManagerTests/CompressionCheckpointReuseTests.swift` — 覆盖 checkpoint summary 通过 processed history 进入 prompt 历史。
+- 验证记录：
+  - `harness/2026.04.30/checkpoint-compression/evidence.txt`
+  - `arch/AntiEntropy/triangle-consistency.md#checkpoint-compression-三边一致性写回2026-04-30`
+  - Full suite：192 tests / 41 suites passed。
