@@ -3,3 +3,6 @@ DerivedData/
 .build/
 xcuserdata/
 *.xcresult
+.obsidian/
+.serena/
+.vscode/
