@@ -5,9 +5,9 @@
 
 ## 1. 功能范围
 
-- 控制发送给模型的上下文长度在 40% 以内
+- 控制发送给模型的上下文长度在标准模式 40% 以内；高智能压缩模式提前在 25% effective window 的 90% 处触发压缩
 - 提供两种上下文缩减策略：对话剔除（Truncation）与对话压缩（Compression）
-- 策略可按会话独立配置
+- 策略和压缩模式可按会话独立配置
 - 与 PromptEngine 协作，在拼装前预处理历史消息
 
 ## 2. 文件清单与职责
@@ -17,7 +17,8 @@
 | `ContextManager.swift` | 主调度器，根据会话配置选择策略，返回处理后的历史消息 |
 | `ContextStrategy.swift` | 策略协议定义 + 枚举 |
 | `TruncationStrategy.swift` | 对话剔除策略实现 |
-| `CompressionPolicy.swift` | 计算 OpenChat 40% 预算、Codex 风格 effective compact window 与自动压缩阈值 |
+| `CompressionMode.swift` | 会话级压缩模式：standard / highIntelligence |
+| `CompressionPolicy.swift` | 按会话压缩模式计算 prompt budget、effective compact window 与自动压缩阈值 |
 | `CompressionSourceHasher.swift` | 对 checkpoint 覆盖的消息范围生成 SHA256 source hash |
 | `PreparedHistory.swift` | 表达 `compressed context + checkpoint 后 message history`，并提供旧 PromptAssembler 兼容出口 |
 | `CompressionSummarizer.swift` | 包装 API 压缩提示词，不直接访问数据库 |
@@ -52,7 +53,18 @@ enum ContextStrategy: String, Codable {
 
 用户在每个会话中选择策略，存储在 `conversation.contextStrategy` 字段。
 
-### 3.3 ContextManager 主接口
+### 3.3 压缩模式枚举
+
+```swift
+enum CompressionMode: String, Codable {
+    case standard          // 标准模式：上下文窗口 × 40%
+    case highIntelligence  // 高智能模式：上下文窗口 × 25% × 90%
+}
+```
+
+用户在每个会话中选择压缩模式，存储在 `conversation.compressionMode` 字段；仅当 `conversation.contextStrategy == "compression"` 时参与压缩阈值计算。
+
+### 3.4 ContextManager 主接口
 
 ```swift
 struct ContextManager {
@@ -126,8 +138,8 @@ function truncate(allMessages, tokenBudget):
 
 ```
 function prepareCheckpointHistory(allMessages, fixedTokens):
-    policy = CompressionPolicy(endpoint)
-    latest = latestValidCheckpoint(conversationId, allMessages)
+    policy = CompressionPolicy(endpoint, conversation.compressionMode)
+    latest = latestValidCheckpoint(conversationId, policy, allMessages)
     checkpointEnd = latest?.sourceEndSortOrder ?? 0
     afterCheckpoint = allMessages where sortOrder > checkpointEnd
     activeTokens = fixedTokens + latest.summaryTokenCount + tokenCount(afterCheckpoint)
@@ -148,9 +160,10 @@ function prepareCheckpointHistory(allMessages, fixedTokens):
 
 ### 5.3 阈值
 
-- OpenChat 仍保持 `endpoint.maxContextTokens × 0.40` 硬上限。
-- checkpoint 自动压缩阈值为 `min(promptTokenBudget, effectiveCompactWindowTokens × 0.90)`。
-- `gpt-5.5` 系列模型虽然可配置为 1M 上下文，但压缩阈值按 Codex 事实窗口 `258_000 × 0.90 = 232_200` 计算，并继续受 OpenChat `maxContextTokens × 0.40` 硬上限约束。
+- `standard`：`promptTokenBudget = endpoint.maxContextTokens × 0.40`，`autoCompactTokenLimit = promptTokenBudget`。
+- `highIntelligence`：`effectiveCompactWindowTokens = endpoint.maxContextTokens × 0.25`，`autoCompactTokenLimit = effectiveCompactWindowTokens × 0.90`。
+- `historyBudget(fixedTokens:)` 始终从当前模式的 `autoCompactTokenLimit` 中扣除 system prompt、角色描述、世界书、记忆、当前输入等固定段 token。
+- checkpoint 复用必须同时满足 source hash 有效、`effectiveCompactWindowTokens` 与 `autoCompactTokenLimit` 与当前模式一致，避免切换模式后复用旧阈值摘要。
 
 ### 5.4 压缩 API 调用
 
@@ -229,6 +242,7 @@ Produce a durable handoff summary that will replace older transcript items.
 │ ( ) 对话压缩                            │
 │     调用 API 将旧消息压缩为摘要          │
 │     适用于：可使用云端 API / 需保留语义  │
+│     压缩模式: [标准 ▾]                  │
 │     ⓘ 压缩时会短暂增加响应时间          │
 │                                         │
 │ [使用默认策略]                           │
@@ -237,7 +251,7 @@ Produce a durable handoff summary that will replace older transcript items.
 
 ## 8. 设计决策
 
-1. **40% 上下文比例**：这是一个保守策略，确保模型有足够的"生成空间"和"注意力专注度"。特别是小模型（7B-13B），过长上下文会显著降低生成质量
+1. **可选压缩阈值取向**：标准模式沿用 40% 上下文比例；高智能模式提前在 25% effective window 的 90% 处压缩，优先保留生成空间和注意力稳定性
 2. **两阶段调用**：虽然略增复杂度，但保证世界书动态注入与历史预算计算的准确性
 3. **checkpoint 持久化**：避免每轮重复压缩，同一段旧消息只压缩一次，并跨后续请求复用
 4. **保留原始内容**：checkpoint 不删除原始消息，后续编辑/删除历史时通过 checkpoint invalidation 保证摘要不会过期

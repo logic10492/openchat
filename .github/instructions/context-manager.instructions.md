@@ -4,11 +4,14 @@ applyTo: "**/ContextManager/**/*.swift"
 ---
 # 上下文管理规范
 
-## 40% 预算规则
+## 上下文预算规则
 
 - 发送给模型的总上下文（包括所有 prompt 段 + 历史消息 + 当前输入）不超过 `endpoint.maxContextTokens × 0.40`
 - 该比例是硬性上限，不可通过配置突破
 - 剩余 60% 留给模型生成和注意力安全余量
+- 当会话使用压缩策略时，`conversation.compressionMode` 决定自动压缩阈值取向：
+  - `standard`：自动压缩阈值为 `endpoint.maxContextTokens × 0.40`
+  - `highIntelligence`：effective compact window 为 `endpoint.maxContextTokens × 0.25`，自动压缩阈值为该 effective window 的 90%
 
 ## 策略协议
 
@@ -29,10 +32,11 @@ protocol ContextStrategyProtocol {
 ## 对话压缩 (Checkpoint Compression)
 
 - 压缩不是每轮临时摘要；只有超过 `CompressionPolicy.autoCompactTokenLimit` 时才生成 checkpoint
-- `autoCompactTokenLimit = min(endpoint.maxContextTokens × 0.40, effectiveCompactWindowTokens × 0.90)`
-- `gpt-5.5` 系列的 `effectiveCompactWindowTokens` 固定按 Codex 参考值 `258_000` 计算，因此默认压缩阈值为 `232_200`
+- `standard` 模式：`autoCompactTokenLimit = endpoint.maxContextTokens × 0.40`
+- `highIntelligence` 模式：`effectiveCompactWindowTokens = endpoint.maxContextTokens × 0.25`，`autoCompactTokenLimit = effectiveCompactWindowTokens × 0.90`
 - checkpoint 存储于 `conversation_compression_checkpoint`
 - checkpoint 必须记录 `sourceStartSortOrder`、`sourceEndSortOrder`、`sourceHash`、`summary`、`createdAt`、`endpointId`、`modelName`
+- checkpoint 复用时必须校验 source hash，并且生成时的 `effectiveCompactWindowTokens` / `autoCompactTokenLimit` 必须与当前 `CompressionPolicy` 一致；切换压缩模式后不能复用旧阈值 checkpoint
 - 同一段旧消息只压缩一次；后续请求复用最近有效 checkpoint
 - 生成新 checkpoint 时只压缩上一个 checkpoint 之后的旧历史段，并将旧 summary 合并进新 summary
 - 本轮 prompt 使用 `compressed context + checkpoint 后 message history`
@@ -42,6 +46,7 @@ protocol ContextStrategyProtocol {
 ## 策略选择
 
 - 每个会话通过 `conversation.contextStrategy` 字段选择策略
+- 每个会话通过 `conversation.compressionMode` 字段选择压缩模式；仅当 `contextStrategy == compression` 时生效
 - 默认策略由全局设置 `default_context_strategy` 决定
 - 策略切换即时生效（下次发送消息时使用新策略）
 

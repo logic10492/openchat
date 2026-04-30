@@ -30,6 +30,7 @@ enum TestHelpers {
         id: String = UUID().uuidString,
         title: String = "Test Conversation",
         contextStrategy: ContextStrategy = .truncation,
+        compressionMode: CompressionMode = .standard,
         modelName: String? = nil,
         slowPlotMode: Bool = true
     ) -> ConversationRecord {
@@ -40,6 +41,7 @@ enum TestHelpers {
             apiEndpointId: nil,
             modelName: modelName,
             contextStrategy: contextStrategy.rawValue,
+            compressionMode: compressionMode.rawValue,
             customScenario: nil,
             modelParameters: nil,
             slowPlotMode: slowPlotMode,

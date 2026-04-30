@@ -213,7 +213,7 @@
 - `ChatViewModelPromptAssemblyTests`
 - Focused command: `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/EmbeddingServiceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 26 tests passed，`** TEST SUCCEEDED **`。
 - Focused memory/prompt command including `PromptAssemblerTests`：27 tests / 5 suites passed，`** TEST SUCCEEDED **`。
-- Full suite：该轮审计时为 166 tests / 34 suites passed，`** TEST SUCCEEDED **`；最新 checkpoint compression 审计已更新为 187 tests / 41 suites。
+- Full suite：该轮审计时为 166 tests / 34 suites passed，`** TEST SUCCEEDED **`；最新 compression mode 审计已更新为 192 tests / 41 suites。
 
 ## 2026-04-30 Checkpoint Compression Incremental Audit
 
@@ -231,9 +231,9 @@
 
 本轮静态计数：
 
-- App Swift files: 105
+- App Swift files: 106
 - Test Swift files: 31
-- Context Swift files: 10
+- Context Swift files: 11
 - Database Swift files: 19
 
 ### 行为传播链路
@@ -260,11 +260,42 @@
 
 - `arch-src`：`arch/data-model.md`、`arch/modules/context-manager.md`、`.github/instructions/context-manager.instructions.md` 已写回 checkpoint schema、Codex 风格阈值语义、复用/失效/fallback 行为。
 - `arch-test`：新增 migration/database/context/chat 测试覆盖 v11 表、checkpoint CRUD、source hash、policy、summarizer、compactor、复用和编辑/删除失效。
-- `src-test`：focused suites 与 full suite 均通过，当前基线为 187 tests / 41 suites。
+- `src-test`：focused suites 与 full suite 均通过，当前基线为 192 tests / 41 suites。
 
 ### 验证
 
 - Context focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CompressionPolicyTests -only-testing:OpenChatTests/CompressionSourceHasherTests -only-testing:OpenChatTests/PreparedHistoryTests -only-testing:OpenChatTests/CompressionSummarizerTests -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests`，结果 14 tests / 6 suites passed，`** TEST SUCCEEDED **`。
 - Database focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/CompressionCheckpointDatabaseTests`，结果 24 tests / 2 suites passed，`** TEST SUCCEEDED **`。
 - Chat/prompt focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests -only-testing:OpenChatTests/PromptAssemblerTests`，结果 16 tests / 2 suites passed，`** TEST SUCCEEDED **`。
-- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 187 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 192 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+
+## 2026-04-30 Compression Mode Threshold Incremental Audit
+
+范围：`OpenChat/Core/ContextManager/CompressionMode.swift`、`CompressionPolicy.swift`、`CheckpointCompactor.swift`、`ContextManager.swift`、`ConversationRecord.swift`、`Migrations.swift`、`ChatViewModel.swift`、`ChatSettingsSheet.swift`、conversation preview/test helpers、压缩策略与迁移测试、context-manager / data-model / settings 文档。
+
+审计模式：窄范围增量审计。该轮不新增大型目录，不改变 Feature 间依赖方向；传播面集中在会话设置、conversation schema、ContextManager policy 和 checkpoint 复用判断。
+
+### 静态传播面
+
+- `CompressionMode` 是 Core/ContextManager 内的会话级枚举，当前值为 `standard` 与 `highIntelligence`。
+- `ConversationRecord` 新增 `compressionMode` 字段和 `compressionModeValue` 解析辅助；`v12_add_compression_mode_to_conversation` 只追加列并默认 `standard`。
+- `ChatViewModel` 读取并保存 `selectedCompressionMode`；`ChatSettingsSheet` 仅在 `.compression` strategy 下显示 picker。
+- `CompressionPolicy` 不再读取模型名特判阈值；阈值由 `compressionMode` 决定。
+- `CheckpointCompactor.latestValidCheckpoint` 复用 checkpoint 时同时校验 source hash 与生成时阈值，避免模式切换后复用旧摘要。
+
+### 行为传播链路
+
+`ChatSettingsSheet -> ChatViewModel.selectedCompressionMode -> ConversationRecord.compressionMode -> ContextManager.prepareContextHistory -> CompressionPolicy(endpoint:compressionMode:) -> CheckpointCompactor.latestValidCheckpoint / saveCompressionCheckpoint`
+
+结论：
+
+- 标准模式下，自动压缩阈值为 `endpoint.maxContextTokens × 0.40`。
+- 高智能模式下，effective compact window 为 `endpoint.maxContextTokens × 0.25`，自动压缩阈值为该 effective window 的 90%。
+- 旧会话通过 v12 默认值继续走标准模式，不改变既有 40% 行为。
+- 新模式没有新增 Feature-to-Feature 依赖；Chat 仍只通过 Core service 和 conversation record 交互。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/context-manager.md`、`arch/data-model.md`、`arch/modules/settings/context-strategy.md`、`.github/instructions/context-manager.instructions.md` 已写回 compression mode、v12 schema、阈值公式和 checkpoint 阈值匹配复用规则。
+- `arch-test`：`CompressionPolicyTests`、`MigrationTests`、`CompressionCheckpointReuseTests`、`ChatViewModelPromptAssemblyTests` 覆盖阈值公式、v12 默认值、模式切换不复用旧 checkpoint、设置持久化。
+- `src-test`：focused compression mode suite 39 tests / 4 suites passed；full suite 192 tests / 41 suites passed，`** TEST SUCCEEDED **`。

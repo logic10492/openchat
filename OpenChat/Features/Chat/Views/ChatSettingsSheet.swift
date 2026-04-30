@@ -46,6 +46,14 @@ struct ChatSettingsSheet: View {
                         }
                     }
 
+                    if viewModel.selectedContextStrategy == .compression {
+                        Picker(String(localized: "Compression Mode"), selection: compressionModeBinding) {
+                            ForEach(CompressionMode.allCases, id: \.rawValue) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                    }
+
                     TextField(String(localized: "Custom Scenario"), text: scenarioBinding, axis: .vertical)
 
                     Toggle(String(localized: "Slow Plot Progression (Beta)"), isOn: slowPlotModeBinding)
@@ -115,6 +123,11 @@ struct ChatSettingsSheet: View {
     private var strategyBinding: Binding<ContextStrategy> {
         @Bindable var viewModel = viewModel
         return $viewModel.selectedContextStrategy
+    }
+
+    private var compressionModeBinding: Binding<CompressionMode> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.selectedCompressionMode
     }
 
     private var scenarioBinding: Binding<String> {

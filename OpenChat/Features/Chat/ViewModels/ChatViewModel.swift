@@ -27,6 +27,7 @@ final class ChatViewModel {
     var selectedModelName: String?
     var selectedCharacterCardID: String?
     var selectedContextStrategy: ContextStrategy
+    var selectedCompressionMode: CompressionMode
     var customScenario = ""
     var slowPlotMode: Bool
     var modelTemperature = AppConstants.defaultTemperature
@@ -75,6 +76,7 @@ final class ChatViewModel {
         selectedModelName = conversation.modelName
         selectedCharacterCardID = conversation.characterCardId
         selectedContextStrategy = ContextStrategy(rawValue: conversation.contextStrategy) ?? .truncation
+        selectedCompressionMode = conversation.compressionModeValue
         customScenario = conversation.customScenario ?? ""
         slowPlotMode = conversation.slowPlotMode
         showDetailedStats = UserDefaults.standard.bool(forKey: "show_detailed_stats")
@@ -253,6 +255,7 @@ final class ChatViewModel {
         conversation.modelName = selectedModelName
         conversation.characterCardId = selectedCharacterCardID
         conversation.contextStrategy = selectedContextStrategy.rawValue
+        conversation.compressionMode = selectedCompressionMode.rawValue
         conversation.customScenario = customScenario.nilIfBlank
         conversation.slowPlotMode = slowPlotMode
         conversation.modelParameters = RecordCoders.encode(currentParameters)

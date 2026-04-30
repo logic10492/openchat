@@ -24,7 +24,8 @@ struct MigrationTests {
             ".databaseTableName",
             "APIMode.",
             "WorldBookEntryPosition.",
-            "ContextStrategy."
+            "ContextStrategy.",
+            "CompressionMode."
         ]
         let violations = forbiddenReferences.filter { source.contains($0) }
 
@@ -395,5 +396,40 @@ struct MigrationTests {
             try CompressionCheckpointRecord.fetchCount(db)
         }
         #expect(count == 0)
+    }
+
+    // MARK: - v12 compression mode
+
+    @Test func test_v12_conversation_has_compressionMode_column() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "conversation").map(\.name)
+        }
+
+        #expect(columns.contains("compressionMode"))
+    }
+
+    @Test func test_v12_compressionMode_defaults_to_standard() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+
+        try await manager.write { db in
+            try db.execute(sql: """
+                INSERT INTO conversation (
+                    id, title, contextStrategy, slowPlotMode, isTitleGenerated, isPinned, createdAt, updatedAt
+                )
+                VALUES ('conv-compression-mode-default', 'Mode Default', 'compression', 1, 0, 0, ?, ?)
+                """, arguments: [now, now])
+        }
+
+        let compressionMode = try await manager.read { db in
+            try Row.fetchOne(
+                db,
+                sql: "SELECT compressionMode FROM conversation WHERE id = ?",
+                arguments: ["conv-compression-mode-default"]
+            )?["compressionMode"] as String?
+        }
+
+        #expect(compressionMode == "standard")
     }
 }

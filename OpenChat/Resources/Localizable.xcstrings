@@ -289,6 +289,16 @@
         }
       }
     },
+    "Compression Mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩模式"
+          }
+        }
+      }
+    },
     "Connection succeeded." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1066,6 +1076,16 @@
         }
       }
     },
+    "High Intelligence" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高智能"
+          }
+        }
+      }
+    },
     "Speech Style" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1128,6 +1148,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标签（逗号分隔）"
+          }
+        }
+      }
+    },
+    "Standard" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准"
           }
         }
       }

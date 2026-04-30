@@ -109,6 +109,36 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(parameters.reasoningEffort == .max)
     }
 
+    @Test func test_saveConversationSettings_persistsCompressionMode() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(
+            id: "conversation-compression-mode",
+            contextStrategy: .compression,
+            compressionMode: .standard
+        )
+        try await database.saveConversation(conversation)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        viewModel.selectedCompressionMode = .highIntelligence
+        await viewModel.saveConversationSettings()
+
+        let saved = try await database.fetchConversation(id: conversation.id)
+        #expect(saved?.compressionModeValue == .highIntelligence)
+    }
+
     @Test func test_selected_provider_dialect_falls_back_to_default_model_when_saved_model_is_stale() async throws {
         let database = try TestHelpers.makeDatabaseManager()
         let now = Date()

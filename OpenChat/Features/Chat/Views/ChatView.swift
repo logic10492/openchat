@@ -162,6 +162,7 @@ struct ChatView: View {
                     apiEndpointId: nil,
                     modelName: nil,
                     contextStrategy: "truncation",
+                    compressionMode: "standard",
                     customScenario: nil,
                     modelParameters: nil,
                     slowPlotMode: true,

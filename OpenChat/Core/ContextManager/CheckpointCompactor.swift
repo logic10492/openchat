@@ -10,10 +10,14 @@ struct CheckpointCompactor: Sendable {
         endpoint: APIEndpointConfig,
         fixedTokens: Int
     ) async throws -> PreparedHistory {
-        let policy = CompressionPolicy(endpoint: endpoint)
+        let policy = CompressionPolicy(
+            endpoint: endpoint,
+            compressionMode: conversation.compressionModeValue
+        )
         let checkpoints = try await databaseManager.fetchCompressionCheckpoints(conversationId: conversation.id)
         let latestCheckpoint = latestValidCheckpoint(
             checkpoints: checkpoints,
+            policy: policy,
             allMessages: allMessages
         )
         let checkpointEnd = latestCheckpoint?.sourceEndSortOrder ?? 0
@@ -92,6 +96,7 @@ struct CheckpointCompactor: Sendable {
 
     private func latestValidCheckpoint(
         checkpoints: [CompressionCheckpointRecord],
+        policy: CompressionPolicy,
         allMessages: [MessageRecord]
     ) -> CompressionCheckpointRecord? {
         let byID = Dictionary(uniqueKeysWithValues: checkpoints.map { ($0.id, $0) })
@@ -102,7 +107,11 @@ struct CheckpointCompactor: Sendable {
                 }
                 return lhs.sourceEndSortOrder > rhs.sourceEndSortOrder
             }
-            .first { isValid(checkpoint: $0, byID: byID, allMessages: allMessages) }
+            .first {
+                $0.effectiveCompactWindowTokens == policy.effectiveCompactWindowTokens
+                    && $0.autoCompactTokenLimit == policy.autoCompactTokenLimit
+                    && isValid(checkpoint: $0, byID: byID, allMessages: allMessages)
+            }
     }
 
     private func isValid(

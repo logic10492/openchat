@@ -420,7 +420,7 @@ final class MemoryListViewModel {
 - `VectorStoreTests`: memory/vector 原子写入、批量事务回滚、sqlite-vec KNN 角色隔离、删除同步、维度校验
 - `MemoryManagerRetrievalTests`: 检索异常 fallback 到近期记忆；提取失败不留下半索引记忆；批次失败不推进部分记忆
 - `ChatViewModelPromptAssemblyTests`: Chat 发送链路中 fallback 记忆进入 API request；当前输入只进入 API request 一次
-- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；full suite 为 187 tests / 41 suites，`** TEST SUCCEEDED **`。
+- 2026-04-30 focused memory/prompt suite 为 27 tests 通过；full suite 为 192 tests / 41 suites，`** TEST SUCCEEDED **`。
 
 ### 2026-04-16 修复
 

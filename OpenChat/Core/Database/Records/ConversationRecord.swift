@@ -10,6 +10,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     var apiEndpointId: String?
     var modelName: String?
     var contextStrategy: String
+    var compressionMode: String
     var customScenario: String?
     var modelParameters: String?
     var slowPlotMode: Bool
@@ -25,6 +26,10 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
 
     var contextStrategyValue: ContextStrategy {
         ContextStrategy(rawValue: contextStrategy) ?? .truncation
+    }
+
+    var compressionModeValue: CompressionMode {
+        CompressionMode(rawValue: compressionMode) ?? .standard
     }
 
     func modelParametersValue() throws -> ModelParameters? {

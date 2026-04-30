@@ -43,6 +43,49 @@ struct CompressionCheckpointReuseTests {
         #expect(history.map(\.content) == ["[Previously]\nstable summary", "recent"])
     }
 
+    @Test func test_prepareHistory_ignoresCheckpointCreatedWithDifferentCompressionModeThreshold() async throws {
+        let db = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(
+            id: "conv-mode-threshold",
+            contextStrategy: .compression,
+            compressionMode: .highIntelligence
+        )
+        let old = [
+            TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "old", sortOrder: 1),
+            TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "old reply", sortOrder: 2)
+        ]
+        let standardModeCheckpoint = TestHelpers.makeCompressionCheckpoint(
+            conversationId: conversation.id,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 2,
+            sourceHash: CompressionSourceHasher.hash(messages: old),
+            summary: "standard-mode summary",
+            effectiveCompactWindowTokens: 4096,
+            autoCompactTokenLimit: 1638
+        )
+        let recent = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "recent", sortOrder: 3)
+        try await db.write { database in
+            try conversation.insert(database)
+            for message in old { try message.insert(database) }
+            try recent.insert(database)
+            try standardModeCheckpoint.insert(database)
+        }
+
+        let session = MockURLProtocol.makeSession { _ in
+            throw APIError.networkError(underlying: URLError(.badServerResponse))
+        }
+        let contextManager = ContextManager(databaseManager: db, apiClient: APIClient(session: session))
+
+        let history = try await contextManager.prepareHistory(
+            messages: old + [recent],
+            conversation: conversation,
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4096),
+            fixedTokens: 10
+        )
+
+        #expect(history.map(\.content) == ["old", "old reply", "recent"])
+    }
+
     @Test func test_prepareHistory_fallsBackToTruncation_withoutSavingCheckpoint_whenCompressionFails() async throws {
         let db = try TestHelpers.makeDatabaseManager()
         let conversation = TestHelpers.makeConversation(id: "conv-fallback", contextStrategy: .compression)

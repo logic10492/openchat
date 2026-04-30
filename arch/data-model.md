@@ -204,9 +204,11 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
 | apiEndpointId | TEXT | FK → api_endpoint.id | 使用的 API 端点 |
 | modelName | TEXT | | 会话使用的模型名称（字符串引用，非 FK） |
 | contextStrategy | TEXT | NOT NULL, DEFAULT 'truncation' | 上下文策略：`truncation` / `compression` |
+| compressionMode | TEXT | NOT NULL, DEFAULT 'standard' | 压缩模式：`standard` / `highIntelligence`，仅在 compression 策略下生效 |
 | customScenario | TEXT | | 会话专属场景覆盖（优先于角色卡场景） |
 | modelParameters | TEXT | | 模型参数覆盖（JSON: `{"temperature":0.8,...}`） |
 | slowPlotMode | INTEGER | NOT NULL, DEFAULT 1 | 慢速剧情推进模式开关（beta） |
+| isTitleGenerated | INTEGER | NOT NULL, DEFAULT 0 | 标题是否已由模型生成或用户确认，避免重复自动改名 |
 | isPinned | INTEGER | NOT NULL, DEFAULT 0 | 是否置顶 |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 |
@@ -221,9 +223,11 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     var apiEndpointId: String?
     var modelName: String?           // 动态选择的模型名称
     var contextStrategy: String      // "truncation" | "compression"
+    var compressionMode: String      // "standard" | "highIntelligence"
     var customScenario: String?
     var modelParameters: String?     // JSON
     var slowPlotMode: Bool
+    var isTitleGenerated: Bool
     var isPinned: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -717,6 +721,20 @@ migrator.registerMigration("v11_create_compression_checkpoints") { db in
 }
 ```
 
+### v12_add_compression_mode_to_conversation
+
+为 `conversation` 添加会话级压缩模式。历史会话默认使用 `standard`，即自动压缩阈值沿用 `maxContextTokens × 0.40`；用户可在对话设置里切换到 `highIntelligence`，由 `CompressionPolicy` 使用 `maxContextTokens × 0.25 × 0.90` 作为自动压缩阈值。
+
+```swift
+migrator.registerMigration("v12_add_compression_mode_to_conversation") { db in
+    try db.alter(table: Historical.conversationTable) { t in
+        t.add(column: "compressionMode", .text)
+            .notNull()
+            .defaults(to: Historical.compressionModeStandard)
+    }
+}
+```
+
 ---
 
 ## 数据库初始化
@@ -744,4 +762,5 @@ final class DatabaseManager {
 3. **JSON 字段（exampleDialogs / keywords / tags / modelParameters）**：使用 TEXT 列存储 JSON 字符串，Swift 侧通过 Codable 解析。不使用独立关联表，减少表数量和查询复杂度
 4. **avatar 使用 BLOB**：角色卡头像通常较小（< 500KB），直接内嵌数据库简化文件管理
 5. **checkpoint 不替换原始消息**：上下文压缩摘要保存在 `conversation_compression_checkpoint`，原始 `message` 不删除、不改写，编辑或删除历史时删除受影响 checkpoint
-6. **sortOrder 而非时间排序**：消息编辑/插入/重新生成时，时间戳不能保证顺序正确，使用显式 sortOrder 更可靠
+6. **压缩模式属于会话状态**：`conversation.compressionMode` 决定 checkpoint 自动压缩阈值；checkpoint 记录生成时的阈值参数，模式切换后旧阈值 checkpoint 不再复用
+7. **sortOrder 而非时间排序**：消息编辑/插入/重新生成时，时间戳不能保证顺序正确，使用显式 sortOrder 更可靠

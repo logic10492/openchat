@@ -19,6 +19,7 @@ enum Migrations {
         static let providerDialectDeepSeekV4 = "deepSeekV4"
         static let worldBookEntryBeforeHistory = "before_history"
         static let contextStrategyTruncation = "truncation"
+        static let compressionModeStandard = "standard"
     }
 
     static func makeMigrator() -> DatabaseMigrator {
@@ -206,6 +207,13 @@ enum Migrations {
                 on: Historical.compressionCheckpointTable,
                 columns: ["conversationId", "sourceEndSortOrder"]
             )
+        }
+        migrator.registerMigration("v12_add_compression_mode_to_conversation") { db in
+            try db.alter(table: Historical.conversationTable) { t in
+                t.add(column: "compressionMode", .text)
+                    .notNull()
+                    .defaults(to: Historical.compressionModeStandard)
+            }
         }
         return migrator
     }

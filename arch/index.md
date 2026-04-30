@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前自动化测试结果：187 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、Chat 发送链路当前输入去重、Memory embedding/vector/retrieval 可靠性。
+- 当前自动化测试结果：192 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Prompt 组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重、Memory embedding/vector/retrieval 可靠性。
 
 ## 功能需求
 
@@ -42,7 +42,7 @@
 - **上下文控制**：将上下文长度控制在 40% 以内，保持模型对当前对话的专注度
 - **对话剔除**：直接丢弃最早的消息（适用于本地模型 / 隐私内容）
 - **对话压缩**：超过阈值时调用 API 生成持久化 checkpoint，后续请求复用 `compressed context + checkpoint 后历史`
-- **策略可选**：每个会话可独立选择剔除或压缩策略
+- **策略可选**：每个会话可独立选择剔除或压缩策略；压缩策略下可选择标准模式（40%）或高智能模式（25% effective window × 90%）
 
 ### 3. Prompt 拼装
 按以下顺序拼装发送给模型的 messages：
@@ -123,7 +123,7 @@ ChatViewModel
    ├─→ ContextManager: 用剩余预算处理历史消息
    │       │
    │       ├─→ TruncationStrategy (剔除)
-   │       └─→ CompressionStrategy (压缩 → APIClient)
+   │       └─→ CheckpointCompactor (压缩 checkpoint → APIClient)
    │
    ├─→ PromptAssembler: 最终拼装 [ChatMessage]
    │

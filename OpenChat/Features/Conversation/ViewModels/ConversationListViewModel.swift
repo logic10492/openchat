@@ -39,6 +39,7 @@ final class ConversationListViewModel {
             apiEndpointId: endpoint?.id,
             modelName: nil,
             contextStrategy: AppConstants.defaultContextStrategy.rawValue,
+            compressionMode: CompressionMode.standard.rawValue,
             customScenario: nil,
             modelParameters: nil,
             slowPlotMode: true,

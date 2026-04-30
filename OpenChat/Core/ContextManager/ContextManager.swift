@@ -45,7 +45,10 @@ struct ContextManager {
         endpoint: APIEndpointConfig,
         fixedTokens: Int
     ) async throws -> PreparedHistory {
-        let policy = CompressionPolicy(endpoint: endpoint)
+        let policy = CompressionPolicy(
+            endpoint: endpoint,
+            compressionMode: conversation.compressionModeValue
+        )
         let historyBudget = policy.historyBudget(fixedTokens: fixedTokens)
 
         switch conversation.contextStrategyValue {
