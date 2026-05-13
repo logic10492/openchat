@@ -84,6 +84,7 @@ struct SettingsView: View {
                 viewModel: APIEndpointEditorViewModel(
                     databaseManager: container.databaseManager,
                     apiClient: container.apiClient,
+                    apiKeyStore: container.apiKeyStore,
                     editingEndpoint: endpoint.id.isEmpty ? nil : endpoint
                 )
             )
@@ -113,6 +114,7 @@ struct SettingsView: View {
             viewModel: SettingsViewModel(
                 databaseManager: DependencyContainer.preview().databaseManager,
                 apiClient: DependencyContainer.preview().apiClient,
+                apiKeyStore: DependencyContainer.preview().apiKeyStore,
                 appState: AppState()
             )
         )

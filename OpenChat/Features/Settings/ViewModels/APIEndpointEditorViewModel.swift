@@ -12,12 +12,17 @@ final class APIEndpointEditorViewModel {
 
     private let databaseManager: DatabaseManager
     private let apiClient: APIClient
+    private let apiKeyStore: any APIKeyStore
 
     // MARK: - Endpoint fields
     var name = ""
     var baseURL = ""
     var apiKey = ""
     var isDefault = false
+    private(set) var hasStoredAPIKey = false
+    private(set) var isSaving = false
+    var errorMessage: String?
+    private var shouldDeleteStoredKey = false
     private(set) var testResult: TestResult?
 
     let editingEndpoint: APIEndpointRecord?
@@ -46,17 +51,20 @@ final class APIEndpointEditorViewModel {
     init(
         databaseManager: DatabaseManager,
         apiClient: APIClient,
+        apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
         editingEndpoint: APIEndpointRecord? = nil
     ) {
         self.databaseManager = databaseManager
         self.apiClient = apiClient
+        self.apiKeyStore = apiKeyStore
         self.editingEndpoint = editingEndpoint
 
         if let editingEndpoint {
             name = editingEndpoint.name
             baseURL = editingEndpoint.baseURL
-            apiKey = editingEndpoint.apiKey ?? ""
             isDefault = editingEndpoint.isDefault
+            hasStoredAPIKey = ((try? apiKeyStore.readKey(endpointId: editingEndpoint.id)) ?? nil) != nil ||
+                editingEndpoint.apiKey?.nilIfBlank != nil
         }
     }
 
@@ -72,25 +80,41 @@ final class APIEndpointEditorViewModel {
     // MARK: - Endpoint persistence
 
     func save() async throws -> APIEndpointRecord {
-        let now = Date()
-        let record = APIEndpointRecord(
-            id: editingEndpoint?.id ?? UUID().uuidString,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            baseURL: baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: apiKey.nilIfBlank,
-            isDefault: isDefault,
-            createdAt: editingEndpoint?.createdAt ?? now,
-            updatedAt: now
-        )
-        try await databaseManager.saveEndpoint(record)
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
 
-        // Ensure the endpoint has at least one model
-        if models.isEmpty {
-            try await databaseManager.ensureDefaultModel(endpointId: record.id)
-            models = try await databaseManager.fetchEndpointModels(endpointId: record.id)
+        do {
+            let now = Date()
+            let record = APIEndpointRecord(
+                id: editingEndpoint?.id ?? UUID().uuidString,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                baseURL: baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                apiKey: nil,
+                isDefault: isDefault,
+                createdAt: editingEndpoint?.createdAt ?? now,
+                updatedAt: now
+            )
+            try await databaseManager.saveEndpoint(record)
+            try updateStoredAPIKey(afterSaving: record)
+
+            // Ensure the endpoint has at least one model
+            if models.isEmpty {
+                try await databaseManager.ensureDefaultModel(endpointId: record.id)
+                models = try await databaseManager.fetchEndpointModels(endpointId: record.id)
+            }
+
+            return record
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
         }
+    }
 
-        return record
+    func clearStoredAPIKey() {
+        apiKey = ""
+        hasStoredAPIKey = false
+        shouldDeleteStoredKey = true
     }
 
     // MARK: - Connection test
@@ -112,7 +136,7 @@ final class APIEndpointEditorViewModel {
 
             let config = APIEndpointConfig(
                 baseURL: url,
-                apiKey: apiKey.nilIfBlank,
+                apiKey: try resolvedAPIKeyForRequest(),
                 modelName: modelName,
                 maxContextTokens: maxCtx,
                 apiMode: apiMode,
@@ -163,7 +187,7 @@ final class APIEndpointEditorViewModel {
         modelFetchError = nil
 
         do {
-            let fetched = try await apiClient.fetchModels(baseURL: url, apiKey: apiKey.nilIfBlank)
+            let fetched = try await apiClient.fetchModels(baseURL: url, apiKey: try resolvedAPIKeyForRequest())
             fetchedAPIModels = fetched
 
             // If endpoint is already saved, persist models to DB
@@ -184,8 +208,12 @@ final class APIEndpointEditorViewModel {
 
             // On fetch failure, ensure there's at least a "default" model
             if let endpointId = editingEndpoint?.id, models.isEmpty {
-                try? await databaseManager.ensureDefaultModel(endpointId: endpointId)
-                models = (try? await databaseManager.fetchEndpointModels(endpointId: endpointId)) ?? []
+                do {
+                    try await databaseManager.ensureDefaultModel(endpointId: endpointId)
+                    models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
+                } catch {
+                    modelFetchError = error.localizedDescription
+                }
             }
         }
 
@@ -218,7 +246,7 @@ final class APIEndpointEditorViewModel {
             try await databaseManager.saveEndpointModel(record)
             models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
         } catch {
-            // Duplicate model — silently ignore
+            errorMessage = error.localizedDescription
         }
 
         // Reset add-model form
@@ -240,7 +268,7 @@ final class APIEndpointEditorViewModel {
                 models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
             }
         } catch {
-            // ignore
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -250,7 +278,7 @@ final class APIEndpointEditorViewModel {
             try await databaseManager.setDefaultEndpointModel(id: id, endpointId: endpointId)
             models = try await databaseManager.fetchEndpointModels(endpointId: endpointId)
         } catch {
-            // ignore
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -279,7 +307,7 @@ final class APIEndpointEditorViewModel {
             models = try await databaseManager.fetchEndpointModels(endpointId: model.endpointId)
             resetEditModelForm()
         } catch {
-            // Keep the sheet open so the user can retry.
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -293,5 +321,36 @@ final class APIEndpointEditorViewModel {
         editModelApiMode = .chatCompletions
         editModelProviderDialect = .openAICompatible
         isShowingEditModel = false
+    }
+
+    private func updateStoredAPIKey(afterSaving record: APIEndpointRecord) throws {
+        if shouldDeleteStoredKey {
+            try apiKeyStore.deleteKey(endpointId: record.id)
+            hasStoredAPIKey = false
+            return
+        }
+
+        if let newKey = apiKey.nilIfBlank {
+            try apiKeyStore.saveKey(newKey, endpointId: record.id)
+            apiKey = ""
+            hasStoredAPIKey = true
+            return
+        }
+
+        if let legacyKey = editingEndpoint?.apiKey?.nilIfBlank,
+           try apiKeyStore.readKey(endpointId: record.id) == nil {
+            try apiKeyStore.saveKey(legacyKey, endpointId: record.id)
+            hasStoredAPIKey = true
+        }
+    }
+
+    private func resolvedAPIKeyForRequest() throws -> String? {
+        if let typedKey = apiKey.nilIfBlank {
+            return typedKey
+        }
+        guard let endpointId = editingEndpoint?.id else {
+            return nil
+        }
+        return try apiKeyStore.readKey(endpointId: endpointId) ?? editingEndpoint?.apiKey?.nilIfBlank
     }
 }

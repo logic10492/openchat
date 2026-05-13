@@ -41,6 +41,7 @@ final class DatabaseManager: @unchecked Sendable {
 
     func eraseAllData(preserveEndpoints: Bool = true) async throws {
         try await write { db in
+            try db.execute(sql: "DELETE FROM memory_embedding")
             try MessageRecord.deleteAll(db)
             try ConversationRecord.deleteAll(db)
             try WorldBookEntryRecord.deleteAll(db)

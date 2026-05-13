@@ -8,13 +8,15 @@ struct WorldBookEntryEditorView: View {
     @State private var priority: Double
     @State private var position: String
     @State private var isEnabled: Bool
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     let entry: WorldBookEntryRecord
-    let onSave: (WorldBookEntryRecord) -> Void
+    let onSave: (WorldBookEntryRecord) async throws -> Void
 
     init(
         entry: WorldBookEntryRecord,
-        onSave: @escaping (WorldBookEntryRecord) -> Void
+        onSave: @escaping (WorldBookEntryRecord) async throws -> Void
     ) {
         self.entry = entry
         self.onSave = onSave
@@ -40,6 +42,11 @@ struct WorldBookEntryEditorView: View {
                     Text("before_history").tag("before_history")
                 }
                 Toggle(String(localized: "Enabled"), isOn: $isEnabled)
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
             .navigationTitle(String(localized: "Entry"))
             .toolbar {
@@ -48,29 +55,42 @@ struct WorldBookEntryEditorView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
-                        onSave(
-                            WorldBookEntryRecord(
-                                id: entry.id,
-                                worldBookId: entry.worldBookId,
-                                title: title,
-                                content: content,
-                                keywords: RecordCoders.encode(
-                                    keywords
-                                        .split(separator: ",")
-                                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                                        .filter { !$0.isEmpty }
-                                ) ?? "[]",
-                                priority: Int(priority),
-                                isEnabled: isEnabled,
-                                position: position,
-                                createdAt: entry.createdAt,
-                                updatedAt: .now
-                            )
-                        )
-                        dismiss()
+                        Task {
+                            isSaving = true
+                            errorMessage = nil
+                            defer { isSaving = false }
+
+                            do {
+                                try await onSave(updatedEntry())
+                                dismiss()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
                     }
+                    .disabled(isSaving)
                 }
             }
         }
+    }
+
+    private func updatedEntry() -> WorldBookEntryRecord {
+        WorldBookEntryRecord(
+            id: entry.id,
+            worldBookId: entry.worldBookId,
+            title: title,
+            content: content,
+            keywords: RecordCoders.encode(
+                keywords
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            ) ?? "[]",
+            priority: Int(priority),
+            isEnabled: isEnabled,
+            position: position,
+            createdAt: entry.createdAt,
+            updatedAt: .now
+        )
     }
 }

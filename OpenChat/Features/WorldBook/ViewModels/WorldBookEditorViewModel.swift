@@ -11,6 +11,8 @@ final class WorldBookEditorViewModel {
     var isEnabled = true
     var entries: [WorldBookEntryRecord] = []
     private(set) var characters: [CharacterCardRecord] = []
+    private(set) var isSaving = false
+    var errorMessage: String?
     let editingWorldBook: WorldBookRecord?
 
     init(
@@ -31,6 +33,7 @@ final class WorldBookEditorViewModel {
             entries = try await databaseManager.fetchWorldBookEntries(worldBookId: editingWorldBook?.id)
         } catch {
             entries = []
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -39,25 +42,44 @@ final class WorldBookEditorViewModel {
             characters = []
             return
         }
-        characters = (try? await databaseManager.fetchCharacterCards(worldBookId: worldBookId)) ?? []
+        do {
+            characters = try await databaseManager.fetchCharacterCards(worldBookId: worldBookId)
+        } catch {
+            characters = []
+            errorMessage = error.localizedDescription
+        }
     }
 
     func save() async throws -> WorldBookRecord {
-        let now = Date()
-        let record = WorldBookRecord(
-            id: editingWorldBook?.id ?? UUID().uuidString,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            description: description.nilIfBlank,
-            isEnabled: isEnabled,
-            createdAt: editingWorldBook?.createdAt ?? now,
-            updatedAt: now
-        )
-        try await databaseManager.saveWorldBook(record)
-        return record
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        do {
+            let now = Date()
+            let record = WorldBookRecord(
+                id: editingWorldBook?.id ?? UUID().uuidString,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: description.nilIfBlank,
+                isEnabled: isEnabled,
+                createdAt: editingWorldBook?.createdAt ?? now,
+                updatedAt: now
+            )
+            try await databaseManager.saveWorldBook(record)
+            return record
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
     }
 
     func saveEntry(_ entry: WorldBookEntryRecord) async throws {
-        try await databaseManager.saveWorldBookEntry(entry)
-        entries = try await databaseManager.fetchWorldBookEntries(worldBookId: entry.worldBookId)
+        do {
+            try await databaseManager.saveWorldBookEntry(entry)
+            entries = try await databaseManager.fetchWorldBookEntries(worldBookId: entry.worldBookId)
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
     }
 }

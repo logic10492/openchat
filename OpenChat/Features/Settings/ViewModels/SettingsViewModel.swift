@@ -6,6 +6,7 @@ import Observation
 final class SettingsViewModel {
     private let databaseManager: DatabaseManager
     private let apiClient: APIClient
+    private let apiKeyStore: any APIKeyStore
     private let appState: AppState
     private let defaults = UserDefaults.standard
 
@@ -22,10 +23,12 @@ final class SettingsViewModel {
     init(
         databaseManager: DatabaseManager,
         apiClient: APIClient,
+        apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
         appState: AppState
     ) {
         self.databaseManager = databaseManager
         self.apiClient = apiClient
+        self.apiKeyStore = apiKeyStore
         self.appState = appState
         loadDefaults()
     }
@@ -41,6 +44,7 @@ final class SettingsViewModel {
     func deleteEndpoint(_ id: String) async {
         do {
             try await databaseManager.deleteEndpoint(id: id)
+            try apiKeyStore.deleteKey(endpointId: id)
             await loadEndpoints()
         } catch {
             appState.present(error: error.localizedDescription)

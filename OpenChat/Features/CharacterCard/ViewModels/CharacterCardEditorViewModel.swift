@@ -20,6 +20,8 @@ final class CharacterCardEditorViewModel {
     var creatorNotes = ""
     var worldBookId: String?
     private(set) var availableWorldBooks: [WorldBookRecord] = []
+    private(set) var isSaving = false
+    var errorMessage: String?
     let editingCard: CharacterCardRecord?
 
     init(
@@ -61,30 +63,44 @@ final class CharacterCardEditorViewModel {
     }
 
     func loadWorldBooks() async {
-        availableWorldBooks = (try? await databaseManager.fetchWorldBooks()) ?? []
+        do {
+            availableWorldBooks = try await databaseManager.fetchWorldBooks()
+        } catch {
+            availableWorldBooks = []
+            errorMessage = error.localizedDescription
+        }
     }
 
     func save() async throws -> CharacterCardRecord {
-        let now = Date()
-        let record = CharacterCardRecord(
-            id: editingCard?.id ?? UUID().uuidString,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            avatar: avatarData,
-            personality: personality.nilIfBlank,
-            appearance: appearance.nilIfBlank,
-            physique: physique.nilIfBlank,
-            speechStyle: speechStyle.nilIfBlank,
-            backstory: backstory.nilIfBlank,
-            systemPrompt: systemPrompt.nilIfBlank,
-            scenario: scenario.nilIfBlank,
-            exampleDialogs: RecordCoders.encode(exampleDialogs),
-            creatorNotes: creatorNotes.nilIfBlank,
-            tags: RecordCoders.encode(tags),
-            worldBookId: worldBookId,
-            createdAt: editingCard?.createdAt ?? now,
-            updatedAt: now
-        )
-        try await databaseManager.saveCharacterCard(record)
-        return record
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        do {
+            let now = Date()
+            let record = CharacterCardRecord(
+                id: editingCard?.id ?? UUID().uuidString,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                avatar: avatarData,
+                personality: personality.nilIfBlank,
+                appearance: appearance.nilIfBlank,
+                physique: physique.nilIfBlank,
+                speechStyle: speechStyle.nilIfBlank,
+                backstory: backstory.nilIfBlank,
+                systemPrompt: systemPrompt.nilIfBlank,
+                scenario: scenario.nilIfBlank,
+                exampleDialogs: RecordCoders.encode(exampleDialogs),
+                creatorNotes: creatorNotes.nilIfBlank,
+                tags: RecordCoders.encode(tags),
+                worldBookId: worldBookId,
+                createdAt: editingCard?.createdAt ?? now,
+                updatedAt: now
+            )
+            try await databaseManager.saveCharacterCard(record)
+            return record
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
     }
 }

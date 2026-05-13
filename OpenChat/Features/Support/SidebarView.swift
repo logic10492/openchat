@@ -70,6 +70,7 @@ struct SidebarView: View {
                     viewModel: SettingsViewModel(
                         databaseManager: container.databaseManager,
                         apiClient: container.apiClient,
+                        apiKeyStore: container.apiKeyStore,
                         appState: appState
                     )
                 )
