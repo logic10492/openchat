@@ -70,12 +70,11 @@ extension ChatViewModel {
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
 
         // Pre-response memory extraction: extract before retrieval so new memories are immediately available
-        if messagesSinceLastExtraction >= Self.extractionInterval,
+        if try await shouldExtractMemories(for: conversation),
            characterCard?.id != nil {
             extractionPhase = .extracting
             do {
                 let result = try await memoryManager.extractMemories(from: conversation)
-                messagesSinceLastExtraction = 0
                 if result.isEmpty {
                     extractionPhase = .skipped
                 } else {
@@ -232,8 +231,10 @@ extension ChatViewModel {
                 )
                 setAssistantStats(stats, messageID: assistantRecord.id)
 
-                // Periodic memory extraction counter
-                messagesSinceLastExtraction += 2 // user + assistant
+                // Keep the local record aligned with extraction boundary updates.
+                if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
+                    conversation = refreshed
+                }
             } catch {
                 try? await persistOrRemovePartialAssistant(assistantRecord)
                 appState.present(error: error.localizedDescription)
@@ -269,6 +270,17 @@ extension ChatViewModel {
     private func setAssistantStats(_ stats: StreamingStats, messageID: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
         messages[index].streamingStats = stats
+    }
+
+    private func shouldExtractMemories(for conversation: ConversationRecord) async throws -> Bool {
+        let latestConversation = try await databaseManager.fetchConversation(id: conversation.id) ?? conversation
+        let cutoff = latestConversation.lastExtractedSortOrder
+        let records = try await databaseManager.fetchMessages(conversationId: latestConversation.id)
+        let pendingCount = records.lazy.filter { record in
+            guard let cutoff else { return true }
+            return record.sortOrder > cutoff
+        }.count
+        return pendingCount >= Self.minimumPendingMessagesForExtraction
     }
 
     private func removeAssistantPlaceholder(id: String) {

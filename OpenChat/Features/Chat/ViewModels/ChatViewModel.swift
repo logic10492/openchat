@@ -54,9 +54,7 @@ final class ChatViewModel {
 
     @ObservationIgnored
     var streamTask: Task<Void, Never>?
-    @ObservationIgnored
-    var messagesSinceLastExtraction = 0
-    static let extractionInterval = 10
+    static let minimumPendingMessagesForExtraction = MemoryManager.minimumMessagesForExtraction
 
     init(
         conversation: ConversationRecord,

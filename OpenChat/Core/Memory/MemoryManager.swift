@@ -10,7 +10,7 @@ struct MemoryManager: Sendable {
     private let apiClient: APIClient
     private let apiKeyStore: any APIKeyStore
 
-    private static let minimumMessagesForExtraction = 4
+    static let minimumMessagesForExtraction = 4
     private static let distanceThreshold: Float = 1.5
 
     init(
