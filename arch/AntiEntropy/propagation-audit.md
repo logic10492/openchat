@@ -132,25 +132,32 @@
 
 链路：
 
-`ChatViewModel` 检索记忆 -> `MemoryManager.retrieveMemories` -> `EmbeddingService`/`VectorStore`/`DatabaseManager` -> `PromptAssembler` 注入记忆；生成完成后周期性触发 `MemoryManager.extractMemories`。
+`ChatViewModel` 前置提取记忆 → `MemoryManager.extractMemories` → `DatabaseManager` 更新 `conversation.lastExtractedSortOrder` → `MemoryManager.retrieveMemories` → `EmbeddingService`/`VectorStore`/`DatabaseManager` → `PromptAssembler` 注入记忆。
 
 关键证据：
 
-- 发送时检索记忆：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:72`
-- 周期性触发提取：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:195`
-- `MemoryManager.extractMemories` 使用增量消息和 API 提取：`OpenChat/Core/Memory/MemoryManager.swift:39`
-- 向量保存失败只记录 warning，不回滚 memory entry：`OpenChat/Core/Memory/MemoryManager.swift:75`
+- 前置同步提取（在检索前）：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` `generateResponse` 中当 `messagesSinceLastExtraction >= extractionInterval` 时同步 await `extractMemories`
+- 发送时检索记忆（提取后）：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` `generateResponse` 中调用 `retrieveMemories`
+- cutoff 使用 `conversation.lastExtractedSortOrder`（message sortOrder 边界），不再使用 `latestMemoryDate`（memory_entry.createdAt）
+- `MemoryManager.extractMemories` 成功后更新 `conversation.lastExtractedSortOrder = messages.last?.sortOrder`
+- UI 反馈通过 `extractionPhase` 状态驱动 `MemoryExtractionIndicator`（替代旧的 `MemoryMarkerView` + `MessageDisplayItem.memoryMarker`）
+- `ChatView.onDisappear` 保留 fire-and-forget 调用 `triggerMemoryExtraction()`
+- `MemoryManager.extractMemories` 使用 `conversation.lastExtractedSortOrder` 增量提取和 API 提取：`OpenChat/Core/Memory/MemoryManager.swift`
+- 向量保存使用批量原子写入；失败时整批回滚，不留半索引记忆：`OpenChat/Core/Memory/VectorStore.swift`
 
-结论：源码已具备 Memory 主链路；Task 5 已回写命名/触发时机现实：
+结论：源码已具备 Memory 主链路；2026-05-13 修复了 cutoff 边界问题和提取可观测性：
 
-- `arch/modules/memory/index.md` 的文件清单已写回 `Features/CharacterCard/Views/MemoryListView.swift` 和 `Features/CharacterCard/ViewModels/MemoryListViewModel.swift`。
-- 设计文档已说明当前源码是每 10 条 user/assistant 消息周期性触发；`ChatView.onDisappear` 也会触发，因此离开当前聊天视图或切换对话可通过视图消失间接触发。App 进入后台 lifecycle hook 仍属于后续 UX/生命周期增强项。
+- cutoff 从 `latestMemoryDate(conversationId:)`（基于 memory_entry.createdAt）改为 `conversation.lastExtractedSortOrder`（基于 message sortOrder），避免并发写入导致消息被永久跳过。
+- 提取时机从响应完成后异步触发改为下一次 generateResponse 中前置同步等待，新提取的记忆立即可用于当前轮检索。
+- UI 反馈从非持久化的 `MessageDisplayItem.memoryMarker` 改为 `MemoryExtractionPhase` 状态驱动的 `MemoryExtractionIndicator`，支持 extracting/completed/failed 三态指示。
+- `ChatView.onDisappear` 保留 fire-and-forget 提取。
+- `arch/modules/memory/index.md` 已同步更新 6.1 触发时机、6.2 提取步骤、6.4 cutoff 策略和 6.5 UI 指示器。
 
 ### Database migration 链路
 
 关键证据：
 
-- 迁移集中在 `OpenChat/Core/Database/Migrations.swift`，当前从 `v1_initial` 到 `v9_add_is_title_generated`。
+- 迁移集中在 `OpenChat/Core/Database/Migrations.swift`，当前从 `v1_initial` 到 `v13_add_last_extracted_sort_order`。
 - `v8_endpoint_model_decoupling` 创建 `endpoint_model` 并迁移旧端点字段：`OpenChat/Core/Database/Migrations.swift:85`
 - `Migrations.Historical` 维护迁移本地历史表名和默认值，`v8` migration 使用这些常量而非 runtime Record/enum 符号。
 
@@ -341,3 +348,43 @@
 
 - `harness/2026.04.30/prompt-four-layer-assembly/index.md`
 - `harness/2026.04.30/prompt-four-layer-assembly/evidence.txt`
+
+## 2026-05-13 Memory Extraction Cutoff & Observability Incremental Audit
+
+范围：`OpenChat/Core/Memory/MemoryManager.swift`、`OpenChat/Core/Database/Migrations.swift`、`OpenChat/Core/Database/Records/ConversationRecord.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`、`OpenChat/Features/Chat/Views/ChatView.swift`、`OpenChat/Features/Chat/Views/MemoryExtractionIndicator.swift`（新增）、`OpenChat/Features/Chat/Models/MemoryExtractionPhase.swift`（新增）、`OpenChatTests/Core/MemoryTests/MemoryExtractionCutoffTests.swift`（新增）、`OpenChatTests/Features/ChatTests/MemoryExtractionPhaseTests.swift`（新增）、Memory 相关 arch 文档。
+
+审计模式：窄范围增量审计，解决 `arch/AntiEntropy/problem.md` 中 P1 cutoff 边界问题和 P1 自动提取触发可靠性问题。
+
+### 静态传播面
+
+- `ConversationRecord` 新增 `lastExtractedSortOrder: Int?` 字段，`v13_add_last_extracted_sort_order` 追加列默认 NULL。
+- `MemoryManager.extractMemories` 改用 `conversation.lastExtractedSortOrder` 替代 `latestMemoryDate(conversationId:)`；提取成功后更新 `conversation.lastExtractedSortOrder`。
+- `ChatViewModel` 新增 `extractionPhase: MemoryExtractionPhase` 属性。
+- `ChatViewModel+Support.generateResponse` 在检索记忆前同步等待提取（当 `messagesSinceLastExtraction >= extractionInterval` 时）。
+- `MemoryExtractionIndicator`（新增）替代 `MemoryMarkerView`（已删除），根据 `extractionPhase` 渲染内联 UI。
+- `MessageDisplayItem.memoryMarker()` 工厂方法已移除。
+
+### 行为传播链路
+
+主链路变更：
+
+`ChatViewModel+Support.generateResponse` -> 持久化 user message -> **前置同步提取** (`MemoryManager.extractMemories`) -> 更新 `conversation.lastExtractedSortOrder` -> `MemoryManager.retrieveMemories` -> `PromptAssembler.preview/assemble` -> `APIClient.streamMessage`
+
+结论：
+
+- 提取时机从响应完成后异步 fire-and-forget 改为下次 generateResponse 中前置同步等待。
+- cutoff 从 `memory_entry.createdAt` 改为 `conversation.lastExtractedSortOrder`（message sortOrder），消除了并发写入导致消息被跳过的 P1 风险。
+- 提取结果立即可用于当前轮语义检索。
+- `ChatView.onDisappear` 保留 fire-and-forget 提取（无 UI 指示）。
+- 没有新增 Feature-to-Feature 依赖；传播面限定在 Chat Feature + Core/Memory + Core/Database。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/memory/index.md` 已更新 6.1 触发时机（前置同步提取）、6.2 提取步骤（sortOrder cutoff + 更新 lastExtractedSortOrder）、6.4 cutoff 策略（sortOrder 替代 createdAt）、6.5 UI 指示器（MemoryExtractionPhase + MemoryExtractionIndicator）。`arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列。`arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
+- `arch-test`：`MemoryExtractionCutoffTests` 覆盖 sortOrder cutoff、首次提取全量处理、消息不足跳过、并发消息不被跳过。`MemoryExtractionPhaseTests` 覆盖 isActive 和 Equatable 语义。`MigrationTests` 覆盖 v13 列存在性和 NULL 默认值。
+- `src-test`：focused suite 38 tests passed；full suite 217 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
+### 验证
+
+- Focused command: `xcodebuild test ... -only-testing:OpenChatTests/MemoryExtractionCutoffTests -only-testing:OpenChatTests/MemoryExtractionPhaseTests -only-testing:OpenChatTests/MigrationTests`，结果 38 tests / 3 suites passed。
+- Full suite: 217 tests / 45 suites passed，`** TEST SUCCEEDED **`。

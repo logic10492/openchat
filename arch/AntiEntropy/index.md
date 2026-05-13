@@ -9,6 +9,7 @@
 |---|---|---|
 | propagation-audit | [propagation-audit.md](propagation-audit.md) | 当前静态图无 Swift import 级循环阻断；Chat 当前输入重复注入、Prompt 四层顺序、migration 源码约束已完成修复写回，剩余主要风险集中在分层边界漂移。 |
 | Triangle-Consistency | [triangle-consistency.md](triangle-consistency.md) | `src-test` 当前通过 197 tests / 41 suites；Prompt 四层顺序、数据库迁移约束、Memory embedding/vector/retrieval、checkpoint compression 与 compression mode 可靠性已回写，Feature 分层漂移留待单独修复计划。 |
+| problem | [problem.md](problem.md) | 记录 2026-05-13 只读审计发现的记忆系统高概率可靠性风险：提取 cutoff、触发调度、检索排序、fallback 阈值和可观测性缺口；尚未声明已修复。 |
 | layering-repair-plan | [layering-repair-plan.md](layering-repair-plan.md) | 记录 Feature/App/Shared/Core 分层漂移的独立修复顺序、验证标准与文档回写要求。 |
 | memory-vector-reliability | [propagation-audit.md](propagation-audit.md#2026-04-30-memory-vector-reliability-incremental-audit) | Memory embedding/vector/retrieval 可靠性修复已完成增量传播审计；详细证据见 `harness/2026.04.30/memory-vector-reliability/index.md`。 |
 | checkpoint-compression | [propagation-audit.md](propagation-audit.md#2026-04-30-checkpoint-compression-incremental-audit) | Codex 风格持久化 compression checkpoint 已完成增量传播审计；详细证据见 `harness/2026.04.30/checkpoint-compression/index.md`。 |

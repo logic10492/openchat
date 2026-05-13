@@ -277,27 +277,25 @@ editMessage(messageId, newContent):
 
 ### 4.6 记忆提取触发
 
-当前源码在每轮 user + assistant 生成完成后将 `messagesSinceLastExtraction += 2`，当计数达到 `ChatViewModel.extractionInterval == 10` 时自动触发记忆提取：
+当前源码在每轮 user + assistant 生成完成后将 `messagesSinceLastExtraction += 2`，当计数达到 `ChatViewModel.extractionInterval == 10` 时，在**下一次 `generateResponse` 中同步等待**记忆提取完成（在检索记忆之前）：
 
 ```swift
-func triggerMemoryExtraction() {
-    Task {
-        do {
-            let result = try await memoryManager.extractMemories(from: conversation)
-            if !result.isEmpty {
-                messages.append(.memoryMarker(content: "..."))
-            }
-        } catch {
-            messages.append(.memoryMarker(content: "...", isError: true))
-        }
-    }
+// Pre-response extraction in generateResponse:
+if messagesSinceLastExtraction >= Self.extractionInterval,
+   characterCard?.id != nil {
+    extractionPhase = .extracting
+    let result = try await memoryManager.extractMemories(from: conversation)
+    messagesSinceLastExtraction = 0
+    extractionPhase = result.isEmpty ? .skipped : .completed(...)
 }
+// Then retrieve memories (new extractions immediately available)
+memories = try await memoryManager.retrieveMemories(...)
 ```
 
-- **触发时机**：发送链路内的周期性后台提取；`ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`。切换对话可通过视图消失间接触发；App 进入后台的 lifecycle hook 仍不属于当前源码行为
-- **后台执行**：使用 `Task` 调用 `MemoryManager.extractMemories(from:)`，不阻塞流式生成完成后的 UI
-- **错误反馈**：提取失败记录日志，并向聊天 UI 追加临时 memory marker
-- **去重保护**：MemoryManager 内部按最新记忆时间做增量提取
+- **触发时机**：发送链路内的前置同步提取（位于用户消息持久化之后、记忆检索之前）；`ChatView.onDisappear` 保留 fire-and-forget 调用
+- **UI 反馈**：通过 `extractionPhase` 状态驱动 `MemoryExtractionIndicator` 内联指示器，显示"正在提取 / 已提取 N 条 / 提取失败"
+- **cutoff 边界**：使用 `conversation.lastExtractedSortOrder`（基于 message sortOrder）替代旧的 `latestMemoryDate`（基于 memory_entry.createdAt），避免并发写入导致消息被跳过
+- **错误反馈**：提取失败记录日志并在 UI 显示错误指示器，不阻塞后续生成
 
 ## 5. MessageDisplayItem
 

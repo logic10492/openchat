@@ -162,12 +162,17 @@ struct VectorStore: Sendable {
 
 ### 6.1 触发时机
 
-当前实现采用发送链路内的周期性后台提取，并保留 `ChatView.onDisappear` 触发：
+当前实现采用**发送链路内的前置同步提取**，提取发生在**用户消息持久化之后、检索记忆之前**：
 
 - `ChatViewModel` 每完成一轮 user + assistant 生成后将 `messagesSinceLastExtraction += 2`。
-- 当计数达到 `ChatViewModel.extractionInterval == 10` 时，调用 `triggerMemoryExtraction()`。
-- `triggerMemoryExtraction()` 内部启动后台 `Task`，调用 `MemoryManager.extractMemories(from:)`，成功后向聊天 UI 追加 memory marker。
-- `ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`，因此离开当前聊天视图或切换对话时可能触发提取。
+- 当计数达到 `ChatViewModel.extractionInterval == 10` 时，在下一次 `generateResponse` 中同步等待 `MemoryManager.extractMemories(from:)` 完成，再执行记忆检索。
+- 提取期间 UI 通过 `extractionPhase` 状态显示内联指示器（详见 6.5）。
+- `ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`（fire-and-forget），因此离开当前聊天视图或切换对话时可能触发提取。
+
+与旧方案（响应完成后异步提取）相比：
+- 提取时间点确定性更高，不会因 ViewModel 重建或页面退出丢失
+- 新提取的记忆**立即可用**于当前轮次的语义检索
+- cutoff 使用 `conversation.lastExtractedSortOrder` 而非 `memory_entry.createdAt`，避免消息被永久跳过
 
 App 进入后台的 lifecycle hook 不属于当前源码行为，作为后续 UX/生命周期增强项单独规划。
 
@@ -176,8 +181,8 @@ App 进入后台的 lifecycle hook 不属于当前源码行为，作为后续 UX
 ```
 extractMemories(from conversation):
     1. 从 DB 重新读取最新 ConversationRecord，确认已绑定 characterCardId
-    2. 查询 latestMemoryDate(conversationId:) 作为增量 cutoff
-    3. 从 DB 加载该对话消息，仅保留 createdAt > cutoff 的新消息；没有 cutoff 时使用全部消息
+    2. 读取 conversation.lastExtractedSortOrder 作为增量 cutoff（首次提取时为 nil）
+    3. 从 DB 加载该对话消息，仅保留 sortOrder > cutoff 的新消息；cutoff 为 nil 时使用全部消息
     4. 如果新消息数 < minimumMessagesForExtraction（当前 4 条），跳过提取
     5. 构建提取 prompt（见 6.3）
     6. 调用 APIClient.sendMessage()（非流式，使用对话关联的端点）
@@ -186,6 +191,7 @@ extractMemories(from conversation):
     9. 调用 MemoryVectorStore.insert(entries:) 批量原子保存 memory_entry + memory_embedding
        - 任一 embedding 或 vector 写入失败，本批次整体失败
        - 不留下只有 memory_entry、没有 memory_embedding 的半索引记忆
+    10. 提取成功后更新 conversation.lastExtractedSortOrder = messages.last?.sortOrder
 ```
 
 ### 6.3 提取 Prompt 模板
@@ -212,12 +218,39 @@ Conversation:
 {messages formatted as "role: content"}
 ```
 
-### 6.4 去重策略
+### 6.4 增量 cutoff 策略
 
-- 通过 `DatabaseManager.latestMemoryDate(conversationId:)` 查询该对话最近一次已保存记忆的时间。
-- 若存在上次提取时间，只处理 `createdAt > latestMemoryDate` 的新消息；若不存在，则处理该对话全部消息。
+- 通过 `conversation.lastExtractedSortOrder` 记录上次提取处理到的消息 sortOrder 边界。
+- 若存在上次 cutoff，只处理 `sortOrder > lastExtractedSortOrder` 的新消息；若不存在（首次提取），则处理该对话全部消息。
 - 新消息数少于 `MemoryManager.minimumMessagesForExtraction` 时跳过本轮提取。
+- 提取成功后立即更新 `conversation.lastExtractedSortOrder` 为本批消息的最大 sortOrder。
+- 使用 sortOrder 而非 `createdAt` 的原因：并发提取期间新写入的消息 sortOrder 更大，不会被跳过；而 `createdAt` 可能因时间精度或提取延迟导致边界模糊。
 - 后续可扩展：对新提取的记忆与已有记忆做向量相似度比较，去除高度重复条目
+
+### 6.5 提取 UI 指示器
+
+提取期间通过 `ChatViewModel.extractionPhase` 驱动内联 UI 指示器，显示在用户消息与助手响应之间：
+
+```swift
+enum MemoryExtractionPhase: Sendable, Equatable {
+    case idle                                       // 无提取
+    case extracting                                 // API 调用中
+    case completed(count: Int, summaries: [String])  // 提取完成
+    case skipped                                    // 消息不足，不触发
+    case failed(description: String)                // 提取失败
+}
+```
+
+| 状态 | 图标 | 文本 | 样式 |
+|---|---|---|---|
+| `extracting` | 🧠 脉冲动画 | "正在提取记忆…" | `.caption.italic()`, `.secondary`, 居中 |
+| `completed(N, _)` | 🧠 | "提取了 N 条记忆" | `.caption.italic()`, `.secondary`, 居中, 可展开 |
+| `failed` | ⚠️ | "记忆提取失败" | `.caption.italic()`, `.red.opacity(0.7)`, 居中 |
+| `idle` / `skipped` | — | — | 不渲染 |
+
+**交互**：`completed` 状态下轻点可展开/收起具体记忆列表。提取完成后 3 秒自动过渡为 `idle`。
+
+**实现**：`MemoryExtractionIndicator` view 替代旧的 `MemoryMarkerView` + `MessageDisplayItem.memoryMarker()`。
 
 ## 7. 记忆检索流程
 
@@ -378,7 +411,9 @@ final class MemoryListViewModel {
 3. **sqlite-vec**：复用已有的 SQLite 基础设施，无需引入独立的向量数据库
 4. **15% memory token 预算**：避免记忆占用过多上下文空间，保持当前对话质量
 5. **可观测降级**：记忆系统故障不应影响核心聊天功能；语义检索失败 fallback 到近期记忆并记录日志
-6. **周期性增量提取 + 视图消失触发**：当前源码每累计 10 条 user/assistant 消息后后台提取，`ChatView.onDisappear` 也会触发提取；App 进入后台 lifecycle hook 另行规划
+6. **前置同步提取 + 视图消失触发**：当前源码每累计 10 条 user/assistant 消息后在下次 generateResponse 中同步提取，提取结果立即可用于当前轮检索；`ChatView.onDisappear` 保留 fire-and-forget 触发；App 进入后台 lifecycle hook 另行规划
+7. **sortOrder 边界替代 createdAt cutoff**：通过 `conversation.lastExtractedSortOrder` 记录已处理消息边界，避免并发写入或时间精度导致消息被永久跳过
+8. **提取过程可观测**：`extractionPhase` 状态驱动内联 UI 指示器，用户可实时感知提取状态
 
 ## 13. 实现证据
 
