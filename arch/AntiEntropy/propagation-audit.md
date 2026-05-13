@@ -136,7 +136,7 @@
 
 关键证据：
 
-- 前置同步提取（在检索前）：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` `generateResponse` 中当 `messagesSinceLastExtraction >= extractionInterval` 时同步 await `extractMemories`
+- 前置同步提取（在检索前）：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` `generateResponse` 中先按 DB 中 `conversation.lastExtractedSortOrder` 计算待提取消息数，达到 `minimumPendingMessagesForExtraction` 后同步 await `extractMemories`
 - 发送时检索记忆（提取后）：`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` `generateResponse` 中调用 `retrieveMemories`
 - cutoff 使用 `conversation.lastExtractedSortOrder`（message sortOrder 边界），不再使用 `latestMemoryDate`（memory_entry.createdAt）
 - `MemoryManager.extractMemories` 成功后更新 `conversation.lastExtractedSortOrder = messages.last?.sortOrder`
@@ -360,7 +360,7 @@
 - `ConversationRecord` 新增 `lastExtractedSortOrder: Int?` 字段，`v13_add_last_extracted_sort_order` 追加列默认 NULL。
 - `MemoryManager.extractMemories` 改用 `conversation.lastExtractedSortOrder` 替代 `latestMemoryDate(conversationId:)`；提取成功后更新 `conversation.lastExtractedSortOrder`。
 - `ChatViewModel` 新增 `extractionPhase: MemoryExtractionPhase` 属性。
-- `ChatViewModel+Support.generateResponse` 在检索记忆前同步等待提取（当 `messagesSinceLastExtraction >= extractionInterval` 时）。
+- `ChatViewModel+Support.generateResponse` 在检索记忆前同步等待提取（当 DB 中 `sortOrder > lastExtractedSortOrder` 的消息数达到 `minimumPendingMessagesForExtraction` 时）。
 - `MemoryExtractionIndicator`（新增）替代 `MemoryMarkerView`（已删除），根据 `extractionPhase` 渲染内联 UI。
 - `MessageDisplayItem.memoryMarker()` 工厂方法已移除。
 
@@ -381,10 +381,10 @@
 ### 三边一致性
 
 - `arch-src`：`arch/modules/memory/index.md` 已更新 6.1 触发时机（前置同步提取）、6.2 提取步骤（sortOrder cutoff + 更新 lastExtractedSortOrder）、6.4 cutoff 策略（sortOrder 替代 createdAt）、6.5 UI 指示器（MemoryExtractionPhase + MemoryExtractionIndicator）。`arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列。`arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
-- `arch-test`：`MemoryExtractionCutoffTests` 覆盖 sortOrder cutoff、首次提取全量处理、消息不足跳过、并发消息不被跳过。`MemoryExtractionPhaseTests` 覆盖 isActive 和 Equatable 语义。`MigrationTests` 覆盖 v13 列存在性和 NULL 默认值。
-- `src-test`：focused suite 38 tests passed；full suite 217 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+- `arch-test`：`MemoryExtractionCutoffTests` 覆盖 sortOrder cutoff、首次提取全量处理、消息不足跳过、并发消息不被跳过。`MemoryExtractionPhaseTests` 覆盖 isActive 和 Equatable 语义。`MigrationTests` 覆盖 v13 列存在性和 NULL 默认值。`ChatViewModelPromptAssemblyTests` 覆盖 ViewModel 重建后仍按 DB sortOrder 边界触发提取。
+- `src-test`：focused suite 49 tests / 4 suites passed；full suite 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
 
 ### 验证
 
-- Focused command: `xcodebuild test ... -only-testing:OpenChatTests/MemoryExtractionCutoffTests -only-testing:OpenChatTests/MemoryExtractionPhaseTests -only-testing:OpenChatTests/MigrationTests`，结果 38 tests / 3 suites passed。
-- Full suite: 217 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+- Focused command: `xcodebuild test ... -only-testing:OpenChatTests/MemoryExtractionCutoffTests -only-testing:OpenChatTests/MemoryExtractionPhaseTests -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests`，结果 49 tests / 4 suites passed。
+- Full suite: 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。

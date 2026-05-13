@@ -1,0 +1,87 @@
+# Memory 架构边界
+
+## 1. 模块定位
+
+Memory 模块负责跨对话长期记忆，不负责同一会话的窗口压缩。当前职责边界如下：
+
+- `Core/Memory`：记忆提取、语义检索、embedding、sqlite-vec 向量存储、错误类型。
+- `Core/Database`：`memory_entry`、`memory_embedding`、`conversation.lastExtractedSortOrder` 的持久化结构和 CRUD。
+- `Core/PromptEngine`：将检索结果注入 `[Memories]` system block，并按 token 预算裁剪。
+- `Features/Chat`：决定发送链路中的提取/检索时机，显示提取状态。
+- `Features/CharacterCard`：提供角色维度的记忆查看、搜索和删除管理。
+
+## 2. 文件职责
+
+| 文件 | 职责 |
+|---|---|
+| `Core/Memory/MemoryManager.swift` | 提取与检索编排层；解析 LLM 返回的 `ExtractedMemory`；处理检索 fallback |
+| `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 加载、tokenizer 调用、384 维向量生成 |
+| `Core/Memory/XLMRobertaTokenizer.swift` | 读取 `tokenizer.json`，生成固定长度 input IDs / attention mask |
+| `Core/Memory/VectorStore.swift` | sqlite-vec 插入、批量原子写入、KNN 检索、删除 |
+| `Core/Memory/MemoryDependencies.swift` | `EmbeddingProvider`、`MemoryVectorStore` 协议，便于测试注入 |
+| `Core/Memory/MemoryError.swift` | `MemoryType` 与 `MemoryError` |
+| `Core/Database/Records/MemoryEntryRecord.swift` | `memory_entry` GRDB Record |
+| `Core/Database/DatabaseManager+Memory.swift` | 记忆查询、保存、删除、计数等 DB 操作 |
+| `Features/Chat/ViewModels/ChatViewModel+Support.swift` | 发送链路中的前置提取、检索和 prompt 组装调用 |
+| `Features/Chat/Models/MemoryExtractionPhase.swift` | Chat 内联提取状态 |
+| `Features/Chat/Views/MemoryExtractionIndicator.swift` | 提取状态 UI |
+| `Features/CharacterCard/Views/MemoryListView.swift` | 角色记忆列表 UI |
+| `Features/CharacterCard/ViewModels/MemoryListViewModel.swift` | 记忆列表加载、过滤和删除 |
+
+## 3. 依赖方向
+
+```
+Features/Chat
+  -> Core/Memory
+  -> Core/Database
+  -> Shared
+
+Features/CharacterCard
+  -> Core/Memory
+  -> Core/Database
+  -> Shared
+
+Core/PromptEngine
+  -> Core/Database Records
+```
+
+约束：
+
+- `Core/Memory` 不依赖 `Features`。
+- `PromptAssembler` 只消费 `MemoryEntryRecord`，不调用 `MemoryManager`。
+- `ChatViewModel` 通过 init 接收 `MemoryManager`，不自行创建 embedding 或 vector store。
+- 记忆 UI 通过 `MemoryListViewModel` 访问 `DatabaseManager` / `MemoryManager`，View 不直接做数据库操作。
+
+## 4. 与其他记忆相关系统的区别
+
+| 系统 | 作用 | 是否跨对话 | 是否进入 Memory 模块 |
+|---|---|---:|---:|
+| `memory_entry` | 角色长期记忆 | 是 | 是 |
+| `memory_embedding` | 长期记忆向量索引 | 是 | 是 |
+| `conversation.lastExtractedSortOrder` | 自动提取进度边界 | 单 conversation | 是，作为提取 cutoff |
+| compression checkpoint | 同一会话长历史压缩 | 否 | 否，属于 `Core/ContextManager` |
+| recent messages | 当前会话历史 | 否 | 否，由 Chat/ContextManager 处理 |
+
+## 5. 当前设计取舍
+
+- 保存抽取后的事件/事实/关系/摘要，而不是保存每条原始消息向量，减少噪声和索引体积。
+- embedding 在本地执行，长期记忆检索不需要额外网络请求。
+- LLM 只参与自动提取；正常 recall 不走生成式 LLM。
+- 检索失败不阻断聊天，提取失败不推进 cutoff。
+- 当前记忆条目 schema 较扁平，尚未建模 source range、provenance、dedupe/reinforce、冲突解决或 reflect observation。
+
+## 6. Background 目标边界
+
+Background 目标架构中，Memory 不再直接进入 prompt，而是作为 `MemoryBackgroundSource` 产出候选条目：
+
+```text
+MemoryManager / MemoryBackgroundSource
+  -> BackgroundCandidate(sourceType: .memory)
+  -> BackgroundWorker
+  -> BackgroundPacket
+  -> BackgroundAssembler / PromptAssembler
+```
+
+这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。改变的是 recall 结果的消费方：从 `PromptAssembler.trim(memories:)` 迁移到 Background 统一调度。
+
+Hindsight-lite 规划中的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息，再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。

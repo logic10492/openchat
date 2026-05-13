@@ -4,13 +4,13 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-04-30）
+## 当前落地状态（2026-05-13）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前通过的 Swift Testing 测试（197 个）覆盖：
+- 当前通过的 Swift Testing 测试（218 个）覆盖：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -33,6 +33,8 @@
   - `EmbeddingServiceTests`
   - `VectorStoreTests`
   - `MemoryManagerRetrievalTests`
+  - `MemoryExtractionCutoffTests`
+  - `MemoryExtractionPhaseTests`
   - `ChatViewModelPromptAssemblyTests`
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
