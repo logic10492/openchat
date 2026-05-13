@@ -215,6 +215,11 @@ enum Migrations {
                     .defaults(to: Historical.compressionModeStandard)
             }
         }
+        migrator.registerMigration("v13_add_last_extracted_sort_order") { db in
+            try db.alter(table: Historical.conversationTable) { t in
+                t.add(column: "lastExtractedSortOrder", .integer)
+            }
+        }
         return migrator
     }
 

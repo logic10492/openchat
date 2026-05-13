@@ -10,12 +10,14 @@ final class ChatViewModel {
     let contextManager: ContextManager
     let memoryManager: MemoryManager
     let titleGenerator: TitleGenerator
+    let apiKeyStore: any APIKeyStore
     let appState: AppState
 
     var conversation: ConversationRecord
     var messages: [MessageDisplayItem] = []
     var isGenerating = false
     var isGeneratingTitle = false
+    var extractionPhase: MemoryExtractionPhase = .idle
     var tokenUsage: TokenUsageReport?
     private(set) var availableEndpoints: [APIEndpointRecord] = []
     private(set) var availableCharacterCards: [CharacterCardRecord] = []
@@ -63,6 +65,7 @@ final class ChatViewModel {
         contextManager: ContextManager,
         memoryManager: MemoryManager,
         titleGenerator: TitleGenerator,
+        apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
         appState: AppState
     ) {
         self.conversation = conversation
@@ -71,6 +74,7 @@ final class ChatViewModel {
         self.contextManager = contextManager
         self.memoryManager = memoryManager
         self.titleGenerator = titleGenerator
+        self.apiKeyStore = apiKeyStore
         self.appState = appState
         selectedEndpointID = conversation.apiEndpointId
         selectedModelName = conversation.modelName

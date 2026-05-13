@@ -37,7 +37,7 @@ extension ChatViewModel {
             )
         }
 
-        return try APIEndpointConfig(from: resolvedEndpoint, model: resolvedModel)
+        return try await makeEndpointConfig(endpoint: resolvedEndpoint, model: resolvedModel)
     }
 
     func generateResponse(
@@ -68,6 +68,31 @@ extension ChatViewModel {
         let characterCard = try await databaseManager.fetchCharacterCard(id: selectedCharacterCardID ?? conversation.characterCardId)
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
+
+        // Pre-response memory extraction: extract before retrieval so new memories are immediately available
+        if messagesSinceLastExtraction >= Self.extractionInterval,
+           characterCard?.id != nil {
+            extractionPhase = .extracting
+            do {
+                let result = try await memoryManager.extractMemories(from: conversation)
+                messagesSinceLastExtraction = 0
+                if result.isEmpty {
+                    extractionPhase = .skipped
+                } else {
+                    let summaries = result.map(\.content)
+                    extractionPhase = .completed(count: result.count, summaries: summaries)
+                    logger.info("Memory extraction completed: \(result.count) memories extracted for conversation \(self.conversation.id)")
+                    // Refresh conversation record to pick up updated lastExtractedSortOrder
+                    if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
+                        conversation = refreshed
+                    }
+                }
+            } catch {
+                extractionPhase = .failed(description: error.localizedDescription)
+                logger.error("Memory extraction failed for conversation \(self.conversation.id): \(error.localizedDescription)")
+            }
+        }
+
         let currentMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
         let promptHistoryMessages = makePromptHistoryMessages(
             from: currentMessages,
@@ -146,6 +171,10 @@ extension ChatViewModel {
             guard let self else { return }
             var lastUsage: StreamUsage?
             let streamStart = ContinuousClock.now
+            defer {
+                isGenerating = false
+                streamTask = nil
+            }
             do {
                 for try await delta in apiClient.streamMessage(
                     messages: assembly.messages,
@@ -203,20 +232,28 @@ extension ChatViewModel {
                 )
                 setAssistantStats(stats, messageID: assistantRecord.id)
 
-                // Periodic memory extraction
+                // Periodic memory extraction counter
                 messagesSinceLastExtraction += 2 // user + assistant
-                if messagesSinceLastExtraction >= Self.extractionInterval {
-                    messagesSinceLastExtraction = 0
-                    triggerMemoryExtraction()
-                }
             } catch {
-                removeAssistantPlaceholder(id: assistantRecord.id)
+                try? await persistOrRemovePartialAssistant(assistantRecord)
                 appState.present(error: error.localizedDescription)
             }
-
-            isGenerating = false
-            streamTask = nil
         }
+    }
+
+    private func makeEndpointConfig(
+        endpoint: APIEndpointRecord,
+        model: EndpointModelRecord
+    ) async throws -> APIEndpointConfig {
+        let storedKey = try apiKeyStore.readKey(endpointId: endpoint.id)
+        if storedKey == nil, let legacyKey = endpoint.apiKey?.nilIfBlank {
+            try apiKeyStore.saveKey(legacyKey, endpointId: endpoint.id)
+            var sanitized = endpoint
+            sanitized.apiKey = nil
+            try await databaseManager.saveEndpoint(sanitized)
+            return try APIEndpointConfig(from: sanitized, model: model, apiKey: legacyKey)
+        }
+        return try APIEndpointConfig(from: endpoint, model: model, apiKey: storedKey ?? endpoint.apiKey)
     }
 
     private func appendAssistantDelta(_ delta: String, messageID: String) {
@@ -238,26 +275,45 @@ extension ChatViewModel {
         messages.removeAll { $0.id == id && $0.content.isEmpty }
     }
 
+    private func persistOrRemovePartialAssistant(_ assistantRecord: MessageRecord) async throws {
+        let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
+        let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
+        guard !finalContent.isEmpty || !(finalReasoning?.isEmpty ?? true) else {
+            removeAssistantPlaceholder(id: assistantRecord.id)
+            return
+        }
+
+        let partial = MessageRecord(
+            id: assistantRecord.id,
+            conversationId: assistantRecord.conversationId,
+            role: assistantRecord.role,
+            content: finalContent,
+            tokenCount: TokenCounter.count(finalContent),
+            isCompressed: assistantRecord.isCompressed,
+            originalContent: assistantRecord.originalContent,
+            sortOrder: assistantRecord.sortOrder,
+            createdAt: assistantRecord.createdAt,
+            reasoningContent: finalReasoning
+        )
+        try await databaseManager.saveMessage(partial)
+    }
+
     func triggerMemoryExtraction() {
         Task {
             do {
                 let result = try await memoryManager.extractMemories(from: conversation)
                 if !result.isEmpty {
-                    logger.info("Memory extraction completed: \(result.count) memories extracted for conversation \(self.conversation.id)")
-                    let summary = result.map { "· \($0.content)" }.joined(separator: "\n")
-                    let text = String(localized: "🧠 Memorized \(result.count) entries") + "\n" + summary
-                    await MainActor.run {
-                        self.messages.append(.memoryMarker(content: text))
-                    }
+                    logger.info("Memory extraction on disappear completed: \(result.count) memories for conversation \(self.conversation.id)")
                 }
             } catch {
-                logger.error("Memory extraction failed for conversation \(self.conversation.id): \(error.localizedDescription)")
-                let text = String(localized: "🧠 Memory extraction failed") + "\n" + error.localizedDescription
-                await MainActor.run {
-                    self.messages.append(.memoryMarker(content: text, isError: true))
-                }
+                logger.error("Memory extraction on disappear failed for conversation \(self.conversation.id): \(error.localizedDescription)")
             }
         }
+    }
+
+    func dismissExtractionIndicator() {
+        guard extractionPhase != .extracting else { return }
+        extractionPhase = .idle
     }
 
     private func makePromptHistoryMessages(

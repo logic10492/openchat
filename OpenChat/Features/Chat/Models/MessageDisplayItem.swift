@@ -25,22 +25,6 @@ struct MessageDisplayItem: Identifiable, Hashable {
         streamingStats = nil
     }
 
-    /// Inline memory extraction marker (not persisted)
-    static func memoryMarker(content: String, isError: Bool = false) -> MessageDisplayItem {
-        MessageDisplayItem(
-            id: "memory-\(UUID().uuidString)",
-            role: isError ? "memory-error" : "memory",
-            content: content,
-            reasoningContent: nil,
-            tokenCount: nil,
-            isCompressed: false,
-            originalContent: nil,
-            createdAt: .now,
-            sortOrder: Int.max,
-            streamingStats: nil
-        )
-    }
-
     private init(
         id: String,
         role: String,

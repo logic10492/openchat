@@ -353,6 +353,88 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(storedCurrentInputs.count == 1)
     }
 
+    @Test func test_stream_failure_after_partial_delta_persists_visible_assistant_content() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-partial-failure",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-partial-failure",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.saveConversation(conversation)
+
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Partial reply"},"finish_reason":null}]}
+
+            data: {"invalid":
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let contextManager = ContextManager(databaseManager: databaseManager, apiClient: apiClient)
+        let memoryManager = MemoryManager(
+            databaseManager: databaseManager,
+            embeddingService: ChatFailingEmbeddingProvider(),
+            vectorStore: ChatEmptyVectorStore(),
+            apiClient: apiClient
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: contextManager,
+            memoryManager: memoryManager,
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Continue."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        let assistant = storedMessages.first { $0.role == "assistant" }
+        #expect(assistant?.content == "Partial reply")
+        #expect(viewModel.messages.contains { $0.role == "assistant" && $0.content == "Partial reply" })
+        #expect(viewModel.isGenerating == false)
+        #expect(viewModel.streamTask == nil)
+    }
+
     @Test func test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()

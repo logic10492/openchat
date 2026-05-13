@@ -8,6 +8,7 @@ struct MemoryManager: Sendable {
     private let embeddingService: any EmbeddingProvider
     private let vectorStore: any MemoryVectorStore
     private let apiClient: APIClient
+    private let apiKeyStore: any APIKeyStore
 
     private static let minimumMessagesForExtraction = 4
     private static let distanceThreshold: Float = 1.5
@@ -16,12 +17,14 @@ struct MemoryManager: Sendable {
         databaseManager: DatabaseManager,
         embeddingService: any EmbeddingProvider,
         vectorStore: any MemoryVectorStore,
-        apiClient: APIClient
+        apiClient: APIClient,
+        apiKeyStore: any APIKeyStore = KeychainAPIKeyStore()
     ) {
         self.databaseManager = databaseManager
         self.embeddingService = embeddingService
         self.vectorStore = vectorStore
         self.apiClient = apiClient
+        self.apiKeyStore = apiKeyStore
     }
 
     // MARK: - Extraction
@@ -36,14 +39,12 @@ struct MemoryManager: Sendable {
             return []
         }
 
-        // Incremental extraction: only process messages after the last extracted memory
-        let lastExtractionDate = try await databaseManager.latestMemoryDate(
-            conversationId: current.id
-        )
+        // Incremental extraction: only process messages after last extracted sortOrder
+        let cutoff = current.lastExtractedSortOrder
         let allMessages = try await databaseManager.fetchMessages(conversationId: current.id)
         let messages: [MessageRecord]
-        if let cutoff = lastExtractionDate {
-            messages = allMessages.filter { $0.createdAt > cutoff }
+        if let cutoff {
+            messages = allMessages.filter { $0.sortOrder > cutoff }
         } else {
             messages = allMessages
         }
@@ -86,6 +87,15 @@ struct MemoryManager: Sendable {
 
         let saved = prepared.map(\.entry)
         logger.info("Extracted \(saved.count) memories from conversation \(current.id)")
+
+        // Update extraction boundary so next extraction only processes newer messages
+        if let maxSortOrder = messages.map(\.sortOrder).max() {
+            var updated = current
+            updated.lastExtractedSortOrder = maxSortOrder
+            updated.updatedAt = Date()
+            try await databaseManager.saveConversation(updated)
+        }
+
         return saved
     }
 
@@ -182,7 +192,16 @@ struct MemoryManager: Sendable {
             )
         }
 
-        return try APIEndpointConfig(from: record, model: model)
+        let storedKey = try apiKeyStore.readKey(endpointId: record.id)
+        if storedKey == nil, let legacyKey = record.apiKey?.nilIfBlank {
+            try apiKeyStore.saveKey(legacyKey, endpointId: record.id)
+            var sanitized = record
+            sanitized.apiKey = nil
+            try await databaseManager.saveEndpoint(sanitized)
+            return try APIEndpointConfig(from: sanitized, model: model, apiKey: legacyKey)
+        }
+
+        return try APIEndpointConfig(from: record, model: model, apiKey: storedKey ?? record.apiKey)
     }
 
     private func callExtractionAPI(

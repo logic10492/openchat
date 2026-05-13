@@ -25,6 +25,12 @@ extension DatabaseManager {
 
     func deleteCharacterCard(id: String) async throws {
         try await write { db in
+            try db.execute(sql: """
+                DELETE FROM memory_embedding
+                WHERE entry_id IN (
+                    SELECT id FROM memory_entry WHERE characterCardId = ?
+                )
+                """, arguments: [id])
             _ = try CharacterCardRecord.deleteOne(db, key: id)
         }
     }

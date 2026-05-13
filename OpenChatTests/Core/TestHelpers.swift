@@ -47,6 +47,7 @@ enum TestHelpers {
             slowPlotMode: slowPlotMode,
             isTitleGenerated: false,
             isPinned: false,
+            lastExtractedSortOrder: nil,
             createdAt: .now,
             updatedAt: .now
         )
