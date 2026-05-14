@@ -1,0 +1,117 @@
+# Memory Hindsight-lite Repair - Phase A Evidence
+
+Date: 2026-05-14
+Phase: A recall ordering
+
+## Worktree Baseline
+
+Command:
+git status --short
+
+Result before edits:
+?? arch/modules/image.png
+?? comp_swap/
+?? docs/superpowers/plans/2026-05-14-memory-hindsight-lite-repair/
+
+Note:
+The plan directory and two unrelated untracked paths pre-existed this implementation pass. Phase A edits intentionally avoid `arch/modules/image.png` and `comp_swap/`.
+
+## Simulator Discovery
+
+Command:
+xcrun simctl list devices available | rg 'iPhone'
+
+Sandbox note:
+The first non-escalated attempt could not connect to CoreSimulatorService and could not write `/Users/fukujusou/Library/Logs/CoreSimulator/CoreSimulator.com.apple.CoreSimulator.simctl.log` due sandbox permissions. The escalated retry succeeded.
+
+Available target used for tests:
+iPhone 17 Pro
+
+## Baseline Propagation Evidence
+
+Static search:
+rg -n "^import |@testable import|PromptAssembler|MemoryManager|MemoryEntryRecord|TokenBudget|retrieveMemories|makeMemoryMessageContent|\[Memories\]" OpenChat/Core/PromptEngine OpenChat/Core/Memory OpenChat/Features/Chat/ViewModels OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift
+
+High-signal source anchors:
+- OpenChat/Core/Memory/MemoryManager.swift:127-138 restores semantic ids to ordered entries, merges recent summaries, and returns the final ordered memory array.
+- OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:102-143 passes retrieved memories into `PromptAssembler.preview(...)` and `PromptAssembler.assemble(...)`.
+- OpenChat/Core/PromptEngine/PromptAssembler.swift:61 calls `trim(memories:within:)`.
+- OpenChat/Core/PromptEngine/PromptAssembler.swift:201-204 builds the single `[Memories]` system block.
+- OpenChat/Core/PromptEngine/PromptAssembler.swift:283-293 was the baseline reordering point.
+
+## Baseline Focused Tests
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+34 tests / 4 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_18-12-34-+0800.xcresult
+
+## Phase A Verification
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/PromptAssemblerTests'
+
+Result:
+14 tests / 1 suite passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_18-16-52-+0800.xcresult
+
+Re-run at 2026-05-14 20:14 +0800:
+14 tests / 1 suite passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_20-14-49-+0800.xcresult
+
+## Post-change Focused Suite
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+35 tests / 4 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_18-17-49-+0800.xcresult
+
+Re-run at 2026-05-14 20:16 +0800:
+35 tests / 4 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_20-16-33-+0800.xcresult
+
+## Full Suite
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result:
+219 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_18-27-38-+0800.xcresult
+
+Re-run at 2026-05-14 20:17 +0800:
+219 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_20-17-28-+0800.xcresult
+
+## Post-change Propagation Quality Check
+
+Status:
+DONE
+
+Source diff:
+- OpenChat/Core/PromptEngine/PromptAssembler.swift: `trim(memories:within:)` now iterates `memories` directly.
+- OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift: added order-preserving budget trim regression test.
+
+Static drift check:
+- No production Swift imports were added.
+- `MemoryManager.retrieveMemories(...)` interface remains unchanged.
+- Chat ViewModel, API request shape, Database migrations, and Xcode project were not modified.
+- `git diff --check` passed.
+- Initial stale-doc check found no active Memory/Prompt arch claim that P1 recall ordering remains open; remaining `memories.sorted` mentions there are baseline/change-history evidence.
+- 2026-05-14 20:17 broader post-audit doc drift check found `arch/modules/background/sources.md` still phrased P1 as current; corrected it to say Phase A is closed and Background 接入 must preserve the same order contract.
+
+Remaining non-Phase-A risks:
+- fallback tiers / `MemoryRecallTrace` not implemented.
+- provenance / dedupe metadata not implemented.
+- Responses API system folding risk remains open.

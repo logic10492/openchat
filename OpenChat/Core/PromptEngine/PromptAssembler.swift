@@ -284,7 +284,7 @@ struct PromptAssembler {
         guard !memories.isEmpty else { return [] }
         var result: [MemoryEntryRecord] = []
         var used = 0
-        for entry in memories.sorted(by: { $0.importance > $1.importance }) {
+        for entry in memories {
             let tokens = TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent(entry)))
             guard used + tokens <= budget || result.isEmpty else { break }
             result.append(entry)

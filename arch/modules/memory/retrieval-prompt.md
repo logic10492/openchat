@@ -69,21 +69,25 @@ memoryBudget = min(Int(Double(remaining) * 0.15), memoryTokens)
 historyBudget = remaining - exampleDialogsBudget - worldBookBudget - memoryBudget
 ```
 
-## 6. 当前排序风险
+## 6. Prompt 裁剪顺序
 
-当前有一个已知 P1 风险：
+2026-05-14 Phase A 已关闭原 P1 排序风险：
 
 - `MemoryManager.retrieveMemories(...)` 会先按 KNN id 顺序恢复语义相关结果。
-- 但 `PromptAssembler.trim(memories:within:)` 在裁剪前执行 `memories.sorted { importance DESC }`。
-- 当 token 预算不足时，高 importance 但低相关的记忆可能挤掉当前输入更相关的记忆。
+- `PromptAssembler.trim(memories:within:)` 现在按输入数组顺序累积 token，不再执行 `memories.sorted { importance DESC }`。
+- 当 token 预算不足时，裁剪会保留 retrieval order 中靠前的记忆；若第一条本身超预算，仍沿用既有“至少保留第一条”的行为。
 
-这也是 `arch/AntiEntropy/problem.md` 中仍打开的“语义检索顺序在 Prompt 注入前被 importance 重排”问题。
+排序权属：
 
-修复方向：
+- 当前由 `MemoryManager` 输出最终 prompt memory 顺序。
+- 本轮 Memory 完善后由 `MemoryRecallResult` 负责 rank fusion；未来独立 Background 计划可由 `MemoryBackgroundSource` 包装该结果。
+- `importance` 只作为同等相关性时的 tie-breaker、fallback 策略输入或 UI 展示元数据，不再由 `PromptAssembler` 用来重排 prompt memory。
 
-- 保留 retrieval order 作为主排序。
-- `importance` 只作为同分/补充排序或预算内展示元数据。
-- 如引入 Hindsight-lite recall，可在 `MemoryManager` 内完成 semantic + keyword + recency fusion 后输出最终顺序，`PromptAssembler` 不再重排。
+实现与测试证据：
+
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`：`trim(memories:within:)` 对 `memories` 原序迭代。
+- `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`：`test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory` 覆盖 `[A, B, C]` 输入、`C > B > A` importance、预算只保留 A/B 的场景。
+- 2026-05-14 verification：`PromptAssemblerTests` 14 tests passed；Memory/Vector/Prompt/Chat focused suite 35 tests passed；full suite 219 tests / 45 suites passed。
 
 ## 7. Hindsight-lite recall 规划
 
@@ -95,14 +99,15 @@ semantic KNN candidates
   + recent high-value candidates
   -> rank fusion
   -> ordered MemoryRecallResult
-  -> prompt trim / BackgroundCandidate
+  -> current [Memories] prompt compatibility
+  -> future BackgroundCandidate adapter boundary
 ```
 
 目标 contract：
 
 - `MemoryRecallResult.entries` 是最终有序列表。
 - `MemoryRecallTrace` 记录 semantic/keyword/recent candidate 数量、fallback reason、selected ids 和 omitted ids。
-- `PromptAssembler` 只按输入顺序裁剪，不再了解 semantic distance 或 fallback 细节。
+- 兼容旧链路时，`PromptAssembler` 只按输入顺序裁剪，不再了解 semantic distance、importance rerank 或 fallback 细节。
 - `recent` 只作为 high-value 补充或 fallback tier，不再无条件把最近噪声塞入 prompt。
 
 fallback 分层：

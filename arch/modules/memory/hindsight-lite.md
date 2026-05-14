@@ -1,9 +1,11 @@
 # Hindsight-lite 完善设计
 
-> 状态：设计规划，尚未实现。
+> 状态：Phase A recall ordering 已实现；其余 retain / recall trace / fallback tiers / provenance / reflect 仍为设计规划。
 > 目标：用轻量 retain / recall / reflect 设计关闭 `arch/AntiEntropy/problem.md` 中剩余的记忆系统问题。
 
 本页参考 Hindsight 论文的三段式操作：retain、recall、reflect。论文把 agent memory 视为可推理的结构化底座，并强调证据、推断和可追踪更新的区别。OpenChat 不需要完整复刻论文中的多网络记忆系统，当前目标是把已有 `memory_entry` / `memory_embedding` 演进成低延迟、可解释、可测试的本地轻量版本。
+
+边界说明：本页只定义 Memory 层完善。世界书向量化与 BackgroundWorker 统一调度是后续独立计划；本页只要求 Memory 输出可被后续 `MemoryBackgroundSource` 包装，不实现 Background 层。
 
 参考：<https://arxiv.org/abs/2512.12818>
 
@@ -11,7 +13,7 @@
 
 Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有 iOS 本地架构上补齐四个缺口：
 
-1. **排序可靠**：当前输入相关性必须优先于 `importance`，关闭 P1 recall ordering 问题。
+1. **排序可靠**：当前输入相关性必须优先于 `importance`；Phase A 已关闭 P1 prompt trim 重排问题。
 2. **来源可追踪**：每条自动记忆应知道来自哪段消息，降低抽取幻觉和重复污染。
 3. **召回可解释**：fallback、distance threshold、预算裁剪和被省略条目都要能在 debug 视图中解释。
 4. **整理低频化**：reflect 只用于记忆整理和 observation synthesis，不进入每轮主聊天链路。
@@ -25,16 +27,17 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 - 不让 `PromptAssembler` 承担 recall rerank。
 - 不为 provider 没有返回的字段伪造“模型置信分数”。
 - 不把 Background 目标架构写成当前已实现能力。
+- 不实现世界书向量化或 `BackgroundWorker`。
 
 ## 3. 与当前问题的对应关系
 
 | problem.md 条目 | Hindsight-lite 设计动作 | 目标状态 |
 |---|---|---|
-| P1：Prompt 注入前被 importance 重排 | Phase A：order-preserving trim，排序权归 recall | 可关闭 |
+| P1：Prompt 注入前被 importance 重排 | Phase A：order-preserving trim，排序权归 recall | 已关闭 |
 | P2：fallback 和阈值缺少校准与可观测性 | Phase C：`MemoryRecallTrace` + fallback tier | 规划后可实现 |
 | P2：recent fallback 只按时间取最近 | Phase C：recent high-value fallback，不盲目注入噪声 | 规划后可实现 |
 | P2：提取 prompt 缺少角色卡、已有记忆、source 边界和去重 | Phase B：retain schema + extraction prompt v2 | 规划后可实现 |
-| P2：Responses API system folding | Phase E：Background block position audit | 规划后可实现 |
+| P2：Responses API system folding | Phase E：当前 `[Memories]` request shape audit；Background block audit 留给独立 Background 计划 | 规划后可实现 |
 | P3：检索可观测性不足 | Phase C / E：recall diagnostics 到 debug UI | 规划后可实现 |
 
 ## 4. 总体架构
@@ -54,7 +57,8 @@ Recall
   -> recent high-value candidates
   -> rank fusion
   -> ordered MemoryRecallResult
-  -> BackgroundCandidate(.memory)   // target
+  -> current [Memories] compatibility output
+  -> future BackgroundCandidate(.memory) adapter boundary
 
 Reflect
   selected memory cluster
@@ -72,7 +76,7 @@ MemoryManager.retrieveMemories
   -> [Memories] system block
 ```
 
-目标源码应收敛为：
+后续 Background 独立计划中的目标源码才会收敛为：
 
 ```text
 MemoryBackgroundSource
@@ -84,7 +88,7 @@ MemoryBackgroundSource
 
 ## 5. Phase A：Recall ordering 先行修复
 
-这是最小、最高优先级改动，直接关闭当前 P1。
+这是最小、最高优先级改动，已于 2026-05-14 落地并关闭当前 P1。
 
 ### 5.1 排序所有权
 
@@ -117,6 +121,12 @@ private static func trim(memories: [MemoryEntryRecord], within budget: Int) -> [
 
 - 输入顺序 `[A, B, C]`，importance 为 `C > B > A`，预算只能容纳两条时，prompt 保留 `[A, B]`。
 - `MemoryManager.retrieveMemories(...)` 返回 KNN 顺序时，`PromptAssembler.preview(...)` 不改变该顺序。
+
+实现证据：
+
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`：`trim(memories:within:)` 对输入 `memories` 原序迭代。
+- `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`：`test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory`。
+- 2026-05-14 verification：`PromptAssemblerTests` 14 tests passed；Memory/Vector/Prompt/Chat focused suite 35 tests passed；full suite 219 tests / 45 suites passed。
 
 ## 6. Phase B：Retain schema v2
 
@@ -259,7 +269,7 @@ struct MemoryRecallTrace: Sendable {
 }
 ```
 
-`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 可以先保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。等 Background 落地后再让 `MemoryBackgroundSource` 读取完整 trace。
+`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 可以先保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。完整 trace 是 Memory 层能力；等后续独立 Background 计划落地后，再由 `MemoryBackgroundSource` 读取并包装。
 
 ### 7.2 Candidate sources
 
@@ -327,7 +337,7 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 
 - 用户在记忆管理页点击“整理记忆”。
 - App 空闲或后台低频触发。
-- BackgroundWorker 发现重复/冲突 cluster 后生成整理任务。
+- 后续 BackgroundWorker 若发现重复/冲突 cluster，可生成整理任务。
 
 禁止：
 
@@ -369,11 +379,11 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 - 冲突解决或删除建议进入 review，不自动破坏历史证据。
 - 自动注入 prompt 时，observation 可以比原始 cluster 有更高优先级，但仍受 recall relevance 控制。
 
-## 9. Phase E：Background 与 Responses API
+## 9. Phase E：Background 适配边界与 Responses API
 
-### 9.1 Background 集成
+### 9.1 Background 适配边界
 
-Hindsight-lite 不直接替代 Background。它提供更好的 Memory source：
+Hindsight-lite 不直接替代 Background，也不在本计划内实现 Background。它提供更好的 Memory source，供后续独立 Background 计划包装：
 
 ```text
 MemoryRecallResult
@@ -382,11 +392,12 @@ MemoryRecallResult
   -> BackgroundPacket
 ```
 
-迁移顺序：
+后续迁移顺序：
 
 1. 先修 `PromptAssembler` order-preserving trim。
-2. 再把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
-3. 最后让 `PromptAssembler` 消费 Background block，而不是分别消费 memories 和 world-book entries。
+2. 本计划补齐 `MemoryRecallResult` / trace / provenance。
+3. 后续 Background 计划再把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
+4. 最后让 `PromptAssembler` 消费 Background block，而不是分别消费 memories 和 world-book entries。
 
 ### 9.2 Responses API system folding
 
@@ -394,9 +405,9 @@ MemoryRecallResult
 
 规划动作：
 
-- 给 Background block 加稳定 label，例如 `[Background] ... [/Background]`。
 - 对 Chat Completions 和 Responses API 分别记录最终请求 shape。
-- 在测试中确认 memory/background 不会被拼进 user message，也不会丢失。
+- 在本计划测试中确认当前 `[Memories]` 不会被拼进 user message，也不会丢失。
+- Background block 的稳定 label 与 request-shape audit 留给后续 Background 计划包。
 - 在 `arch/modules/api-client.md` 或 Responses API 文档中记录 system folding 对 prompt 层次的影响。
 
 ## 10. 可观测性
@@ -430,7 +441,7 @@ MemoryRecallResult
 | provenance migration | companion table 追加，不破坏旧数据 |
 | dedupe behavior | 同批重复不重复写入 |
 | reflect output validation | observation 必须有 `basedOn` |
-| Responses API request shape | Background / Memories block 不丢失 |
+| Responses API request shape | 当前 `[Memories]` block 不丢失；Background block 留给后续独立计划 |
 
 建议 focused verification：
 
@@ -448,6 +459,6 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | C | provenance companion table + extraction prompt v2 | 是 |
 | D | dedupe / reinforce metadata | 可能需要 |
 | E | reflect observation synthesis | 是，建议有 `basedOn` 表 |
-| F | MemoryBackgroundSource 接入 Background | 否或少量 DTO |
+| F | MemoryBackgroundSource 接入 Background | 后续独立计划，不在本页对应计划包内 |
 
 最务实的第一步是 Phase A。它范围小、风险低、能直接关闭当前 P1，并为后续 recall fusion 建立正确的排序契约。

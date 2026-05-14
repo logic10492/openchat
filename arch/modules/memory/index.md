@@ -12,7 +12,7 @@
 - 记忆条目内容由当前会话配置的聊天 API 以 JSON 形式抽取，字段为 `content`、`type`、`importance`。
 - 条目保存前使用本地 CoreML MultilingualE5Small 生成 384 维 embedding，生产 `VectorStore` 在一个 GRDB write transaction 内同时写入 `memory_entry` 与 `memory_embedding`。
 - 每次发送消息时，当前输入先生成 query embedding，再通过 sqlite-vec KNN 检索相关记忆；语义检索异常或结果低于阈值时 fallback 到近期记忆。
-- 检索结果作为 `[Memories] ... [/Memories]` labeled system block 注入 Current-Turn Context。
+- 检索结果按 `MemoryManager` 输出顺序作为 `[Memories] ... [/Memories]` labeled system block 注入 Current-Turn Context；`PromptAssembler` 只按输入顺序和 token budget 裁剪，不再按 `importance` 重排。
 - 角色详情页提供记忆列表、搜索、单条删除和清空入口；Chat 内联显示提取中、已提取和失败状态。
 
 ## 2. 文档结构
@@ -23,7 +23,7 @@
 | [data-model.md](data-model.md) | `memory_entry`、`memory_embedding`、`conversation.lastExtractedSortOrder` 与迁移约束 |
 | [embedding-vector-store.md](embedding-vector-store.md) | CoreML embedding、E5 前缀、sqlite-vec 写入/检索一致性 |
 | [extraction.md](extraction.md) | 自动提取触发、LLM JSON 抽取、解析容错、增量 cutoff |
-| [retrieval-prompt.md](retrieval-prompt.md) | 语义检索、fallback、prompt 注入、当前排序风险 |
+| [retrieval-prompt.md](retrieval-prompt.md) | 语义检索、fallback、prompt 注入、Phase A 后的裁剪顺序 |
 | [ui-management.md](ui-management.md) | Chat 提取指示器与角色记忆管理 UI |
 | [testing.md](testing.md) | 测试覆盖、验证命令和当前已知缺口 |
 | [hindsight-lite.md](hindsight-lite.md) | 轻量 retain / recall / reflect 完善设计，用于关闭剩余 memory problem |
@@ -67,7 +67,7 @@ MemoryManager.retrieveMemories
   -> filter distance < 1.5
   -> fetch MemoryEntryRecord by ids, restore KNN order
   -> merge recent memories, deduplicate
-  -> PromptAssembler.trim(memories:)
+  -> PromptAssembler.trim(memories:)     // preserve input order
   -> [Memories] system block
 ```
 
@@ -83,13 +83,15 @@ MemoryManager.retrieveMemories
 
 当前 Memory 仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)` 后传给 `PromptAssembler` 注入 `[Memories]`。目标架构中，Memory 会变成 `MemoryBackgroundSource`：负责产生长期记忆候选，不再直接拥有 prompt 注入权。
 
+边界：当前 Memory 完善计划只补 Memory 层能力。世界书向量化、`Core/Background`、`BackgroundWorker` 和 `PromptAssembler` 切换到 `BackgroundPacket` 属于后续独立计划包。
+
 迁移要求：
 
-- 先修复 retrieval ordering，让语义相关性优先于 `importance` 重排。
+- 已完成 retrieval ordering Phase A：`PromptAssembler` 不再用 `importance` 重排 memory，后续可把 recall trace / fallback diagnostics 暴露给 Background。
 - 引入 `MemoryRecallResult` / trace 后，Memory source 可以向 Background 暴露 fallback、distance、omission diagnostics。
-- 再把 memory retrieval 输出包装为 `BackgroundCandidate(sourceType: .memory)`。
-- `BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选排序和裁剪。
-- `PromptAssembler` 最终只消费 `BackgroundPacket` 或由 `BackgroundAssembler` 生成的 prompt block。
+- 后续 Background 计划再把 memory retrieval 输出包装为 `BackgroundCandidate(sourceType: .memory)`。
+- 后续 Background 计划由 `BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选排序和裁剪。
+- 后续 Background 计划再让 `PromptAssembler` 消费 `BackgroundPacket` 或由 `BackgroundAssembler` 生成的 prompt block。
 
 ## 6. 实现证据
 

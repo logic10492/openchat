@@ -166,6 +166,48 @@ struct PromptAssemblerTests {
         #expect(preview.tokenUsage.memories > 0)
     }
 
+    @Test func test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let cardId = "card-ordering"
+        let filler = String(repeating: "detail ", count: 24)
+        let first = TestHelpers.makeMemoryEntry(
+            characterCardId: cardId,
+            content: "alpha relevant first memory. \(filler)",
+            memoryType: .fact,
+            importance: 10
+        )
+        let second = TestHelpers.makeMemoryEntry(
+            characterCardId: cardId,
+            content: "bravo relevant second memory. \(filler)",
+            memoryType: .fact,
+            importance: 50
+        )
+        let third = TestHelpers.makeMemoryEntry(
+            characterCardId: cardId,
+            content: "cedar less relevant third memory. \(filler)",
+            memoryType: .fact,
+            importance: 100
+        )
+
+        let preview = PromptAssembler.preview(
+            conversation: conversation,
+            characterCard: nil,
+            worldBook: nil,
+            worldBookEntries: [],
+            memories: [first, second, third],
+            recentMessages: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2200)
+        )
+
+        let memoryBlock = try #require(preview.currentTurnContextMessages.first { $0.content.contains("[Memories]") })
+        let firstRange = try #require(memoryBlock.content.range(of: "alpha relevant first memory."))
+        let secondRange = try #require(memoryBlock.content.range(of: "bravo relevant second memory."))
+
+        #expect(firstRange.lowerBound < secondRange.lowerBound)
+        #expect(!memoryBlock.content.contains("cedar less relevant third memory."))
+    }
+
     @Test func test_assemble_includes_memories_and_time_context() throws {
         let conversation = TestHelpers.makeConversation()
         let card = TestHelpers.makeCharacterCard()

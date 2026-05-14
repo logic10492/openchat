@@ -35,7 +35,7 @@
 |   5 | Stable Conversation State | user / assistant | checkpoint 后会话历史                  | `ContextManager` 返回的 checkpoint 后 `processedHistory`                           | 动态段 | 不包含本轮当前输入                                                      |
 |   6 | Current-Turn Context      | system           | example dialogs block             | `characterCard.exampleDialogs`                                                 | 可选段 | 以带标签的 system block 注入，不再作为原始 user/assistant 示例消息注入             |
 |   7 | Current-Turn Context      | system           | world book entries block          | 当前输入 + 最近历史触发的世界书条目                                                            | 动态段 | 按 `priority` 降序；目标顺序不再暴露 `after_system` / `before_history` 注入点 |
-|   8 | Current-Turn Context      | system           | memories block                    | `MemoryManager.retrieveMemories(...)` 按当前输入检索返回的记忆                             | 动态段 | 按检索结果顺序和 importance 预算裁剪                                       |
+|   8 | Current-Turn Context      | system           | memories block                    | `MemoryManager.retrieveMemories(...)` 按当前输入检索返回的记忆                             | 动态段 | 按检索结果顺序和 token 预算裁剪；不按 `importance` 重排                       |
 |   9 | Current Turn              | user             | current user input + time context | `currentInput` + `PromptAssembler.makeTimeContext()`                           | 固定段 | 同一条 user message 内先放用户输入，再放 `[Time] <ISO8601> [/Time]`         |
 
 旧的 `WorldBookEntryPosition.after_system` / `.before_history` 字段保留为既有数据兼容字段，不再决定最终 prompt 位置。所有当前轮命中的世界书内容最终统一落入 Current-Turn Context 的 world book block。
@@ -305,7 +305,7 @@ function preview(conversation, characterCard, worldBook, entries, memories, hist
 
     exampleDialogBlock = makeExampleDialogsBlock(characterCard.exampleDialogMessages())
     worldBookBlock = makeWorldBookBlock(triggeredWorldBookEntries)
-    memoryBlock = makeMemoryBlock(memories.sortedByImportanceDescending)
+    memoryBlock = makeMemoryBlock(memories) // preserve retrieval order
 
     // 3. Current Turn
     timeString = ISO8601DateFormatter().string(from: Date())

@@ -245,7 +245,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 ### arch-src
 
 - `arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列，字段与 `v13_add_last_extracted_sort_order` 一致。
-- `arch/modules/memory/` 已从单一 index 拆分为 `architecture.md`、`data-model.md`、`embedding-vector-store.md`、`extraction.md`、`retrieval-prompt.md`、`ui-management.md`、`testing.md` 和 `hindsight-lite.md`；触发时机、sortOrder cutoff、UI 指示器、检索 fallback、当前排序风险与 Hindsight-lite 未实现边界均已回写。
+- `arch/modules/memory/` 已从单一 index 拆分为 `architecture.md`、`data-model.md`、`embedding-vector-store.md`、`extraction.md`、`retrieval-prompt.md`、`ui-management.md`、`testing.md` 和 `hindsight-lite.md`；触发时机、sortOrder cutoff、UI 指示器、检索 fallback、Phase A retrieval-order-preserving prompt trim 与 Hindsight-lite 未实现边界均已回写。
 - `arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
 
 ### arch-test
@@ -259,3 +259,25 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 - Focused suite 38 tests / 3 suites passed。
 - Full suite 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
+## Memory Recall Ordering Phase A 三边一致性写回（2026-05-14）
+
+范围：`OpenChat/Core/PromptEngine/PromptAssembler.swift`、`OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`、Memory / Prompt / AntiEntropy 相关文档。
+
+### arch-src
+
+- `arch/modules/memory/retrieval-prompt.md` 已从“当前排序风险”改为 Phase A 后的 prompt 裁剪顺序事实。
+- `arch/modules/memory/index.md` 已记录 `[Memories]` 按 `MemoryManager` 输出顺序注入，`PromptAssembler` 只按输入顺序和 token budget 裁剪。
+- `arch/modules/prompt-assembly.md` 已移除 `memories.sortedByImportanceDescending` 伪代码。
+- `arch/modules/memory/hindsight-lite.md` 已标记 Phase A implemented，同时保留 fallback tiers、trace、provenance、reflect 仍为规划。
+
+### arch-test
+
+- `PromptAssemblerTests.test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory` 覆盖输入 `[A, B, C]`、importance `C > B > A`、预算只容纳 A/B 时仍保持 retrieval order。
+
+### src-test
+
+- Baseline focused suite：34 tests / 4 suites passed。
+- Phase A focused suite：`PromptAssemblerTests` 14 tests / 1 suite passed。
+- Post-change focused suite：35 tests / 4 suites passed。
+- Full suite：219 tests / 45 suites passed。

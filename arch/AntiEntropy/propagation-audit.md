@@ -388,3 +388,43 @@
 
 - Focused command: `xcodebuild test ... -only-testing:OpenChatTests/MemoryExtractionCutoffTests -only-testing:OpenChatTests/MemoryExtractionPhaseTests -only-testing:OpenChatTests/MigrationTests -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests`，结果 49 tests / 4 suites passed。
 - Full suite: 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
+## 2026-05-14 Memory Recall Ordering Phase A Incremental Audit
+
+范围：`OpenChat/Core/PromptEngine/PromptAssembler.swift`、`OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`、`arch/modules/memory/*`、`arch/modules/prompt-assembly.md`、`arch/AntiEntropy/*`、`harness/2026.05.14/memory-hindsight-lite-repair/*`。
+
+审计模式：窄范围增量审计，解决 `arch/AntiEntropy/problem.md` 中 P1 “语义检索顺序在 Prompt 注入前被 importance 重排”问题。OpenChat 当前没有可生成 Swift import graph 的传播审计脚本，本轮使用源码链路、`rg` 静态引用和 focused tests 作为证据。
+
+### 静态传播面
+
+- Production Swift 改动限定在 `OpenChat/Core/PromptEngine/PromptAssembler.swift`。
+- Test Swift 改动限定在 `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`。
+- 未新增 Swift import，未修改 `MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 兼容接口。
+- 未修改 Chat ViewModel、API request、Database migration、签名配置或 Xcode project。
+- 文档写回限定在 Memory / Prompt / AntiEntropy / Background migration plan 的排序事实同步。
+
+### 行为传播链路
+
+主链路保持：
+
+`ChatViewModel+Support.generateResponse -> MemoryManager.retrieveMemories -> PromptAssembler.preview -> ContextManager.prepareHistory -> PromptAssembler.assemble -> APIClient.streamMessage`
+
+变更点：
+
+- `MemoryManager.retrieveMemories(...)` 仍负责按 KNN ids 恢复 ordered entries，并追加去重后的 recent summaries。
+- `PromptAssembler.trim(memories:within:)` 从 `memories.sorted { importance DESC }` 改为对输入 `memories` 原序迭代。
+- `[Memories]` block 仍位于 Current-Turn Context，位于 world book block 之后、Current Turn user message 之前。
+- token budget 与“至少保留第一条”行为不变。
+
+结论：Phase A 把 prompt memory 的排序权收敛回 recall 侧，关闭 P1 重排问题；未扩大 Core/Memory、Chat、Networking 或 Database 的行为传播面。`importance` 仍可作为未来 recall fusion、fallback tier 或 UI 元数据，但不再由 `PromptAssembler` 覆盖 retrieval order。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/memory/retrieval-prompt.md`、`arch/modules/memory/index.md`、`arch/modules/memory/hindsight-lite.md`、`arch/modules/prompt-assembly.md` 已同步 Phase A 后的 order-preserving trim 事实。
+- `arch-test`：`PromptAssemblerTests.test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory` 覆盖高 importance 低 relevance 第三条在预算不足时不会挤掉前两条 retrieval-order memory。
+- `src-test`：baseline focused suite 34 tests / 4 suites passed；Phase A `PromptAssemblerTests` 14 tests / 1 suite passed；post-change focused suite 35 tests / 4 suites passed；full suite 219 tests / 45 suites passed。2026-05-14 20:14-20:17 +0800 已重跑 Phase A focused、post-change focused 和 full suite，结果仍为 14 / 35 / 219 tests 全部通过。
+
+### Durable Evidence
+
+- `harness/2026.05.14/memory-hindsight-lite-repair/index.md`
+- `harness/2026.05.14/memory-hindsight-lite-repair/evidence.txt`

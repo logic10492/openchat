@@ -24,7 +24,7 @@ enum BackgroundSourceType: String, Codable, Sendable {
 - 返回 `BackgroundCandidate(sourceType: .memory)`。
 - 不再直接把 memories 传给 `PromptAssembler`。
 
-当前 Memory P1 排序问题应在这里或 `BackgroundWorker` 解决：semantic retrieval order 应是主排序信号，`importance` 只能做 tie-breaker。
+2026-05-14 Phase A 已在现有 `PromptAssembler.trim(memories:)` 关闭 Memory P1 排序问题：prompt 裁剪保持 recall 输入顺序，不再按 `importance` 重排。Background 接入后仍必须保持该契约，semantic retrieval order 是主排序信号，`importance` 只能做 tie-breaker。
 
 ## 3. WorldBookBackgroundSource
 

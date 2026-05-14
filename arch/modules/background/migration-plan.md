@@ -33,17 +33,18 @@
 - budget 裁剪稳定。
 - diagnostics 记录 omitted reason。
 
-## Phase 2：修 Memory recall ordering
+## Phase 2：Memory recall ordering 验收与 Background 接入
 
 目标：
 
-- 关闭 `PromptAssembler.trim(memories:)` importance 重排问题。
+- 复用 2026-05-14 已关闭的 `PromptAssembler.trim(memories:)` importance 重排修复。
 - 让 MemorySource 的 candidate order 保持 semantic relevance。
 - importance 只做 tie-breaker。
 
 验证：
 
-- 高 importance 低 relevance 不应挤掉高 relevance 记忆。
+- 已有 Phase A 回归测试证明高 importance 低 relevance 不会在 `PromptAssembler` 裁剪阶段挤掉高 relevance 记忆。
+- Background 接入时继续要求 MemorySource candidate order 保持 semantic relevance。
 
 ## Phase 3：世界书向量化
 
