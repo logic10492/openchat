@@ -210,6 +210,7 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
 | slowPlotMode | INTEGER | NOT NULL, DEFAULT 1 | 慢速剧情推进模式开关（beta） |
 | isTitleGenerated | INTEGER | NOT NULL, DEFAULT 0 | 标题是否已由模型生成或用户确认，避免重复自动改名 |
 | isPinned | INTEGER | NOT NULL, DEFAULT 0 | 是否置顶 |
+| lastExtractedSortOrder | INTEGER | | 上次记忆提取处理到的消息 sortOrder（用于增量提取 cutoff） |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | updatedAt | TEXT | NOT NULL | ISO 8601 |
 
@@ -229,6 +230,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
     var slowPlotMode: Bool
     var isTitleGenerated: Bool
     var isPinned: Bool
+    var lastExtractedSortOrder: Int?
     var createdAt: Date
     var updatedAt: Date
 

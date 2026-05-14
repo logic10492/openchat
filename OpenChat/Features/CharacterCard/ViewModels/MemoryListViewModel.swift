@@ -10,6 +10,7 @@ final class MemoryListViewModel {
 
     private(set) var memories: [MemoryEntryRecord] = []
     var searchText: String = ""
+    var errorMessage: String?
 
     var filteredMemories: [MemoryEntryRecord] {
         guard !searchText.isEmpty else { return memories }
@@ -32,6 +33,7 @@ final class MemoryListViewModel {
             memories = try await databaseManager.fetchMemories(characterCardId: characterCardId)
         } catch {
             memories = []
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -39,8 +41,9 @@ final class MemoryListViewModel {
         do {
             try await memoryManager.deleteMemory(id: id)
             memories.removeAll { $0.id == id }
+            errorMessage = nil
         } catch {
-            // Silent failure for single deletion
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -48,8 +51,9 @@ final class MemoryListViewModel {
         do {
             try await memoryManager.deleteAllMemories(for: characterCardId)
             memories.removeAll()
+            errorMessage = nil
         } catch {
-            // Silent failure
+            errorMessage = error.localizedDescription
         }
     }
 }

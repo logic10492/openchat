@@ -42,6 +42,17 @@ struct MemoryListView: View {
             Text(String(localized: "This action cannot be undone."))
         }
         .task { await viewModel.loadMemories() }
+        .safeAreaInset(edge: .bottom) {
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.regularMaterial)
+            }
+        }
     }
 
     private var listContent: some View {

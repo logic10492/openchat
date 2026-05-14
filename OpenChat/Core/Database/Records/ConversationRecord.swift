@@ -16,6 +16,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     var slowPlotMode: Bool
     var isTitleGenerated: Bool
     var isPinned: Bool
+    var lastExtractedSortOrder: Int?
     var createdAt: Date
     var updatedAt: Date
 

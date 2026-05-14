@@ -102,6 +102,14 @@ struct WorldBookEditorView: View {
                         isShowingImport = true
                     }
                 }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
             }
             .navigationTitle(viewModel.editingWorldBook == nil ? String(localized: "New World Book") : String(localized: "Edit World Book"))
             .toolbar {
@@ -111,11 +119,15 @@ struct WorldBookEditorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
                         Task {
-                            _ = try? await viewModel.save()
-                            dismiss()
+                            do {
+                                _ = try await viewModel.save()
+                                dismiss()
+                            } catch {
+                                // ViewModel owns the visible error message.
+                            }
                         }
                     }
-                    .disabled(viewModel.name.nilIfBlank == nil)
+                    .disabled(viewModel.name.nilIfBlank == nil || viewModel.isSaving)
                 }
             }
             .task {
@@ -126,34 +138,29 @@ struct WorldBookEditorView: View {
                 WorldBookEntryEditorView(
                     entry: entry,
                     onSave: { updatedEntry in
-                        Task {
-                            try? await viewModel.saveEntry(updatedEntry)
-                        }
+                        try await viewModel.saveEntry(updatedEntry)
                     }
                 )
             }
             .sheet(isPresented: $isShowingImport) {
                 WorldBookImportView { parsedEntries in
-                    Task {
-                        let worldBook = try? await viewModel.save()
-                        guard let worldBook else { return }
-                        for parsed in parsedEntries {
-                            let entry = WorldBookEntryRecord(
-                                id: UUID().uuidString,
-                                worldBookId: worldBook.id,
-                                title: parsed.title,
-                                content: parsed.content,
-                                keywords: RecordCoders.encode(parsed.keywords) ?? "[]",
-                                priority: parsed.priority,
-                                isEnabled: true,
-                                position: parsed.position,
-                                createdAt: .now,
-                                updatedAt: .now
-                            )
-                            try? await viewModel.saveEntry(entry)
-                        }
-                        await viewModel.loadEntries()
+                    let worldBook = try await viewModel.save()
+                    for parsed in parsedEntries {
+                        let entry = WorldBookEntryRecord(
+                            id: UUID().uuidString,
+                            worldBookId: worldBook.id,
+                            title: parsed.title,
+                            content: parsed.content,
+                            keywords: RecordCoders.encode(parsed.keywords) ?? "[]",
+                            priority: parsed.priority,
+                            isEnabled: true,
+                            position: parsed.position,
+                            createdAt: .now,
+                            updatedAt: .now
+                        )
+                        try await viewModel.saveEntry(entry)
                     }
+                    await viewModel.loadEntries()
                 }
             }
             .sheet(item: $editingCharacterCard, onDismiss: reloadCharacters) { card in

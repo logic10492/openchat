@@ -35,6 +35,14 @@ struct CharacterCardEditorView: View {
                     TextField(String(localized: "System Prompt"), text: bind(\.systemPrompt), axis: .vertical)
                     TextField(String(localized: "Scenario"), text: bind(\.scenario), axis: .vertical)
                 }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
             }
             .navigationTitle(viewModel.editingCard == nil ? String(localized: "New Character") : String(localized: "Edit Character"))
             .toolbar {
@@ -47,11 +55,15 @@ struct CharacterCardEditorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
                         Task {
-                            _ = try? await viewModel.save()
-                            dismiss()
+                            do {
+                                _ = try await viewModel.save()
+                                dismiss()
+                            } catch {
+                                // ViewModel owns the visible error message.
+                            }
                         }
                     }
-                    .disabled(!viewModel.isValid)
+                    .disabled(!viewModel.isValid || viewModel.isSaving)
                 }
             }
             .task {

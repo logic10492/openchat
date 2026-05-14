@@ -42,6 +42,7 @@ struct ConversationRowView: View {
                 slowPlotMode: true,
                 isTitleGenerated: false,
                 isPinned: false,
+                lastExtractedSortOrder: nil,
                 createdAt: .now,
                 updatedAt: .now
             )
@@ -60,6 +61,7 @@ struct ConversationRowView: View {
                 slowPlotMode: true,
                 isTitleGenerated: false,
                 isPinned: true,
+                lastExtractedSortOrder: nil,
                 createdAt: .now,
                 updatedAt: .now.addingTimeInterval(-3600)
             )

@@ -327,7 +327,33 @@ final class WorldBookEditorViewModel {
 | `PromptEngine` | 拼装时通过角色卡的 worldBookId 查询已启用条目 → KeywordMatcher 匹配 → 按 priority 注入 |
 | `Chat` | ChatView 中可查看当前绑定的世界书和触发的条目（调试用） |
 
-## 9. ChatGPT 辅助生成世界书的推荐 prompt
+## 9. Background 目标架构
+
+当前世界书由 `PromptAssembler` 通过关键词触发直接注入 `[World Book Entries]`。目标 Background 架构中，世界书会变成 `WorldBookBackgroundSource`：
+
+```text
+WorldBookEntryRecord
+  -> keyword trigger
+  -> semantic KNN over world_book_entry_embedding
+  -> BackgroundCandidate(sourceType: .worldBook)
+  -> BackgroundWorker
+  -> BackgroundPacket
+```
+
+目标变化：
+
+- 世界书不再单独拥有 prompt 注入权。
+- `priority` 继续作为排序信号，但不再单独决定注入。
+- `position` 保留为旧数据兼容字段，不参与最终 background 位置。
+- 世界书条目需要向量化，便于和 Memory 候选统一调度。
+
+详见：
+
+- `arch/modules/background/index.md`
+- `arch/modules/background/sources.md`
+- `arch/modules/background/world-book-vectorization.md`
+
+## 10. ChatGPT 辅助生成世界书的推荐 prompt
 
 提供给用户参考的 prompt 模板（在格式说明中展示）：
 

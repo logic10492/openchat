@@ -2,19 +2,58 @@ import SwiftUI
 
 @main
 struct OpenChatApp: App {
-    @State private var dependencyContainer: DependencyContainer
+    @State private var startupState: StartupState
     @State private var appState = AppState()
 
     init() {
-        let container = (try? DependencyContainer.live()) ?? DependencyContainer.preview()
-        _dependencyContainer = State(initialValue: container)
+        do {
+            _startupState = State(initialValue: .ready(try DependencyContainer.live()))
+        } catch {
+            _startupState = State(initialValue: .failed(error.localizedDescription))
+        }
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(appState)
-                .environment(dependencyContainer)
+            switch startupState {
+            case .ready(let dependencyContainer):
+                ContentView()
+                    .environment(appState)
+                    .environment(dependencyContainer)
+            case .failed(let message):
+                StartupErrorView(message: message) {
+                    retryStartup()
+                }
+            }
+        }
+    }
+
+    private func retryStartup() {
+        do {
+            startupState = .ready(try DependencyContainer.live())
+        } catch {
+            startupState = .failed(error.localizedDescription)
+        }
+    }
+}
+
+private enum StartupState {
+    case ready(DependencyContainer)
+    case failed(String)
+}
+
+private struct StartupErrorView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(String(localized: "OpenChat Could Not Start"), systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
+            Button(String(localized: "Retry"), action: retry)
+                .buttonStyle(.borderedProminent)
         }
     }
 }

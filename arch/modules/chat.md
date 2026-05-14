@@ -15,6 +15,8 @@
 - 每条 AI 回复下方显示详细统计（输入/输出 token 数、TPS、上下文窗口剩余百分比），可在全局设置中关闭详细模式，关闭后仅在窗口余量 < 20% 时显示上下文窗口剩余百分比
 - 记忆提取完成时在对话中显示临时提示（"已提取 N 条记忆"，3 秒后自动消失）
 
+> Stage 规划：Chat 当前是单会话/单主角色实现。多角色共同参与、导演 agent 和用户导演输入属于目标 Stage 系统，详见 `arch/modules/stage/index.md`。
+
 ## 2. 文件清单与职责
 
 | 文件 | 职责 |
@@ -277,27 +279,24 @@ editMessage(messageId, newContent):
 
 ### 4.6 记忆提取触发
 
-当前源码在每轮 user + assistant 生成完成后将 `messagesSinceLastExtraction += 2`，当计数达到 `ChatViewModel.extractionInterval == 10` 时自动触发记忆提取：
+当前源码在用户消息持久化后，从 DB 读取 `conversation.lastExtractedSortOrder` 与消息列表，计算 `sortOrder > cutoff` 的待提取消息数；当待提取消息数达到 `ChatViewModel.minimumPendingMessagesForExtraction == 4` 时，在**当前 `generateResponse` 中同步等待**记忆提取完成（在检索记忆之前）：
 
 ```swift
-func triggerMemoryExtraction() {
-    Task {
-        do {
-            let result = try await memoryManager.extractMemories(from: conversation)
-            if !result.isEmpty {
-                messages.append(.memoryMarker(content: "..."))
-            }
-        } catch {
-            messages.append(.memoryMarker(content: "...", isError: true))
-        }
-    }
+// Pre-response extraction in generateResponse:
+if try await shouldExtractMemories(for: conversation),
+   characterCard?.id != nil {
+    extractionPhase = .extracting
+    let result = try await memoryManager.extractMemories(from: conversation)
+    extractionPhase = result.isEmpty ? .skipped : .completed(...)
 }
+// Then retrieve memories (new extractions immediately available)
+memories = try await memoryManager.retrieveMemories(...)
 ```
 
-- **触发时机**：发送链路内的周期性后台提取；`ChatView.onDisappear` 也会调用 `triggerMemoryExtraction()`。切换对话可通过视图消失间接触发；App 进入后台的 lifecycle hook 仍不属于当前源码行为
-- **后台执行**：使用 `Task` 调用 `MemoryManager.extractMemories(from:)`，不阻塞流式生成完成后的 UI
-- **错误反馈**：提取失败记录日志，并向聊天 UI 追加临时 memory marker
-- **去重保护**：MemoryManager 内部按最新记忆时间做增量提取
+- **触发时机**：发送链路内的前置同步提取（位于用户消息持久化之后、记忆检索之前）；`ChatView.onDisappear` 保留 fire-and-forget 调用
+- **UI 反馈**：通过 `extractionPhase` 状态驱动 `MemoryExtractionIndicator` 内联指示器，显示"正在提取 / 已提取 N 条 / 提取失败"
+- **cutoff 边界**：使用 `conversation.lastExtractedSortOrder`（基于 message sortOrder）替代旧的 `latestMemoryDate`（基于 memory_entry.createdAt），避免并发写入导致消息被跳过
+- **错误反馈**：提取失败记录日志并在 UI 显示错误指示器，不阻塞后续生成
 
 ## 5. MessageDisplayItem
 
@@ -395,11 +394,13 @@ struct MessageDisplayItem: Identifiable {
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
-  - 记忆更新提示 banner（3 秒自动消失）
-  - 周期性记忆提取（每 10 条 user/assistant 消息）
-  - 记忆链路修复：增强 JSON 解析容错、增量提取、os.Logger 日志、语义检索失败 fallback 到近期记忆
+  - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
+  - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
+  - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到近期记忆
 - 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证语义检索失败时 fallback 记忆仍进入 API request：
-  - `MemoryExtractionParsingTests`（13 tests: JSON 容错、latestMemoryDate、StreamDelta usage）
+  - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
+  - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
+  - `MemoryExtractionPhaseTests`（提取状态模型）
   - `MemoryManagerRetrievalTests`
   - `APIClientTests`
   - `PromptAssemblerTests`

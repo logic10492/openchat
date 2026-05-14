@@ -68,12 +68,22 @@ extension DatabaseManager {
 
     func deleteMemory(id: String) async throws {
         try await write { db in
+            try db.execute(
+                sql: "DELETE FROM memory_embedding WHERE entry_id = ?",
+                arguments: [id]
+            )
             _ = try MemoryEntryRecord.deleteOne(db, key: id)
         }
     }
 
     func deleteAllMemories(characterCardId: String) async throws {
         try await write { db in
+            try db.execute(sql: """
+                DELETE FROM memory_embedding
+                WHERE entry_id IN (
+                    SELECT id FROM memory_entry WHERE characterCardId = ?
+                )
+                """, arguments: [characterCardId])
             _ = try MemoryEntryRecord
                 .filter(Column("characterCardId") == characterCardId)
                 .deleteAll(db)

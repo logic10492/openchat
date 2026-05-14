@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "· %@" : {
+
+    },
     "%@" : {
 
     },
@@ -35,6 +38,12 @@
       }
     },
     "▍" : {
+
+    },
+    "⚠️" : {
+
+    },
+    "🧠" : {
 
     },
     "Add a world book to inject setting knowledge into prompts." : {

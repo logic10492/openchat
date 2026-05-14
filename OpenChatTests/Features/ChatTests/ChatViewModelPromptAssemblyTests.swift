@@ -48,6 +48,14 @@ private struct ChatEmptyVectorStore: MemoryVectorStore {
     func deleteAll(characterCardId: String) async throws {}
 }
 
+private struct ChatFixedEmbeddingProvider: EmbeddingProvider {
+    func embed(_ text: String, isQuery: Bool) throws -> [Float] {
+        var embedding = [Float](repeating: 0, count: EmbeddingService.embeddingDimension)
+        embedding[0] = isQuery ? 0.9 : 0.8
+        return embedding
+    }
+}
+
 private extension URLRequest {
     func openChatTestBodyData() throws -> Data {
         if let httpBody {
@@ -353,6 +361,88 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(storedCurrentInputs.count == 1)
     }
 
+    @Test func test_stream_failure_after_partial_delta_persists_visible_assistant_content() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-partial-failure",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-partial-failure",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.saveConversation(conversation)
+
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Partial reply"},"finish_reason":null}]}
+
+            data: {"invalid":
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let contextManager = ContextManager(databaseManager: databaseManager, apiClient: apiClient)
+        let memoryManager = MemoryManager(
+            databaseManager: databaseManager,
+            embeddingService: ChatFailingEmbeddingProvider(),
+            vectorStore: ChatEmptyVectorStore(),
+            apiClient: apiClient
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: contextManager,
+            memoryManager: memoryManager,
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Continue."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        let assistant = storedMessages.first { $0.role == "assistant" }
+        #expect(assistant?.content == "Partial reply")
+        #expect(viewModel.messages.contains { $0.role == "assistant" && $0.content == "Partial reply" })
+        #expect(viewModel.isGenerating == false)
+        #expect(viewModel.streamTask == nil)
+    }
+
     @Test func test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()
@@ -447,6 +537,109 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(request.messages.contains {
             $0.role == "system" && $0.content.contains("Ava promised to remember the silver key.")
         })
+    }
+
+    @Test func test_sendMessage_triggers_memory_extraction_from_persisted_sortOrder_boundary() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-persisted-extraction",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-persisted-extraction",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "card-persisted-extraction")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try card.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        for index in 1...3 {
+            try await databaseManager.saveMessage(
+                TestHelpers.makeMessage(
+                    conversationId: conversation.id,
+                    role: index.isMultiple(of: 2) ? "assistant" : "user",
+                    content: "Persisted old turn \(index)",
+                    sortOrder: index
+                )
+            )
+        }
+
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            let requestObject = try JSONDecoder().decode(APIRequest.self, from: body)
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: requestObject.stream ? ["Content-Type": "text/event-stream"] : ["Content-Type": "application/json"]
+            )!
+
+            if requestObject.stream {
+                let payload = """
+                data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+                data: [DONE]
+                """
+                return (response, Data(payload.utf8))
+            }
+
+            let responseBody = """
+            {"id":"memory-extraction","choices":[{"index":0,"message":{"role":"assistant","content":"[{\\"content\\":\\"Ava remembers the persisted boundary.\\",\\"type\\":\\"fact\\",\\"importance\\":80}]"},"finish_reason":"stop"}],"usage":null}
+            """
+            return (response, Data(responseBody.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFixedEmbeddingProvider(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "New turn reaches extraction threshold."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let savedConversation = try await databaseManager.fetchConversation(id: conversation.id)
+        #expect(savedConversation?.lastExtractedSortOrder == 4)
+        let memories = try await databaseManager.fetchMemories(characterCardId: card.id)
+        #expect(memories.map(\.content).contains("Ava remembers the persisted boundary."))
     }
 
     @Test func test_sendMessage_orders_four_layer_prompt_in_api_request() async throws {

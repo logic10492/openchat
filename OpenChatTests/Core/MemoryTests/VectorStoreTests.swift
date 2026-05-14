@@ -84,6 +84,20 @@ struct VectorStoreTests {
         #expect(vectorCount == 0)
     }
 
+    @Test func test_erase_all_data_removes_memory_and_vector_rows() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let store = VectorStore(databaseManager: manager)
+        let card = TestHelpers.makeCharacterCard(id: "card-a")
+        try await insertCards([card], into: manager)
+        let entry = TestHelpers.makeMemoryEntry(id: "memory-a", characterCardId: card.id)
+        try await store.insert(entry: entry, embedding: makeEmbedding(firstValue: 0.8))
+
+        try await manager.eraseAllData(preserveEndpoints: false)
+
+        #expect(try await manager.fetchMemoryCount(characterCardId: card.id) == 0)
+        #expect(try await vectorRowCount(entryId: entry.id, in: manager) == 0)
+    }
+
     @Test func test_insert_invalid_dimension_throws_before_partial_write() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let store = VectorStore(databaseManager: manager)

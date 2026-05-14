@@ -432,4 +432,39 @@ struct MigrationTests {
 
         #expect(compressionMode == "standard")
     }
+
+    // MARK: - v13 lastExtractedSortOrder
+
+    @Test func test_v13_conversation_has_lastExtractedSortOrder_column() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "conversation").map(\.name)
+        }
+
+        #expect(columns.contains("lastExtractedSortOrder"))
+    }
+
+    @Test func test_v13_lastExtractedSortOrder_defaults_to_null() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+
+        try await manager.write { db in
+            try db.execute(sql: """
+                INSERT INTO conversation (
+                    id, title, contextStrategy, compressionMode, slowPlotMode, isTitleGenerated, isPinned, createdAt, updatedAt
+                )
+                VALUES ('conv-leso-default', 'LESO Default', 'truncation', 'standard', 1, 0, 0, ?, ?)
+                """, arguments: [now, now])
+        }
+
+        let value = try await manager.read { db in
+            try Row.fetchOne(
+                db,
+                sql: "SELECT lastExtractedSortOrder FROM conversation WHERE id = ?",
+                arguments: ["conv-leso-default"]
+            )?["lastExtractedSortOrder"] as Int?
+        }
+
+        #expect(value == nil)
+    }
 }

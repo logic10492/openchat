@@ -17,7 +17,20 @@ struct APIEndpointEditorView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField(String(localized: "API Key"), text: bind(\.apiKey))
+                    SecureField(String(localized: "API Key"), text: bind(\.apiKey))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    if viewModel.hasStoredAPIKey && viewModel.apiKey.isEmpty {
+                        HStack {
+                            Label(String(localized: "Stored API Key"), systemImage: "key.fill")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button(String(localized: "Clear")) {
+                                viewModel.clearStoredAPIKey()
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
                 }
 
                 Section {
@@ -39,6 +52,12 @@ struct APIEndpointEditorView: View {
                             Text(message).foregroundStyle(.red)
                         }
                     }
+
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 modelsSection
@@ -51,11 +70,15 @@ struct APIEndpointEditorView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Save")) {
                         Task {
-                            _ = try? await viewModel.save()
-                            dismiss()
+                            do {
+                                _ = try await viewModel.save()
+                                dismiss()
+                            } catch {
+                                // ViewModel owns the visible error message.
+                            }
                         }
                     }
-                    .disabled(!viewModel.isValid)
+                    .disabled(!viewModel.isValid || viewModel.isSaving)
                 }
             }
             .onChange(of: viewModel.baseURL) {

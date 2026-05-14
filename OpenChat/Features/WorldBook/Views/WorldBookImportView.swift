@@ -3,9 +3,11 @@ import SwiftUI
 struct WorldBookImportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
-    let onImport: ([WorldBookImportFormat.ParsedEntry]) -> Void
+    @State private var isImporting = false
+    @State private var errorMessage: String?
+    let onImport: ([WorldBookImportFormat.ParsedEntry]) async throws -> Void
 
-    init(onImport: @escaping ([WorldBookImportFormat.ParsedEntry]) -> Void) {
+    init(onImport: @escaping ([WorldBookImportFormat.ParsedEntry]) async throws -> Void) {
         self.onImport = onImport
     }
 
@@ -34,6 +36,12 @@ struct WorldBookImportView: View {
                         }
                     }
                 }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
             .padding()
             .navigationTitle(String(localized: "Import World Book"))
@@ -43,10 +51,20 @@ struct WorldBookImportView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Import")) {
-                        onImport(parsedEntries)
-                        dismiss()
+                        Task {
+                            isImporting = true
+                            errorMessage = nil
+                            defer { isImporting = false }
+
+                            do {
+                                try await onImport(parsedEntries)
+                                dismiss()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
                     }
-                    .disabled(parsedEntries.isEmpty)
+                    .disabled(parsedEntries.isEmpty || isImporting)
                 }
             }
         }

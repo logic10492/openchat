@@ -84,24 +84,31 @@ struct ChatView: View {
                 } else {
                     LazyVStack(spacing: 24) {
                         ForEach(viewModel.messages) { item in
-                            if item.role == "memory" || item.role == "memory-error" {
-                                MemoryMarkerView(item: item)
-                                    .id(item.id)
-                            } else {
-                                MessageBubbleView(
-                                    item: item,
-                                    isStreaming: isStreamingMessage(item),
-                                    characterName: viewModel.selectedCharacterName,
-                                    showDetailedStats: viewModel.showDetailedStats,
-                                    onDelete: {
-                                        Task { await viewModel.deleteMessage(item.id) }
-                                    },
-                                    onRegenerate: {
-                                        Task { await viewModel.regenerateLastResponse() }
+                            MessageBubbleView(
+                                item: item,
+                                isStreaming: isStreamingMessage(item),
+                                characterName: viewModel.selectedCharacterName,
+                                showDetailedStats: viewModel.showDetailedStats,
+                                onDelete: {
+                                    Task { await viewModel.deleteMessage(item.id) }
+                                },
+                                onRegenerate: {
+                                    Task { await viewModel.regenerateLastResponse() }
+                                }
+                            )
+                            .id(item.id)
+                        }
+
+                        if viewModel.extractionPhase.isActive {
+                            MemoryExtractionIndicator(
+                                phase: viewModel.extractionPhase,
+                                onDismiss: {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        viewModel.dismissExtractionIndicator()
                                     }
-                                )
-                                .id(item.id)
-                            }
+                                }
+                            )
+                            .id("extraction-indicator")
                         }
                     }
                     .padding(.horizontal, 16)
@@ -168,6 +175,7 @@ struct ChatView: View {
                     slowPlotMode: true,
                     isTitleGenerated: false,
                     isPinned: false,
+                    lastExtractedSortOrder: nil,
                     createdAt: .now,
                     updatedAt: .now
                 ),
