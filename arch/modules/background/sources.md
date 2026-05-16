@@ -20,7 +20,7 @@ enum BackgroundSourceType: String, Codable, Sendable {
 职责：
 
 - 用当前输入做 semantic retrieval。
-- 保留 recent fallback，但作为 fallback metadata 标记。
+- 保留 recent high-value fallback，并作为 fallback metadata 标记；不得恢复任意最近 N 条 prompt 注入。
 - 返回 `BackgroundCandidate(sourceType: .memory)`。
 - 不再直接把 memories 传给 `PromptAssembler`。
 

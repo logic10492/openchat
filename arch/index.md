@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前自动化测试结果：218 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff 可靠性。
+- 当前自动化测试结果：251 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Responses request shape、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract 可靠性。
 
 ## 功能需求
 

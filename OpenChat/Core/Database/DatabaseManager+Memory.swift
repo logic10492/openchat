@@ -34,6 +34,35 @@ extension DatabaseManager {
         }
     }
 
+    func fetchRecentHighValueMemories(
+        characterCardId: String,
+        limit: Int
+    ) async throws -> [MemoryEntryRecord] {
+        guard limit > 0 else { return [] }
+        return try await read { db in
+            try MemoryEntryRecord
+                .filter(Column("characterCardId") == characterCardId)
+                .filter(
+                    [MemoryType.relationship.rawValue, MemoryType.summary.rawValue].contains(Column("memoryType")) ||
+                        Column("importance") >= 70
+                )
+                .order(
+                    sql: """
+                    CASE
+                      WHEN memoryType = ? THEN 0
+                      WHEN memoryType = ? THEN 1
+                      ELSE 2
+                    END,
+                    importance DESC,
+                    createdAt DESC
+                    """,
+                    arguments: [MemoryType.relationship.rawValue, MemoryType.summary.rawValue]
+                )
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
     func fetchMemoryCount(characterCardId: String) async throws -> Int {
         try await read { db in
             try MemoryEntryRecord
@@ -96,6 +125,35 @@ extension DatabaseManager {
             try MemoryEntryRecord
                 .filter(ids.contains(Column("id")))
                 .fetchAll(db)
+        }
+    }
+
+    // MARK: - Memory Provenance
+
+    func saveMemoryProvenance(_ provenance: MemoryEntryProvenanceRecord) async throws {
+        try await write { db in
+            try provenance.save(db)
+        }
+    }
+
+    func fetchMemoryProvenance(memoryEntryId: String) async throws -> MemoryEntryProvenanceRecord? {
+        try await read { db in
+            try MemoryEntryProvenanceRecord.fetchOne(db, key: memoryEntryId)
+        }
+    }
+
+    func fetchMemoryProvenances(memoryEntryIds: [String]) async throws -> [MemoryEntryProvenanceRecord] {
+        guard !memoryEntryIds.isEmpty else { return [] }
+        return try await read { db in
+            try MemoryEntryProvenanceRecord
+                .filter(memoryEntryIds.contains(Column("memoryEntryId")))
+                .fetchAll(db)
+        }
+    }
+
+    func deleteMemoryProvenance(memoryEntryId: String) async throws {
+        try await write { db in
+            _ = try MemoryEntryProvenanceRecord.deleteOne(db, key: memoryEntryId)
         }
     }
 }

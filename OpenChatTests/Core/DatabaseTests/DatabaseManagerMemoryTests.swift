@@ -58,6 +58,65 @@ struct DatabaseManagerMemoryTests {
         #expect(recent[0].content == "Memory 0")
     }
 
+    @Test func test_fetch_recent_high_value_memories_filters_noise_and_prioritizes_type() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard(id: "card-high-value-db")
+        try await manager.write { db in try card.insert(db) }
+
+        let now = Date(timeIntervalSince1970: 1_000)
+        let noise = MemoryEntryRecord(
+            id: "noise",
+            characterCardId: card.id,
+            sourceConversationId: nil,
+            content: "Recent low-value event",
+            memoryType: MemoryType.event.rawValue,
+            importance: 10,
+            createdAt: now.addingTimeInterval(60),
+            updatedAt: now.addingTimeInterval(60)
+        )
+        let importantFact = MemoryEntryRecord(
+            id: "important-fact",
+            characterCardId: card.id,
+            sourceConversationId: nil,
+            content: "Important fact",
+            memoryType: MemoryType.fact.rawValue,
+            importance: 90,
+            createdAt: now.addingTimeInterval(30),
+            updatedAt: now.addingTimeInterval(30)
+        )
+        let summary = MemoryEntryRecord(
+            id: "summary",
+            characterCardId: card.id,
+            sourceConversationId: nil,
+            content: "Summary memory",
+            memoryType: MemoryType.summary.rawValue,
+            importance: 20,
+            createdAt: now,
+            updatedAt: now
+        )
+        let relationship = MemoryEntryRecord(
+            id: "relationship",
+            characterCardId: card.id,
+            sourceConversationId: nil,
+            content: "Relationship memory",
+            memoryType: MemoryType.relationship.rawValue,
+            importance: 30,
+            createdAt: now.addingTimeInterval(-30),
+            updatedAt: now.addingTimeInterval(-30)
+        )
+        try await manager.saveMemory(noise)
+        try await manager.saveMemory(importantFact)
+        try await manager.saveMemory(summary)
+        try await manager.saveMemory(relationship)
+
+        let highValue = try await manager.fetchRecentHighValueMemories(
+            characterCardId: card.id,
+            limit: 5
+        )
+
+        #expect(highValue.map(\.id) == ["relationship", "summary", "important-fact"])
+    }
+
     @Test func test_fetch_memory_count() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let card = TestHelpers.makeCharacterCard()

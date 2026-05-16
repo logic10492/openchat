@@ -15,9 +15,9 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。Swift Testing 报告 `218 tests in 45 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+结果：成功。Swift Testing 最新报告 `251 tests in 46 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 218 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff、checkpoint compression 与 compression mode 测试均已纳入当前基线。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 251 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression 与 compression mode 测试均已纳入当前基线。2026-05-16 又补充了 Phase D focused coverage 与 full-suite closeout：reflect DTO contract 与 Responses `[Memories]` request-shape。
 
 ## 总体结论
 
@@ -25,7 +25,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|
 | `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路当前输入重复风险已有 Feature 级测试覆盖，但仍缺少 UI 自动化测试。 |
 | `arch-src` | 局部不一致 | Prompt 时间格式、Memory 目录/触发时机、migration 约束已按当前源码回写；Feature 分层说明仍有漂移，留待 Task 6。 |
-| `arch-test` | 基本一致 | 测试数量已回写为 218；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 251；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses request-shape 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -34,10 +34,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖四层顺序、labeled context blocks、ISO8601 时间位于 Current Turn；Chat 发送链路覆盖 API request 四层顺序和当前输入去重。 |
 | ContextManager | 一致 | 一致 | Truncation、CompressionPolicy、source hash、PreparedHistory、CompressionSummarizer、CheckpointCompactor、checkpoint reuse 与 fallback 均有测试覆盖；Prompt 端到端仍通过 Chat 发送链路测试间接覆盖。 |
-| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、fallback 注入、sortOrder cutoff 边界、并发消息不跳过；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；full suite 为 218 tests / 45 suites。 |
+| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；Phase D closeout full suite 为 251 tests / 46 suites。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 218 tests，Settings UI/manual 覆盖仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 251 tests，Settings UI/manual 覆盖仍需后续验收。 |
 
 ## 关键不一致
 
@@ -129,22 +129,24 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - `OpenChat/Resources/Models/MultilingualE5Small.mlpackage` 与 `OpenChat/Resources/Models/tokenizer.json` 由 `scripts/generate_xcodeproj.rb` 加入 App Bundle。
 - `EmbeddingService` 使用固定 `1 x 256` CoreML 输入，读取 Float16 / Float32 `embeddings`，输出 384 维归一化向量。
 - `VectorStore` 在同一 GRDB transaction 中保存 `memory_entry + memory_embedding`；`insert(entries:)` 为协议必填方法，避免非原子默认实现。
-- `MemoryManager.retrieveMemories(...)` 在 embedding/model/vector 异常时 fallback 到近期记忆；`ChatViewModel+Support` 不再用 `try?` 静默吞掉全部记忆。
+- `MemoryManager.retrieveMemories(...)` 在 embedding/model/vector 异常时通过 `recallMemories(...)` 标记 `semanticUnavailable`，fallback 到 keyword + recent high-value；`ChatViewModel+Support` 不再用 `try?` 静默吞掉全部记忆。
 
 测试现状：
 
 - `DatabaseManagerMemoryTests`、`MemoryExtractionParsingTests`、`PromptAssemblerTests` 覆盖 DB、JSON 容错、Prompt 注入。
 - `EmbeddingServiceTests` 覆盖模型/tokenizer bundle、tokenizer 输出、CoreML 384 维归一化向量。
 - `VectorStoreTests` 覆盖 sqlite-vec KNN、角色隔离、删除同步、维度校验、单条和批量事务回滚。
-- `MemoryManagerRetrievalTests` 覆盖语义检索失败 fallback、提取向量失败不产生半索引记忆、批次失败整批回滚。
-- `ChatViewModelPromptAssemblyTests` 覆盖 fallback 记忆最终注入 API request，以及 ViewModel 重建后仍按 DB sortOrder 边界触发记忆提取。
+- `MemoryManagerRetrievalTests` 覆盖语义检索失败 fallback、semantic no-hit、empty index、recall trace、提取向量失败不产生半索引记忆、批次失败整批回滚、v2 dedupe、越界 source range 丢弃、sourceMessageIds 过滤、skip/reinforce 不插入、向量失败不留下 provenance 半成品。
+- `DatabaseManagerMemoryTests` 覆盖 recent high-value 查询只返回 relationship / summary / high-importance 条目。
+- `MemoryExtractionParsingTests` 覆盖 v1/v2 JSON 解析、provenance CRUD。
+- `ChatViewModelPromptAssemblyTests` 覆盖 fallback high-value 记忆最终注入 API request，普通 recent 噪声不注入，以及 ViewModel 重建后仍按 DB sortOrder 边界触发记忆提取。
 - `ChatView.onDisappear` 自动触发路径属于当前源码现实，但尚未由端到端测试锁定；该缺口已保留在 `arch/roadmap.md` Phase 6 验证标准中。
 
 三边判断：
 
 - `arch-src`：一致。
-- `arch-test`：Memory vector reliability 一致；自动触发路径端到端测试待补。
-- `src-test`：focused memory/prompt suite 27 tests 通过；当前 full suite 为 197 tests / 41 suites。
+- `arch-test`：Memory vector reliability 一致；retain v2 provenance/dedupe 一致；自动触发路径端到端测试待补。
+- `src-test`：focused memory/prompt suite 27 tests 通过；该轮 full suite 为 197 tests / 41 suites。
 
 ### 6. 分层规则与当前 Feature 装配漂移
 
@@ -168,13 +170,13 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：2026-04-30 已把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试均纳入当前基线。
+结论：2026-04-30 该轮曾把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试已纳入当时基线。当前全局基线见本文顶部的 251 tests。
 
 证据：
 
-- `arch/index.md` 已回写为“197 个 Swift Testing 测试全部通过”。
-- `arch/roadmap.md` 已回写为“当前通过的 Swift Testing 测试（197 个）”。
-- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval 可靠性覆盖与 197-test full suite 结果。
+- `arch/index.md` 当前已回写为“251 个 Swift Testing 测试全部通过”。
+- `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（251 个）”。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与当前 251-test full suite 结果。
 - `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
@@ -186,10 +188,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：218 tests passed。
+1. 当前工作区能编译并通过全量 Swift Testing：251 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
-3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff 可靠性、migration 约束、checkpoint compression/compression mode 语义和 218-test 基线；Feature 边界漂移留待后续分层修复计划。
+3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重、Responses `[Memories]` folding 与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试，retain v2 provenance/dedupe/source validation 和 reflect DTO contract 已有测试覆盖；仍缺少 UI 自动化覆盖。
+4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、migration 约束、checkpoint compression/compression mode 语义和 251-test 基线；Feature 边界漂移留待后续分层修复计划。
 
 ## 修复顺序状态
 
@@ -199,7 +201,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Prompt 四层顺序与 Current-Turn Context | Closed：统一为四层顺序，PromptAssemblerTests 与 ChatViewModelPromptAssemblyTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回前置同步提取、onDisappear 兜底、sortOrder cutoff 增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 218 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 251 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
@@ -236,7 +238,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - Focused context/database/chat checkpoint suite 已通过：
   `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:OpenChatTests/CheckpointCompactorTests -only-testing:OpenChatTests/CompressionCheckpointReuseTests -only-testing:OpenChatTests/CompressionStrategyTests`
 - Chat prompt suite 已通过：`xcodebuild test ... -only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests`，7 tests passed。
-- Full suite 当前基线：218 tests / 45 suites，`** TEST SUCCEEDED **`。
+- 该轮 full suite：218 tests / 45 suites，`** TEST SUCCEEDED **`。
 
 ## Memory Extraction Cutoff & Observability 三边一致性写回（2026-05-13）
 
@@ -245,7 +247,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 ### arch-src
 
 - `arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列，字段与 `v13_add_last_extracted_sort_order` 一致。
-- `arch/modules/memory/` 已从单一 index 拆分为 `architecture.md`、`data-model.md`、`embedding-vector-store.md`、`extraction.md`、`retrieval-prompt.md`、`ui-management.md`、`testing.md` 和 `hindsight-lite.md`；触发时机、sortOrder cutoff、UI 指示器、检索 fallback、Phase A retrieval-order-preserving prompt trim 与 Hindsight-lite 未实现边界均已回写。
+- `arch/modules/memory/` 已从单一 index 拆分为 `architecture.md`、`data-model.md`、`embedding-vector-store.md`、`extraction.md`、`retrieval-prompt.md`、`ui-management.md`、`testing.md` 和 `hindsight-lite.md`；触发时机、sortOrder cutoff、UI 指示器、Phase A retrieval-order-preserving prompt trim、Phase B recall trace / fallback tiers 与 Hindsight-lite 未实现边界均已回写。
 - `arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
 
 ### arch-test
@@ -258,7 +260,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 ### src-test
 
 - Focused suite 38 tests / 3 suites passed。
-- Full suite 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+- 该轮 full suite 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
 
 ## Memory Recall Ordering Phase A 三边一致性写回（2026-05-14）
 
@@ -281,3 +283,26 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - Phase A focused suite：`PromptAssemblerTests` 14 tests / 1 suite passed。
 - Post-change focused suite：35 tests / 4 suites passed。
 - Full suite：219 tests / 45 suites passed。
+
+## Memory Recall Trace / Fallback Tier Phase B 三边一致性写回（2026-05-14）
+
+范围：`OpenChat/Core/Memory/MemoryManager.swift`、`OpenChat/Core/Memory/MemoryRecallModels.swift`、`OpenChat/Core/Database/DatabaseManager+Memory.swift`、`OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift`、`OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、Memory / AntiEntropy / plan / harness 文档。
+
+### arch-src
+
+- `arch/modules/memory/retrieval-prompt.md` 已写回 recall v2：semantic / keyword / recent high-value candidates、fallback tier、rank fusion 和 trace contract。
+- `arch/modules/memory/index.md`、`architecture.md`、`embedding-vector-store.md` 和 `hindsight-lite.md` 已记录 `MemoryRecallResult` / `MemoryRecallTrace` 当前 source reality。
+- `arch/AntiEntropy/problem.md` 已关闭 P2 fallback 不可解释和 recent-by-time fallback 两项问题，同时保留 provenance、dedupe、reflect、Responses request shape 为后续阶段。
+
+### arch-test
+
+- `MemoryManagerRetrievalTests` 覆盖 semantic order、keyword trace、semantic unavailable、semantic no-hit、empty index、兼容 `retrieveMemories(...)` 输出顺序。
+- `DatabaseManagerMemoryTests` 覆盖 `fetchRecentHighValueMemories(...)` 筛掉普通 recent 噪声并按 relationship / summary / importance 排序。
+- `ChatViewModelPromptAssemblyTests` 覆盖 semantic failure 后只注入 high-value memory，不注入普通 recent 噪声。
+
+### src-test
+
+- Phase B focused suite：28 tests / 3 suites passed。
+- Broader focused suite：49 tests / 5 suites passed。
+- Full suite：225 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+- 2026-05-14 22:49-22:52 +0800 重新执行同一 B 阶段 focused、broader focused 和 full suite，结果仍为 28 / 49 / 225 tests 全部通过。

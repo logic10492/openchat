@@ -2,7 +2,7 @@
 
 > 生成日期：2026-05-14
 > 范围：`arch/modules/memory/index.md` 与 `arch/AntiEntropy/problem.md` 中剩余 Memory 问题的源码对照、缺口拆解和实现计划。
-> 状态：Phase A 已实施并验证；Phase B/C/D 尚未实施。
+> 状态：Phase A/B/C/D 已实施并验证；Lead closeout full suite 已通过。
 
 ## 范围边界
 
@@ -34,17 +34,22 @@
 - `conversation.lastExtractedSortOrder` 已替代 `memory_entry.createdAt` 作为提取 cutoff。
 - `ChatViewModel.generateResponse(...)` 已在检索前按 DB 边界同步触发提取。
 - `VectorStore.insert(entries:)` 已把 `memory_entry` 和 `memory_embedding` 放在同一 GRDB transaction。
-- embedding/vector 异常时 `MemoryManager.retrieveMemories(...)` 已 fallback 到 recent memories。
+- embedding/vector 异常时 `MemoryManager.retrieveMemories(...)` 已通过 Phase B fallback 到 keyword + recent high-value。
 - Chat 内联已有 `MemoryExtractionPhase` / `MemoryExtractionIndicator` 展示提取状态。
 - 2026-05-14 Phase A 已完成：`PromptAssembler.trim(memories:)` 按输入 retrieval order 裁剪，不再按 `importance DESC` 重排；`PromptAssemblerTests.test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory` 覆盖该行为。
+- 2026-05-14 Phase B 已完成：新增 `MemoryRecallResult` / `MemoryRecallTrace`，`retrieveMemories(...)` 兼容调用 `recallMemories(...)`；fallback 改为 semantic / keyword / recent high-value tiers；focused suite 49 tests / 5 suites passed。
+- 2026-05-15 Phase C 已完成：追加 `memory_entry_provenance`（v14 migration）、`MemoryEntryProvenanceRecord`、provenance CRUD；extraction prompt 改为结构化输入（character + existing hints + message ids/sortOrder）；`ExtractedMemory` 扩展 v2 字段；同批 dedupe、source range validation、sourceMessageIds 过滤、atomic entry+embedding+provenance 写入；focused suite 107 tests / 7 suites passed；full suite 244 tests / 45 suites passed。
+- 2026-05-16 Phase D 已完成最小 contract / request-shape 验收：新增 `MemoryReflectModels.swift`，锁定 reflect request / observation / relation contract；新增 Responses API `[Memories]` folding 测试与 Chat Responses 端到端 request 捕获测试；reflect contract 5 tests / 1 suite passed；Responses API suites 21 tests / 5 suites passed；Chat + MemoryReflect focused 17 tests / 2 suites passed。
+- 2026-05-16 Lead closeout 已完成：`MemoryManagerRetrievalTests` 改为注入 `InMemoryAPIKeyStore()`，避免 full suite 并发跑测试时触碰真实 Keychain 导致 `-25299`；focused 15 tests / 1 suite passed；full suite 251 tests / 46 suites passed。
 
 仍缺失且属于本计划范围：
 
-- `MemoryManager.retrieveMemories(...)` 只返回 `[MemoryEntryRecord]`，没有 `MemoryRecallResult` / `MemoryRecallTrace`。
-- fallback 只有 semantic fail / no hit -> `fetchRecentMemories(createdAt DESC)`，没有 keyword / recent high-value tier。
-- extraction 输入仍是纯 `role: content` 文本；输出仍只有 `content/type/importance`。
-- DB 没有 `memory_entry_provenance`、dedupe metadata、memory link / basedOn 结构。
-- Responses API 仍把所有 system messages join 到 `instructions`，没有 Memory request-shape 级别验收。
+- 无。当前 Memory Hindsight-lite 计划包内的 A/B/C/D 与 Lead closeout 已完成。
+
+不属于本计划继续扩展的剩余项：
+
+- reflect LLM executor / UI 入口尚未实现；当前只落地 Memory 层 DTO contract。
+- `memory_entry_link` 持久化表尚未追加；`MemoryEntryLinkRelation` 只定义第一版 relation contract，schema 留给后续独立 migration。
 
 ## 阅读顺序
 
@@ -65,17 +70,17 @@ S0 baseline read + focused tests
   -> B recall result + fallback tiers
   -> C retain v2 provenance + dedupe
   -> D reflect contract / Responses memory request shape
-  -> Lead closeout: docs + AE + harness evidence + full suite
+  -> Lead closeout: full suite + final evidence
 ```
 
-Phase A 是最小可先落地的修复，风险低且能直接关闭当前 P1。Phase B/C 是 Memory 系统改造主体。Phase D 只做低频 reflect contract、Memory 请求形态验收和后续 Background 适配边界说明，不实现世界书向量化或 Background 层。
+Phase A 是最小可先落地的修复，风险低且能直接关闭当前 P1。Phase B 已完成 recall result / fallback tiers。Phase C 是剩余 Memory retain/provenance 改造主体。Phase D 已完成低频 reflect contract、Memory 请求形态验收和后续 Background 适配边界说明，不实现世界书向量化、Background 层、reflect executor 或 `memory_entry_link` 持久化。
 
 ## 基线命令
 
 OpenChat 是 Xcode project，不是 Swift Package：
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests'
 ```
 
 完成每个源码阶段后运行对应 focused tests；最终运行：

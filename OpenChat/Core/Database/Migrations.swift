@@ -220,6 +220,22 @@ enum Migrations {
                 t.add(column: "lastExtractedSortOrder", .integer)
             }
         }
+        migrator.registerMigration("v14_create_memory_entry_provenance") { db in
+            try db.create(table: "memory_entry_provenance") { t in
+                t.column("memoryEntryId", .text).notNull().primaryKey()
+                    .references(Historical.memoryEntryTable, onDelete: .cascade)
+                t.column("sourceStartSortOrder", .integer)
+                t.column("sourceEndSortOrder", .integer)
+                t.column("sourceMessageIds", .text)
+                t.column("extractionModel", .text)
+                t.column("extractionPromptVersion", .text).notNull().defaults(to: "v1")
+                t.column("confidence", .double)
+                t.column("dedupeKey", .text)
+                t.column("tags", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
         return migrator
     }
 

@@ -6,6 +6,7 @@ import Testing
 private final class RequestCapture: @unchecked Sendable {
     private let lock = NSLock()
     private var request: APIRequest?
+    private var responsesRequest: ResponsesAPIRequest?
 
     func store(_ request: APIRequest) {
         lock.lock()
@@ -13,10 +14,22 @@ private final class RequestCapture: @unchecked Sendable {
         self.request = request
     }
 
+    func store(_ request: ResponsesAPIRequest) {
+        lock.lock()
+        defer { lock.unlock() }
+        responsesRequest = request
+    }
+
     func load() -> APIRequest? {
         lock.lock()
         defer { lock.unlock() }
         return request
+    }
+
+    func loadResponsesRequest() -> ResponsesAPIRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return responsesRequest
     }
 }
 
@@ -443,7 +456,7 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(viewModel.streamTask == nil)
     }
 
-    @Test func test_sendMessage_includes_recent_memory_when_semantic_retrieval_fails() async throws {
+    @Test func test_sendMessage_includes_high_value_memory_when_semantic_retrieval_fails() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()
         let endpoint = APIEndpointRecord(
@@ -481,10 +494,19 @@ struct ChatViewModelPromptAssemblyTests {
         try await databaseManager.saveConversation(conversation)
         try await databaseManager.saveMemory(
             TestHelpers.makeMemoryEntry(
+                id: "memory-recent-noise",
+                characterCardId: card.id,
+                content: "Ava recently counted clouds.",
+                memoryType: .event,
+                importance: 10
+            )
+        )
+        try await databaseManager.saveMemory(
+            TestHelpers.makeMemoryEntry(
                 id: "memory-silver-key",
                 characterCardId: card.id,
                 content: "Ava promised to remember the silver key.",
-                memoryType: .fact,
+                memoryType: .relationship,
                 importance: 90
             )
         )
@@ -536,6 +558,9 @@ struct ChatViewModelPromptAssemblyTests {
         let request = try #require(capture.load())
         #expect(request.messages.contains {
             $0.role == "system" && $0.content.contains("Ava promised to remember the silver key.")
+        })
+        #expect(!request.messages.contains {
+            $0.role == "system" && $0.content.contains("Ava recently counted clouds.")
         })
     }
 
@@ -754,6 +779,120 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(messages[currentTurnIndex].role == "user")
         #expect(messages[currentTurnIndex].content.contains("[Time] "))
         #expect(messages.filter { $0.role == "user" && $0.content.contains("CURRENT_INPUT_UNIQUE_TEXT") }.count == 1)
+    }
+
+    @Test func test_sendMessage_responses_mode_folds_memories_into_instructions_without_user_duplication() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-responses-memory-shape",
+            name: "Local Responses",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-responses-memory-shape",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.responses.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "card-responses-memory-shape")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try card.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMessage(
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "assistant",
+                content: "Previous assistant turn.",
+                sortOrder: 1
+            )
+        )
+        try await databaseManager.saveMemory(
+            TestHelpers.makeMemoryEntry(
+                id: "memory-responses-memory-shape",
+                characterCardId: card.id,
+                content: "Ava remembers the brass lantern.",
+                memoryType: .fact,
+                importance: 90
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(ResponsesAPIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            event: response.output_text.delta
+            data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"Done"}
+
+            event: response.completed
+            data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":10,"output_tokens":1,"total_tokens":11}}}
+
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "CURRENT_RESPONSES_INPUT_UNIQUE_TEXT"
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(viewModel.streamTask == nil)
+        let request = try #require(capture.loadResponsesRequest())
+        let instructions = try #require(request.instructions)
+        let stableRange = try #require(instructions.range(of: "You are"))
+        let memoryRange = try #require(instructions.range(of: "[Memories]"))
+
+        #expect(stableRange.lowerBound < memoryRange.lowerBound)
+        #expect(instructions.contains("Ava remembers the brass lantern."))
+        #expect(!request.input.contains { $0.content.contains("[Memories]") })
+        #expect(request.input.filter { $0.role == "user" && $0.content.contains("CURRENT_RESPONSES_INPUT_UNIQUE_TEXT") }.count == 1)
+        #expect(request.input.last?.role == "user")
+        #expect(request.input.last?.content.contains("[Time] ") == true)
     }
 
     @Test func test_editMessage_deletesAffectedCompressionCheckpoints() async throws {

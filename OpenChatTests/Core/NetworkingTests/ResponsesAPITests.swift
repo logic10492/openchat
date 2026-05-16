@@ -110,6 +110,28 @@ struct ResponsesAPIRequestTests {
         #expect(input[0]["content"] as? String == "Visible character reply.")
         #expect(input[0]["reasoning_content"] == nil)
     }
+
+    @Test func test_memory_block_folds_to_instructions_without_user_duplication() throws {
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: "Stable Identity"),
+            .init(role: "assistant", content: "Previous assistant turn."),
+            .init(role: "system", content: "[Example Dialogs]\nAssistant: Hello\n[/Example Dialogs]"),
+            .init(role: "system", content: "[Memories]\n[Memory — fact]\nAva remembers the brass lantern.\n[/Memories]"),
+            .init(role: "user", content: "CURRENT_INPUT_UNIQUE_TEXT\n\n[Time] 2026-05-16T00:00:00Z [/Time]"),
+        ]
+        let endpoint = TestHelpers.makeEndpoint(apiMode: .responses)
+        let request = ResponsesAPIRequest(messages: messages, endpoint: endpoint, parameters: ModelParameters(), stream: false)
+
+        let instructions = try #require(request.instructions)
+        let stableRange = try #require(instructions.range(of: "Stable Identity"))
+        let memoryRange = try #require(instructions.range(of: "[Memories]"))
+
+        #expect(stableRange.lowerBound < memoryRange.lowerBound)
+        #expect(instructions.contains("Ava remembers the brass lantern."))
+        #expect(request.input.count == 2)
+        #expect(request.input.filter { $0.role == "user" && $0.content.contains("CURRENT_INPUT_UNIQUE_TEXT") }.count == 1)
+        #expect(!request.input.contains { $0.content.contains("[Memories]") })
+    }
 }
 
 // MARK: - ResponsesAPIResponse Tests

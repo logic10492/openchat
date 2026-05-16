@@ -14,7 +14,8 @@ Memory 模块负责跨对话长期记忆，不负责同一会话的窗口压缩�
 
 | 文件 | 职责 |
 |---|---|
-| `Core/Memory/MemoryManager.swift` | 提取与检索编排层；解析 LLM 返回的 `ExtractedMemory`；处理检索 fallback |
+| `Core/Memory/MemoryManager.swift` | 提取与检索编排层；解析 LLM 返回的 `ExtractedMemory`；生成 `MemoryRecallResult` 并处理 fallback tiers |
+| `Core/Memory/MemoryRecallModels.swift` | recall result / entry / trace / fallback / omission DTO |
 | `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 加载、tokenizer 调用、384 维向量生成 |
 | `Core/Memory/XLMRobertaTokenizer.swift` | 读取 `tokenizer.json`，生成固定长度 input IDs / attention mask |
 | `Core/Memory/VectorStore.swift` | sqlite-vec 插入、批量原子写入、KNN 检索、删除 |
@@ -67,7 +68,7 @@ Core/PromptEngine
 - 保存抽取后的事件/事实/关系/摘要，而不是保存每条原始消息向量，减少噪声和索引体积。
 - embedding 在本地执行，长期记忆检索不需要额外网络请求。
 - LLM 只参与自动提取；正常 recall 不走生成式 LLM。
-- 检索失败不阻断聊天，提取失败不推进 cutoff。
+- 检索失败不阻断聊天；semantic 不可用时 fallback 到 keyword + recent high-value，提取失败不推进 cutoff。
 - 当前记忆条目 schema 较扁平，尚未建模 source range、provenance、dedupe/reinforce、冲突解决或 reflect observation。
 
 ## 6. Background 目标边界
@@ -84,4 +85,4 @@ MemoryManager / MemoryBackgroundSource
 
 这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。改变的是 recall 结果的消费方：从 `PromptAssembler.trim(memories:)` 迁移到 Background 统一调度。
 
-Hindsight-lite 规划中的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息，再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。
+已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息，再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。

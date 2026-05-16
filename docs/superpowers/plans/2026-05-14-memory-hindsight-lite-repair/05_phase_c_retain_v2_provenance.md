@@ -4,6 +4,8 @@
 
 让自动抽取出的 memory 具备来源、prompt 版本、dedupe 和基本可审计 metadata，关闭 AE 中“提取 prompt 缺 source / dedupe”的 P2。
 
+## 状态：已完成
+
 ## C1：Migration 与 Record
 
 追加 v14 migration，不修改旧 migration：
@@ -12,7 +14,7 @@
 v14_create_memory_entry_provenance
 ```
 
-建议表：
+已创建表：
 
 ```text
 memory_entry_provenance
@@ -29,14 +31,15 @@ memory_entry_provenance
   updatedAt DATETIME NOT NULL
 ```
 
-新增：
+新增文件：
 
 - `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`
-- `OpenChat/Core/Database/DatabaseManager+MemoryProvenance.swift`
+
+实际实现把 provenance CRUD 放在现有 `OpenChat/Core/Database/DatabaseManager+Memory.swift` 中，而非新建 `DatabaseManager+MemoryProvenance.swift`。
 
 约束：
 
-- `sourceMessageIds`、`tags` 使用 JSON array 字符串，沿用现有 RecordCoders 风格。
+- `sourceMessageIds`、`tags` 使用 JSON array 字符串，沿用现有 `RecordCoders` 风格。
 - 旧 memory 没 provenance 时所有现有查询和 UI 继续可用。
 
 ## C2：Extraction prompt v2
@@ -118,23 +121,55 @@ memory_entry_provenance
 
 ## 测试
 
+全部已覆盖并验证通过：
+
 - migration 新表列存在，外键 cascade 删除 provenance。
 - 旧 `memory_entry` 无 provenance 仍能 fetch / search / delete。
 - v1 extraction JSON 仍可解析。
 - v2 extraction JSON 解析 source range、ids、confidence、tags、dedupeKey、action。
-- 越界 source range 不污染 provenance。
+- 越界 source range 丢弃，不写入 provenance。
 - 同批重复 dedupe 后只写一条。
 - embedding/vector 失败时不留下 entry/provenance 半成品。
 
 ## 验收
 
+Focused tests：
+
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests'
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests'
 ```
 
-完成后更新：
+结果：107 tests / 7 suites passed，`** TEST SUCCEEDED **`。
+
+Full suite：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+结果：244 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
+## 实现证据
+
+- `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`
+- `OpenChat/Core/Database/Migrations.swift`：`v14_create_memory_entry_provenance`
+- `OpenChat/Core/Database/DatabaseManager+Memory.swift`：provenance CRUD
+- `OpenChat/Core/Memory/VectorStore.swift`：`insert(entries:provenances:)`
+- `OpenChat/Core/Memory/MemoryDependencies.swift`：`MemoryVectorStore` 协议扩展
+- `OpenChat/Core/Memory/MemoryManager.swift`：结构化提取、v2 解析、dedupe、validation、provenance 生成
+- `OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift`
+- `OpenChatTests/Core/MemoryExtractionParsingTests.swift`
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
+
+已更新：
 
 - `arch/modules/memory/data-model.md`
 - `arch/modules/memory/extraction.md`
 - `arch/modules/memory/hindsight-lite.md`
+- `arch/modules/memory/index.md`
+- `arch/modules/memory/testing.md`
 - `arch/AntiEntropy/problem.md`
+- `arch/AntiEntropy/triangle-consistency.md`
+- `arch/AntiEntropy/propagation-audit.md`
+- `harness/2026.05.14/memory-hindsight-lite-repair/index.md`
+- `harness/2026.05.14/memory-hindsight-lite-repair/evidence.txt`

@@ -1,5 +1,7 @@
 # 06. Phase D：Reflect、Background 适配边界与 Responses API
 
+> 状态：2026-05-16 已完成最小 reflect contract 与当前 `[Memories]` request-shape 验收。未实现 reflect LLM executor、UI 入口、`memory_entry_link` migration 或 Background 层。
+
 ## 目标
 
 在不扩大主聊天链路延迟的前提下，为低频 reflect 建立 Memory 层 contract，并验收当前 `[Memories]` 在 Responses API 下的请求形态。Background 只记录后续适配边界，不在本计划包实现。
@@ -43,6 +45,17 @@ memory_entry_link
 ```
 
 `relation` 第一版至少支持 `summarizes`、`duplicates`、`reinforces`。
+
+实现证据：
+
+- `OpenChat/Core/Memory/MemoryReflectModels.swift`
+- `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift`
+
+当前 enum raw values：
+
+- `MemoryReflectTask`：`summarize`、`dedupe`、`resolve_conflict`、`relationship_observation`
+- `MemoryReflectAction`：`insert_observation`、`mark_duplicate`、`needs_user_review`
+- `MemoryEntryLinkRelation`：`summarizes`、`duplicates`、`reinforces`
 
 ## D2：Background 边界
 
@@ -93,6 +106,8 @@ Background block 的 request-shape 验收不在本计划包内，留给后续独
 
 只有测试证明当前 shape 不满足目标时，才修改 `ResponsesAPIRequest.swift`。
 
+当前测试证明 source behavior 满足 D3 目标，因此未修改 `ResponsesAPIRequest.swift`。
+
 ## D4：可观测性 UI / Debug
 
 普通 UI 先不暴露 distance 数值。可选 debug 展示：
@@ -106,9 +121,27 @@ Background block 的 request-shape 验收不在本计划包内，留给后续独
 
 ## 验收
 
+旧计划草稿曾写过：
+
 ```bash
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/ResponsesAPITests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
 ```
+
+注意：Swift Testing 的 `-only-testing` 选择器需要使用 suite 名称；`ResponsesAPITests` 是文件名，不会选中该文件内的 Swift Testing suites。Phase D 实际验收使用以下 suite-name 命令：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=6F61E759-8E3C-4951-B929-0A63AA47BFBB' '-only-testing:OpenChatTests/ResponsesAPIRequestTests' '-only-testing:OpenChatTests/ResponsesAPIResponseTests' '-only-testing:OpenChatTests/SSEParserTypedEventsTests' '-only-testing:OpenChatTests/APIClientResponsesModeTests' '-only-testing:OpenChatTests/ModelParametersAPIModeTests'
+```
+
+结果：21 tests / 5 suites passed，`** TEST SUCCEEDED **`。
+
+Chat + reflect focused 验证：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+```
+
+结果：17 tests / 2 suites passed，`** TEST SUCCEEDED **`。旧命令中曾包含 `ResponsesAPITests` 文件名选择器，但 Swift Testing 不会用文件名选中 Responses suites；Responses suites 已由上方 suite-name 命令单独验证。
 
 完成后更新：
 

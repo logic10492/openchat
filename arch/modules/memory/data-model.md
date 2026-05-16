@@ -75,40 +75,47 @@ LLM 返回的 `type` 会做小写匹配；无法识别时 fallback 到 `.event`�
 |---|---|
 | `v4_create_memory_tables` | 创建 `memory_entry` 与 `memory_embedding`，并添加 `characterCardId` / `sourceConversationId` 索引 |
 | `v13_add_last_extracted_sort_order` | 在 `conversation` 追加 `lastExtractedSortOrder` |
+| `v14_create_memory_entry_provenance` | 创建 `memory_entry_provenance` companion table |
 
 迁移约束：
 
 - 只追加新 migration，不修改已有 migration。
-- 如要扩展 Hindsight-lite schema，优先追加 v14+ migration。
+- 如要扩展 Hindsight-lite schema，优先追加 v15+ migration。
 - 若只新增可选元数据且不影响现有 prompt 注入，可考虑新表而非大幅重写 `memory_entry`。
 
-## 6. 当前缺口
+## 6. `memory_entry_provenance`
 
-- `memory_entry` 没有 source message range，无法精确追踪某条记忆来自哪些消息。
-- 没有 `confidence`、`tags`、`dedupeKey`、`extractionPromptVersion` 或 `basedOn`。
-- 没有显式的 duplicate/reinforces/contradicts/supersedes 关系。
+`memory_entry_provenance` 是 Hindsight-lite Phase C 追加的 companion table，保留记忆来源和提取元数据，避免一次性扩宽 `memory_entry` 主表。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `memoryEntryId` | TEXT | PK, NOT NULL, FK -> `memory_entry.id` | 与记忆条目一对一 |
+| `sourceStartSortOrder` | INTEGER | | 来源消息起始 sortOrder |
+| `sourceEndSortOrder` | INTEGER | | 来源消息结束 sortOrder |
+| `sourceMessageIds` | TEXT | | JSON array，具体消息 ID |
+| `extractionModel` | TEXT | | 执行提取的模型名称 |
+| `extractionPromptVersion` | TEXT | NOT NULL, DEFAULT 'v1' | 提取 prompt 版本 |
+| `confidence` | REAL | | 抽取器自报置信度（0...1） |
+| `dedupeKey` | TEXT | | 去重键 |
+| `tags` | TEXT | | JSON array，分类标签 |
+| `createdAt` | DATETIME | NOT NULL | 创建时间 |
+| `updatedAt` | DATETIME | NOT NULL | 更新时间 |
+
+外键：`memoryEntryId -> memory_entry(id) ON DELETE CASCADE`
+
+当前 Record：`MemoryEntryProvenanceRecord`
+
+- `sourceMessageIds`、`tags` 使用 JSON array 字符串，沿用 `RecordCoders` 风格。
+- 旧 `memory_entry` 没有 provenance 时仍能检索、展示和删除。
+
+## 7. 当前缺口
+
+- 没有显式的 `memory_entry_link`（reinforces / duplicates / contradicts / supersedes / summarizes 关系）。
 - `latestMemoryDate(conversationId:)` 仍保留在 `DatabaseManager+Memory`，但自动提取 cutoff 已改用 `conversation.lastExtractedSortOrder`。
 
-## 7. Hindsight-lite 目标 schema
+## 8. Hindsight-lite 目标 schema
 
 为降低迁移风险，Hindsight-lite 优先使用 companion table，而不是直接把 `memory_entry` 扩成大宽表。
-
-建议第一批追加：
-
-```text
-memory_entry_provenance
-  memoryEntryId TEXT PRIMARY KEY
-  sourceStartSortOrder INTEGER
-  sourceEndSortOrder INTEGER
-  sourceMessageIds TEXT
-  extractionModel TEXT
-  extractionPromptVersion TEXT
-  confidence REAL
-  dedupeKey TEXT
-  tags TEXT
-  createdAt DATETIME
-  updatedAt DATETIME
-```
 
 建议后续追加：
 
@@ -131,6 +138,6 @@ memory_entry_link
 
 迁移要求：
 
-- 使用 v14+ 追加 migration。
+- 使用 v15+ 追加 migration。
 - 旧 `memory_entry` 记录没有 provenance 时仍可检索和注入。
 - reflect 生成的 observation 必须通过 `memory_entry_link(relation = summarizes)` 或等价 `basedOn` 结构保留来源。

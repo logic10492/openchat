@@ -58,6 +58,32 @@ struct VectorStore: Sendable {
         }
     }
 
+    func insert(
+        entries: [(entry: MemoryEntryRecord, embedding: [Float])],
+        provenances: [String: MemoryEntryProvenanceRecord]
+    ) async throws {
+        do {
+            let items = try entries.map { item in
+                try validateDimension(item.embedding)
+                return (entry: item.entry, blob: embeddingToBlob(item.embedding))
+            }
+
+            try await databaseManager.write { db in
+                for item in items {
+                    try item.entry.save(db)
+                    try insertEmbedding(entryId: item.entry.id, blob: item.blob, in: db)
+                    if let provenance = provenances[item.entry.id] {
+                        try provenance.save(db)
+                    }
+                }
+            }
+        } catch let error as MemoryError {
+            throw error
+        } catch {
+            throw MemoryError.vectorStoreError(underlying: error)
+        }
+    }
+
     func search(
         query: [Float],
         characterCardId: String,

@@ -467,4 +467,62 @@ struct MigrationTests {
 
         #expect(value == nil)
     }
+
+    // MARK: - v14 memory_entry_provenance
+
+    @Test func test_v14_creates_memory_entry_provenance_table() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+        #expect(tableNames.contains("memory_entry_provenance"))
+    }
+
+    @Test func test_v14_memory_entry_provenance_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "memory_entry_provenance").map(\.name)
+        }
+        #expect(columns.contains("memoryEntryId"))
+        #expect(columns.contains("sourceStartSortOrder"))
+        #expect(columns.contains("sourceEndSortOrder"))
+        #expect(columns.contains("sourceMessageIds"))
+        #expect(columns.contains("extractionModel"))
+        #expect(columns.contains("extractionPromptVersion"))
+        #expect(columns.contains("confidence"))
+        #expect(columns.contains("dedupeKey"))
+        #expect(columns.contains("tags"))
+        #expect(columns.contains("createdAt"))
+        #expect(columns.contains("updatedAt"))
+    }
+
+    @Test func test_v14_memory_entry_provenance_cascade_on_memory_delete() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let memory = TestHelpers.makeMemoryEntry(characterCardId: card.id)
+        let provenance = MemoryEntryProvenanceRecord(
+            memoryEntryId: memory.id,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 2,
+            extractionPromptVersion: "v2",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        try await manager.write { db in
+            try card.insert(db)
+            try memory.insert(db)
+            try provenance.insert(db)
+        }
+
+        try await manager.write { db in
+            try db.execute(sql: "DELETE FROM memory_entry WHERE id = ?", arguments: [memory.id])
+        }
+
+        let count = try await manager.read { db in
+            try MemoryEntryProvenanceRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
 }

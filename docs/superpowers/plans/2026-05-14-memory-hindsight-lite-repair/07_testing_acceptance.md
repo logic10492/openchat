@@ -22,13 +22,13 @@ xcrun simctl list devices available | rg 'iPhone'
 | A | `PromptAssemblerTests` |
 | B | `MemoryManagerRetrievalTests`, `DatabaseManagerMemoryTests`, `ChatViewModelPromptAssemblyTests` |
 | C | `MigrationTests`, `MemoryExtractionParsingTests`, `MemoryManagerRetrievalTests`, `VectorStoreTests`, `DatabaseManagerMemoryTests` |
-| D | `ResponsesAPITests`, `ChatViewModelPromptAssemblyTests` |
+| D | `ResponsesAPIRequestTests`, `ResponsesAPIResponseTests`, `SSEParserTypedEventsTests`, `APIClientResponsesModeTests`, `ModelParametersAPIModeTests`, `ChatViewModelPromptAssemblyTests`, `MemoryReflectModelsTests` |
 | Closeout | full suite |
 
 ## 最终 focused command
 
 ```bash
-xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/ResponsesAPITests'
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/ResponsesAPIRequestTests' '-only-testing:OpenChatTests/ResponsesAPIResponseTests' '-only-testing:OpenChatTests/SSEParserTypedEventsTests' '-only-testing:OpenChatTests/APIClientResponsesModeTests' '-only-testing:OpenChatTests/ModelParametersAPIModeTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
 ```
 
 ## Full suite

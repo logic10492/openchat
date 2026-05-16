@@ -1,6 +1,6 @@
 # Hindsight-lite 完善设计
 
-> 状态：Phase A recall ordering 已实现；其余 retain / recall trace / fallback tiers / provenance / reflect 仍为设计规划。
+> 状态：Phase A recall ordering、Phase B recall trace / fallback tiers、Phase C retain provenance / dedupe、Phase D reflect contract / Responses request-shape 已实现；reflect executor、`memory_entry_link` migration 和 Background 接入仍为后续规划。
 > 目标：用轻量 retain / recall / reflect 设计关闭 `arch/AntiEntropy/problem.md` 中剩余的记忆系统问题。
 
 本页参考 Hindsight 论文的三段式操作：retain、recall、reflect。论文把 agent memory 视为可推理的结构化底座，并强调证据、推断和可追踪更新的区别。OpenChat 不需要完整复刻论文中的多网络记忆系统，当前目标是把已有 `memory_entry` / `memory_embedding` 演进成低延迟、可解释、可测试的本地轻量版本。
@@ -15,7 +15,7 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 
 1. **排序可靠**：当前输入相关性必须优先于 `importance`；Phase A 已关闭 P1 prompt trim 重排问题。
 2. **来源可追踪**：每条自动记忆应知道来自哪段消息，降低抽取幻觉和重复污染。
-3. **召回可解释**：fallback、distance threshold、预算裁剪和被省略条目都要能在 debug 视图中解释。
+3. **召回可解释**：Phase B 已在 Memory 层记录 fallback、distance threshold、selected ids 和 omitted；debug UI 展示与 prompt budget omission 仍属于后续工作。
 4. **整理低频化**：reflect 只用于记忆整理和 observation synthesis，不进入每轮主聊天链路。
 
 ## 2. 非目标
@@ -34,11 +34,11 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 | problem.md 条目 | Hindsight-lite 设计动作 | 目标状态 |
 |---|---|---|
 | P1：Prompt 注入前被 importance 重排 | Phase A：order-preserving trim，排序权归 recall | 已关闭 |
-| P2：fallback 和阈值缺少校准与可观测性 | Phase C：`MemoryRecallTrace` + fallback tier | 规划后可实现 |
-| P2：recent fallback 只按时间取最近 | Phase C：recent high-value fallback，不盲目注入噪声 | 规划后可实现 |
-| P2：提取 prompt 缺少角色卡、已有记忆、source 边界和去重 | Phase B：retain schema + extraction prompt v2 | 规划后可实现 |
-| P2：Responses API system folding | Phase E：当前 `[Memories]` request shape audit；Background block audit 留给独立 Background 计划 | 规划后可实现 |
-| P3：检索可观测性不足 | Phase C / E：recall diagnostics 到 debug UI | 规划后可实现 |
+| P2：fallback 和阈值缺少校准与可观测性 | Phase B：`MemoryRecallTrace` + fallback tier | 已实现，UI 展示未做 |
+| P2：recent fallback 只按时间取最近 | Phase B：keyword + recent high-value fallback，不盲目注入噪声 | 已实现 |
+| P2：提取 prompt 缺少角色卡、已有记忆、source 边界和去重 | Phase C：retain schema + extraction prompt v2 | 已实现 |
+| P2：Responses API system folding | Phase D：当前 `[Memories]` request shape audit；Background block audit 留给独立 Background 计划 | 已实现当前 request-shape 验收 |
+| P3：检索可观测性不足 | Phase B/D：recall trace 已有内部 contract；debug UI 与 prompt budget omission 后续处理 | 部分实现 |
 
 ## 4. 总体架构
 
@@ -67,10 +67,11 @@ Reflect
   -> user-confirmed or audited write
 ```
 
-当前源码仍是：
+当前兼容链路仍是：
 
 ```text
 MemoryManager.retrieveMemories
+  -> MemoryManager.recallMemories
   -> [MemoryEntryRecord]
   -> PromptAssembler.trim(memories:)
   -> [Memories] system block
@@ -126,15 +127,16 @@ private static func trim(memories: [MemoryEntryRecord], within budget: Int) -> [
 
 - `OpenChat/Core/PromptEngine/PromptAssembler.swift`：`trim(memories:within:)` 对输入 `memories` 原序迭代。
 - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`：`test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory`。
-- 2026-05-14 verification：`PromptAssemblerTests` 14 tests passed；Memory/Vector/Prompt/Chat focused suite 35 tests passed；full suite 219 tests / 45 suites passed。
+- 2026-05-14 Phase A verification：`PromptAssemblerTests` 14 tests passed；Memory/Vector/Prompt/Chat focused suite 35 tests passed；full suite 219 tests / 45 suites passed。
+- 2026-05-15 Phase C verification：focused suite 107 tests / 7 suites passed；full suite 244 tests / 45 suites passed。
 
-## 6. Phase B：Retain schema v2
+## 6. Phase C：Retain schema v2
 
-当前 retain 只保存 `content/type/importance`。这能工作，但无法回答“这条记忆从哪里来”“是否重复”“是否被后来信息强化或冲突”。
+retain v2 已追加 `memory_entry_provenance` companion table 和结构化提取输入/输出。当前保留 `content/type/importance` 作为主表稳定内容，provenance 元数据独立存储。
 
 ### 6.1 最小新增结构
 
-建议优先追加 companion table，减少对 `MemoryEntryRecord` 主表和现有 UI 的冲击：
+Phase C 已追加 companion table，减少对 `MemoryEntryRecord` 主表和现有 UI 的冲击：
 
 ```text
 memory_entry_provenance
@@ -165,12 +167,19 @@ memory_entry_link
 保守原因：
 
 - `memory_entry` 继续保持当前 prompt 注入路径可用。
-- Hindsight-lite 元数据可以独立迁移、独立测试。
+- Hindsight-lite 元数据可以独立迁移、独立测试（v14 migration）。
 - 如果后续 Background 接管 prompt，主表仍能作为稳定内容表。
+
+实现证据：
+
+- `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`
+- `OpenChat/Core/Database/Migrations.swift`：`v14_create_memory_entry_provenance`
+- `OpenChat/Core/Database/DatabaseManager+Memory.swift`：provenance CRUD
+- `OpenChat/Core/Memory/VectorStore.swift`：`insert(entries:provenances:)` 原子写入
 
 ### 6.2 Extraction prompt v2
 
-输入应从纯文本：
+输入已从纯文本：
 
 ```text
 user: ...
@@ -217,30 +226,32 @@ LLM 输出建议：
 解析策略：
 
 - v2 字段缺失时仍兼容 v1。
-- `sourceStartSortOrder` / `sourceEndSortOrder` 必须落在本批消息范围内；否则丢弃该条或降级为无 provenance。
-- `confidence` 只表示抽取器自报置信，不参与最终 truth 判定。
+- `sourceStartSortOrder` / `sourceEndSortOrder` 必须落在本批消息范围内；否则丢弃该条。
+- `sourceMessageIds` 必须是本批 ids 子集；无效 id 会从 provenance 中过滤。
+- `confidence` 只表示抽取器自报置信，不参与最终 truth 判定；在 provenance 中 clamp 到 0...1。
 - `action == skip` 不写入 DB，只计入 diagnostics。
-- `action == reinforce` 优先写 `memory_entry_link` 或更新 `lastReinforcedAt`，不重复插入同义条目。
+- `action == reinforce` 第一版不覆盖旧 memory，也不新增重复记忆，直接跳过插入；后续 reflect 计划可扩展 `memory_entry_link`。
 
 ### 6.3 去重策略
 
-第一阶段不需要复杂 graph。建议用三层去重：
+第一阶段已落地两层去重：
 
-1. **同批去重**：同一 extraction response 内 `dedupeKey` 相同只保留 importance 更高或更短的一条。
-2. **近邻去重**：抽取前给 LLM 最近/最相关的 existing memory hints，让它返回 `reinforce` 或 `skip`。
-3. **向量近似去重**：写入前用新条目的 embedding 搜索同角色现有记忆，距离很近且类型一致时标记为 duplicate candidate。
+1. **同批去重**：同一 extraction response 内 `dedupeKey` 相同只保留 importance 更高或更短的一条；没有 `dedupeKey` 时用 normalized content 作为临时 key。
+2. **近邻去重**：抽取前给 LLM 最近/最相关的 existing memory hints（relationship / summary / high importance，最多 5 条），让它返回 `reinforce` 或 `skip`。
+
+向量近似去重留给后续 reflect 计划。
 
 写入原则：
 
-- 自动流程可以跳过明确重复条目。
+- 自动流程可以跳过明确重复条目（`action == skip`、越界 source、同批 dedupe）。
 - 自动流程不应无声删除旧条目。
 - 合并、替换或标记冲突需要 debug trace，必要时交给用户确认。
 
-## 7. Phase C：Recall fusion 与 fallback 分层
+## 7. Phase B：Recall fusion 与 fallback 分层
 
 ### 7.1 Recall result contract
 
-新增内部 DTO，先不要求 UI 全量展示：
+已新增内部 DTO，先不要求 UI 全量展示：
 
 ```swift
 struct MemoryRecallResult: Sendable {
@@ -269,49 +280,39 @@ struct MemoryRecallTrace: Sendable {
 }
 ```
 
-`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 可以先保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。完整 trace 是 Memory 层能力；等后续独立 Background 计划落地后，再由 `MemoryBackgroundSource` 读取并包装。
+`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。完整 trace 是 Memory 层能力；等后续独立 Background 计划落地后，再由 `MemoryBackgroundSource` 读取并包装。
 
 ### 7.2 Candidate sources
 
-建议召回候选：
+当前召回候选：
 
-- semantic：sqlite-vec KNN top 20。
-- keyword：对 `memory_entry.content` 做简单关键词匹配或后续 FTS5。
+- semantic：sqlite-vec KNN，search limit 扩大到 `max(limit * 2, 20)`。
+- keyword：对 `memory_entry.content` 做简单关键词匹配，后续可迁移到 FTS5。
 - recent high-value：最近的 `relationship` / `summary` / 高 importance 记忆，数量小于等于 3。
 
 注意：recent 不是默认兜底塞满 prompt。它只补充高价值上下文。
 
 ### 7.3 Rank fusion
 
-第一版可用 Reciprocal Rank Fusion：
+当前第一版使用稳定融合规则：
 
-```text
-score =
-  semanticWeight * 1 / (k + semanticRank)
-  + keywordWeight * 1 / (k + keywordRank)
-  + recencyWeight * 1 / (k + recencyRank)
-  + importanceTieBreaker
-```
-
-建议权重：
-
-| 信号 | 建议 |
+| 信号 | 行为 |
 |---|---|
-| semantic | 主信号 |
-| keyword | 中等权重，用于名字、地点、专有名词 |
-| recency | 小权重，只防止近期关系状态完全丢失 |
-| importance | tie-breaker，不覆盖相关性 |
+| semantic | 主信号，按 distance 升序 |
+| keyword | semantic 后补充；semantic unavailable / no hit 时作为 fallback 主结果 |
+| recency | 只补少量 recent high-value；noSemanticHit 且有 keyword 时不额外补 recent |
+| importance | keyword tie-breaker 与 recent high-value 筛选条件，不覆盖 semantic order |
 
 ### 7.4 Fallback tiers
 
-当前 fallback 是“语义失败或低相关时取最近 N 条”。这会把近期噪声注入 prompt。建议改成分层：
+Phase B 已把旧“语义失败或低相关时取最近 N 条”改成分层：
 
 | fallback | 触发 | 返回 |
 |---|---|---|
 | `semanticUnavailable` | embedding/model/sqlite-vec 失败 | keyword + recent high-value |
 | `noSemanticHit` | semantic 全部超过阈值 | keyword candidates；没有 keyword 时只返回 pinned/high-value relationship summary |
 | `emptyIndex` | 角色没有记忆或没有 embedding | 空结果，不伪造 recent |
-| `budgetDropped` | 有候选但 prompt 预算不足 | trace 记录 omitted，不额外补 recent |
+| `budgetDropped` | 有候选但 prompt 预算不足 | 留给后续 Background / prompt budget trace |
 
 这能解决两个体感问题：
 
@@ -328,6 +329,8 @@ score =
 - 后续可按 embedding 模型版本保存 threshold，避免换模型后沿用旧尺度。
 
 ## 8. Phase D：Reflect / observation synthesis
+
+Phase D 当前只落地 Memory 层最小 contract，不实现 reflect LLM executor 或 UI 入口。
 
 Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain 已经使用 LLM 抽取，但它只是结构化保存；recall 默认应是本地检索和排序。
 
@@ -347,7 +350,17 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 
 ### 8.2 输入输出
 
-输入：
+实现中的输入 contract：
+
+```swift
+struct MemoryReflectRequest: Sendable {
+    let characterCardId: String
+    let task: MemoryReflectTask
+    let sourceMemoryIds: [String]
+}
+```
+
+规划中的 LLM 输入：
 
 ```json
 {
@@ -360,7 +373,28 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 }
 ```
 
-输出：
+实现中的 observation contract：
+
+```swift
+struct MemoryReflectObservation: Sendable {
+    let content: String
+    let memoryType: MemoryType
+    let basedOnMemoryIds: [String]
+    let confidence: Double?
+    let suggestedAction: MemoryReflectAction
+}
+```
+
+规则：
+
+- `sourceMemoryIds` / `basedOnMemoryIds` 不能为空。
+- `content` 不能为空。
+- `confidence` clamp 到 `0...1`。
+- task contract 为 `summarize`、`dedupe`、`resolve_conflict`、`relationship_observation`。
+- suggested action contract 为 `insert_observation`、`mark_duplicate`、`needs_user_review`。
+- 第一版 relation contract 为 `summarizes`、`duplicates`、`reinforces`。
+
+规划中的 LLM 输出：
 
 ```json
 {
@@ -379,7 +413,12 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 - 冲突解决或删除建议进入 review，不自动破坏历史证据。
 - 自动注入 prompt 时，observation 可以比原始 cluster 有更高优先级，但仍受 recall relevance 控制。
 
-## 9. Phase E：Background 适配边界与 Responses API
+实现证据：
+
+- `OpenChat/Core/Memory/MemoryReflectModels.swift`
+- `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift`
+
+## 9. Phase D：Background 适配边界与 Responses API
 
 ### 9.1 Background 适配边界
 
@@ -403,12 +442,17 @@ MemoryRecallResult
 
 当前 Responses API 会把 system messages 合并到 `instructions`。因此 `[Memories]` 在源代码 message 列表中的位置，不一定等于 provider 实际看到的位置。
 
-规划动作：
+当前已完成：
 
 - 对 Chat Completions 和 Responses API 分别记录最终请求 shape。
 - 在本计划测试中确认当前 `[Memories]` 不会被拼进 user message，也不会丢失。
+- Chat Completions 模式下 `[Memories]` 仍在 `messages` 中，位于 Current Turn user 前。
+- Responses 模式下 `[Memories]` 在 `instructions` 中，`input` 只包含非 system messages，current input 不重复。
+
+仍留给后续：
+
 - Background block 的稳定 label 与 request-shape audit 留给后续 Background 计划包。
-- 在 `arch/modules/api-client.md` 或 Responses API 文档中记录 system folding 对 prompt 层次的影响。
+- 在 Background 接入后重新验收 `BackgroundPacket` / Background block 的 provider request shape。
 
 ## 10. 可观测性
 
@@ -440,8 +484,8 @@ MemoryRecallResult
 | extraction prompt v2 parsing | source range、confidence、tags、action 兼容 |
 | provenance migration | companion table 追加，不破坏旧数据 |
 | dedupe behavior | 同批重复不重复写入 |
-| reflect output validation | observation 必须有 `basedOn` |
-| Responses API request shape | 当前 `[Memories]` block 不丢失；Background block 留给后续独立计划 |
+| reflect output validation | 已覆盖：observation 必须有 `basedOn`，request 必须有 source ids，relation 集合最小化 |
+| Responses API request shape | 已覆盖：当前 `[Memories]` block 不丢失；Background block 留给后续独立计划 |
 
 建议 focused verification：
 
@@ -456,9 +500,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | A | order-preserving trim + tests | 否 |
 | B1 | `MemoryRecallResult` / trace 内部 DTO | 否 |
 | B2 | fallback tiers + keyword/recent high-value candidate | 否，可先用现有表 |
-| C | provenance companion table + extraction prompt v2 | 是 |
-| D | dedupe / reinforce metadata | 可能需要 |
-| E | reflect observation synthesis | 是，建议有 `basedOn` 表 |
+| C | provenance companion table + extraction prompt v2 | 是（v14） |
+| D | reflect contract + Responses request-shape | 否 |
+| E | reflect executor / `memory_entry_link` / basedOn 表 | 是 |
 | F | MemoryBackgroundSource 接入 Background | 后续独立计划，不在本页对应计划包内 |
 
-最务实的第一步是 Phase A。它范围小、风险低、能直接关闭当前 P1，并为后续 recall fusion 建立正确的排序契约。
+Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。剩余工作是后续独立计划中的 reflect executor、`memory_entry_link` 持久化和 Background 接入。

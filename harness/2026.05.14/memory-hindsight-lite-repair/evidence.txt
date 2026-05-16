@@ -115,3 +115,312 @@ Remaining non-Phase-A risks:
 - fallback tiers / `MemoryRecallTrace` not implemented.
 - provenance / dedupe metadata not implemented.
 - Responses API system folding risk remains open.
+
+## Phase B Baseline and Verification
+
+Phase: B recall trace / fallback tiers
+
+Baseline command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Baseline result before Phase B edits:
+35 tests / 4 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_21-48-06-+0800.xcresult
+
+Pre-change propagation anchors:
+- `MemoryManager.retrieveMemories(...)` returned `[MemoryEntryRecord]` directly.
+- `ChatViewModel+Support.generateResponse` called `retrieveMemories(...)` and passed memories to `PromptAssembler.preview(...)` / `assemble(...)`.
+- `PromptAssembler` consumed only `[MemoryEntryRecord]` and did not know fallback details.
+- `DatabaseManager+Memory.fetchRecentMemories(...)` was the old recent-by-time query.
+
+Phase B source diff:
+- Added `OpenChat/Core/Memory/MemoryRecallModels.swift`.
+- Updated `OpenChat/Core/Memory/MemoryManager.swift` with `recallMemories(...)`, semantic/keyword/recent-high-value candidates, fallback tiers, selected ids, and omission trace.
+- Updated `OpenChat/Core/Database/DatabaseManager+Memory.swift` with `fetchRecentHighValueMemories(...)`.
+- Updated tests in `MemoryManagerRetrievalTests`, `DatabaseManagerMemoryTests`, and `ChatViewModelPromptAssemblyTests`.
+- Updated `OpenChat.xcodeproj/project.pbxproj` only to include `MemoryRecallModels.swift` in the app target.
+
+Phase B focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Phase B focused result:
+28 tests / 3 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-06-15-+0800.xcresult
+
+Broader focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Broader focused result:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-07-09-+0800.xcresult
+
+Final focused re-run after docs writeback:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-21-39-+0800.xcresult
+
+Post-evidence focused re-run:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-23-32-+0800.xcresult
+
+Final focused re-run after AntiEntropy/doc tail sync:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-38-36-+0800.xcresult
+
+Final full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Final full-suite result:
+225 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-22-33-+0800.xcresult
+
+User-requested Phase B revalidation at 2026-05-14 22:49-22:52 +0800:
+
+Simulator discovery:
+xcrun simctl list devices available | rg 'iPhone'
+
+Result:
+- Non-escalated attempt could not connect to CoreSimulatorService due sandbox/log permissions.
+- Escalated retry succeeded and listed `iPhone 17 Pro`; the same destination was used for all revalidation commands.
+
+Revalidation focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Revalidation focused result:
+28 tests / 3 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-49-48-+0800.xcresult
+
+Revalidation broader focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Revalidation broader focused result:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-50-55-+0800.xcresult
+
+Revalidation full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Revalidation full-suite result:
+225 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-52-01-+0800.xcresult
+
+Post-change propagation quality check:
+- Static changed-file surface is limited to Core/Memory, Core/Database, Xcode source membership, tests, and docs.
+- No production Swift imports were added beyond the new DTO file's `Foundation`.
+- `MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` remains the Chat-facing compatibility API.
+- `PromptAssembler` and `ContextManager` were not changed.
+- `git diff --check` passed after source edits.
+- `rg` stale-doc audit found old recent-fallback claims; arch/AntiEntropy docs were updated to Phase B source truth.
+- 2026-05-14 22:49-22:52 +0800 revalidation confirmed the same propagation boundary after focused, broader focused, and full-suite runs.
+
+Remaining non-Phase-B risks:
+- retain v2 provenance / dedupe metadata not implemented.
+- reflect observation not implemented.
+- Responses API `[Memories]` request-shape audit remains Phase D.
+- Prompt budget omission is not yet fed back into `MemoryRecallTrace`; this belongs to later Background / prompt-budget integration.
+
+
+## Phase C Baseline and Verification
+
+Phase: C retain v2 / provenance / dedupe
+
+Baseline command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Baseline result before Phase C edits:
+49 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_22-50-55-+0800.xcresult
+
+Pre-change propagation anchors:
+- `MemoryManager.callExtractionAPI(...)` sent plain `role: content` text.
+- `ExtractedMemory` only had `content`, `type`, `importance`.
+- `VectorStore.insert(entries:)` only wrote `memory_entry + memory_embedding`.
+- No `memory_entry_provenance` table existed.
+
+Phase C source diff:
+- Added `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`.
+- Updated `OpenChat/Core/Database/Migrations.swift` with `v14_create_memory_entry_provenance`.
+- Updated `OpenChat/Core/Database/DatabaseManager+Memory.swift` with provenance CRUD.
+- Updated `OpenChat/Core/Memory/VectorStore.swift` with `insert(entries:provenances:)` atomic write.
+- Updated `OpenChat/Core/Memory/MemoryDependencies.swift` with protocol method + default implementation.
+- Updated `OpenChat/Core/Memory/MemoryManager.swift` with structured extraction input, v2 parsing, dedupe, validation, and provenance generation.
+- Updated tests in `MemoryManagerRetrievalTests`, `MemoryExtractionParsingTests`, `DatabaseManagerMemoryTests`, `MigrationTests`.
+- Regenerated `OpenChat.xcodeproj/project.pbxproj` via `ruby scripts/generate_xcodeproj.rb` to include new file.
+
+Phase C focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests'
+
+Phase C focused result:
+103 tests / 7 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxhtsfy/Logs/Test/Test-OpenChat-2026.05.14_23-57-22-+0800.xcresult
+
+Phase C full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Phase C full-suite result:
+240 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.14_23-57-52-+0800.xcresult
+
+Post-change propagation quality check:
+- Static changed-file surface is limited to Core/Memory, Core/Database, Xcode source membership, tests, and docs.
+- No production Swift imports were added beyond the new Record file's `Foundation` and `GRDB`.
+- `MemoryManager.extractMemories(from:) -> [MemoryEntryRecord]` remains the Chat-facing compatibility API.
+- `PromptAssembler` and `ContextManager` were not changed.
+- `git diff --check` passed after source edits.
+- `rg` stale-doc audit found old retain-v1 claims; arch/AntiEntropy/docs were updated to Phase C source truth.
+- 2026-05-14 23:57 +0800 validation confirmed focused 103 tests / 7 suites and full suite 240 tests / 45 suites passed.
+
+Final Phase C revalidation at 2026-05-15 19:20-19:21 +0800:
+
+Core focused subset command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/MigrationTests'
+
+Core focused subset result:
+66 tests / 3 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.15_19-20-52-+0800.xcresult
+
+Phase C full focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests'
+
+Phase C full focused result:
+107 tests / 7 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.15_19-21-31-+0800.xcresult
+
+Final full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Final full-suite result:
+244 tests / 45 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.15_19-21-48-+0800.xcresult
+
+Final post-change propagation quality check:
+- Static changed-file surface remains limited to Core/Memory, Core/Database, Xcode source membership, tests, arch docs, and harness evidence.
+- `ChatViewModel+Support` still calls `MemoryManager.extractMemories(from:)` / `retrieveMemories(...)`; Chat-facing signatures are unchanged.
+- `PromptAssembler`, `ContextManager`, and `APIClient` were not changed by Phase C.
+- `memory_entry` schema is unchanged; v14 only adds `memory_entry_provenance`.
+- Production write path uses `VectorStore.insert(entries:provenances:)` to save entry + embedding + provenance in one GRDB write transaction.
+- `rg` stale-doc audit after final docs sync found no remaining active Phase C 103/240 result claims outside this historical evidence section.
+
+Remaining non-Phase-C risks:
+- reflect observation synthesis not implemented.
+- Responses API `[Memories]` request-shape audit remains Phase D.
+- Prompt budget omission is not yet fed back into `MemoryRecallTrace`; this belongs to later Background / prompt-budget integration.
+
+Phase: D reflect contract / Responses request-shape
+Timestamp: 2026-05-16 02:40-02:59 +0800
+
+Pre-change anchors:
+- `ResponsesAPIRequest.init(...)` already joined all system messages into `instructions`.
+- No Memory reflect DTO contract existed.
+- No request-shape test specifically asserted `[Memories]` under Responses mode.
+
+Phase D source diff:
+- Added `OpenChat/Core/Memory/MemoryReflectModels.swift`.
+- Added `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift`.
+- Updated `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift` with `[Memories]` folding request-level coverage.
+- Updated `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` with Responses mode request capture coverage.
+- Regenerated `OpenChat.xcodeproj` via `ruby scripts/generate_xcodeproj.rb` to include new Swift files.
+
+Reflect contract focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=4435A025-9E0B-40AF-9BE0-DE0648F77AED' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+
+Reflect contract focused result:
+5 tests / 1 suite passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_02-55-45-+0800.xcresult
+
+Legacy Chat + reflect focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/ResponsesAPITests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+
+Legacy Chat + reflect focused result:
+16 tests / 2 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_02-40-16-+0800.xcresult
+
+Note:
+- `ResponsesAPITests` is a Swift file name, not a Swift Testing suite name. The command above did not select the Responses suites; it validated ChatViewModelPromptAssemblyTests and MemoryReflectModelsTests before the enum raw value cleanup.
+
+Responses suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=6F61E759-8E3C-4951-B929-0A63AA47BFBB' '-only-testing:OpenChatTests/ResponsesAPIRequestTests' '-only-testing:OpenChatTests/ResponsesAPIResponseTests' '-only-testing:OpenChatTests/SSEParserTypedEventsTests' '-only-testing:OpenChatTests/APIClientResponsesModeTests' '-only-testing:OpenChatTests/ModelParametersAPIModeTests'
+
+Responses suite result:
+21 tests / 5 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_02-57-10-+0800.xcresult
+
+Chat + reflect focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+
+Chat + reflect focused result:
+17 tests / 2 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_02-58-42-+0800.xcresult
+
+Blocked verification attempts:
+- Responses suites on iOS 26.4 `iPhone 17` UDID `4435A025-9E0B-40AF-9BE0-DE0648F77AED` hit simulator runner launch preflight `Busy` before tests started, then passed on iOS 26.5 `iPhone 17 Pro` UDID `6F61E759-8E3C-4951-B929-0A63AA47BFBB`.
+- Chat + reflect focused suite hit runner launch preflight `Busy` on iOS 26.5 `iPhone 17 Pro` UDID `6F61E759-8E3C-4951-B929-0A63AA47BFBB`, then passed on iOS 26.4 `iPhone 17 Pro` UDID `F8D0D88B-71FD-471F-855A-B2B5D8267117`.
+
+Post-change propagation quality check:
+- No production `ChatViewModel.generateResponse(...)` reflect call was added.
+- `ResponsesAPIRequest.swift` was not changed; tests now document and lock current folding behavior.
+- No DB migration was added; `memory_entry_link` remains a future persistence plan.
+- No `Core/Background` dependency was added.
+
+Remaining non-Phase-D risks:
+- reflect LLM executor, UI entry, and `memory_entry_link` persistence remain future work.
+- Background block request-shape remains future Background plan work.
+
+Phase: Lead closeout
+Timestamp: 2026-05-16 03:03-03:10 +0800
+
+Initial full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=B20ADF19-7ADC-427D-9EBE-A76712A3E2AE'
+
+Initial full-suite result:
+251 tests / 46 suites ran; 2 issues in `MemoryManagerRetrievalTests`.
+Failing tests:
+- `test_extractMemories_v2_dedupe_keeps_higher_importance`
+- `test_extractMemories_v2_filters_invalid_source_message_ids_in_provenance`
+Error: `APIKeyStoreError.keychainFailure(-25299)`.
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_03-05-19-+0800.xcresult
+
+Closeout fix:
+- `OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift` now injects `InMemoryAPIKeyStore()` into its `MemoryManager` instances.
+- This is test isolation only; production `MemoryManager` still defaults to `KeychainAPIKeyStore()`.
+- Rationale: the retain v2 tests already use mock API / embedding / vector dependencies and should not touch the real simulator Keychain during parallel full-suite execution.
+
+Focused recheck command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=B20ADF19-7ADC-427D-9EBE-A76712A3E2AE' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests'
+
+Focused recheck result:
+15 tests / 1 suite passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_03-07-37-+0800.xcresult
+
+Final full-suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=4DC4D569-DFFE-41E4-9383-2A6386B5B26E'
+
+Final full-suite result:
+251 tests / 46 suites passed.
+** TEST SUCCEEDED **
+xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.16_03-10-07-+0800.xcresult
+
+Lead closeout conclusion:
+- Phase A/B/C/D source and test coverage are now green under the final full-suite baseline.
+- Simulator launch preflight `Busy` occurred during some retry attempts, but the final closeout full suite completed successfully on iOS 26.5 `iPhone 17e` UDID `4DC4D569-DFFE-41E4-9383-2A6386B5B26E`.
+- Remaining reflect executor, `memory_entry_link` persistence, UI entry, and Background block request-shape are future independent plans.

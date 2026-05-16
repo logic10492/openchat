@@ -1,7 +1,7 @@
 # OpenChat Planning
 
-> 更新时间：2026-05-13
-> 状态：规划入口。本文记录目标架构和落地顺序，不代表当前源码已全部实现。
+> 更新时间：2026-05-16
+> 状态：规划入口 + 当前执行状态。本文记录目标架构、已完成计划包和下一步落地顺序；未标记完成的阶段不代表当前源码已实现。
 
 ## 1. 当前重点
 
@@ -9,6 +9,23 @@ OpenChat 下一阶段的重点有两条主线：
 
 1. 把角色扮演所需的背景上下文从“各模块分别注入 prompt”升级为“统一 Background 调度”。
 2. 把单角色 Chat 扩展为支持多角色共同参与的 Stage。
+
+当前执行顺序已经调整：
+
+```text
+Memory Hindsight-lite repair
+  -> WorldBook vectorization
+  -> BackgroundSource / BackgroundWorker
+  -> Prompt switches to BackgroundPacket
+  -> LibMan / Stage
+```
+
+2026-05-16 状态：
+
+- Memory Hindsight-lite A/B/C/D 与 Lead closeout 已完成并通过 full suite。
+- BackgroundWorker 尚未开始实现。
+- BackgroundWorker 前置工作是世界书向量化，让 WorldBook 像 Memory 一样具备 embedding、semantic recall、trace 和候选管理能力。
+- LibMan、Stage、Director、多角色同场仍是后续阶段。
 
 ```text
 WorldBook + Memory + Character State + Conversation State
@@ -79,7 +96,8 @@ WorldBook + Memory + Character State + Conversation State
 
 当前差异：
 
-- 当前 Memory 仍由 `ChatViewModel` 调 `MemoryManager.retrieveMemories(...)`，再由 `PromptAssembler` 注入 `[Memories]`。
+- 当前 Memory 已完成 Hindsight-lite 修复：`MemoryManager` 能输出 `MemoryRecallResult` / `MemoryRecallTrace`，fallback 改为 semantic / keyword / recent high-value 分层，retain v2 已有 provenance / dedupe metadata。
+- 但当前 Memory 仍由 `ChatViewModel` 调 `MemoryManager.retrieveMemories(...)`，再由 `PromptAssembler` 注入 `[Memories]`；尚未包装成 `MemoryBackgroundSource`。
 - 当前 WorldBook 仍由 `PromptAssembler` keyword trigger 后注入 `[World Book Entries]`。
 - 目标架构会把这两条路径收敛到 Background。
 
@@ -92,11 +110,14 @@ WorldBook + Memory + Character State + Conversation State
 
 ## 5. 世界书向量化
 
+> 当前状态：尚未实现，是进入 BackgroundWorker 前的下一项前置工作。
+
 目标：
 
 - 为 `world_book_entry` 建立 embedding 索引。
 - 让世界书支持 keyword + semantic 双路召回。
 - 让 BackgroundWorker 能公平比较世界书候选和记忆候选。
+- 让 WorldBook 像 Memory 一样由专门 Core 层管理：embedding、索引重建、召回结果、trace、禁用过滤和 CRUD/import/delete 同步维护。
 
 建议目标表：
 
@@ -119,6 +140,9 @@ world_book_entry_embedding_meta
 参考文档：
 
 - `arch/modules/background/world-book-vectorization.md`
+- `arch/modules/world-book.md`
+
+第一阶段不切换到 BackgroundWorker，也不立即取消当前 `[World Book Entries]` block。目标是先建立 WorldBook 的向量检索能力和可测试管理边界，之后再由 Background 计划包统一消费。
 
 ## 6. LibMan / 图书管理员
 
@@ -179,55 +203,60 @@ Stage 是 Chat 的目标扩展形态。
 
 Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 
-- retain：Memory 继续负责长期记忆抽取与持久化，下一步补 source range / provenance / dedupe metadata。
-- recall：Memory 先输出有序 `MemoryRecallResult`，再作为候选给 BackgroundWorker，而不是直接进 prompt。
-- reflect：只做低频整理或显式用户操作，输出带 `basedOn` 的 observation，不进入每轮主聊天链路。
+- retain：Memory 继续负责长期记忆抽取与持久化；source range / provenance / dedupe metadata 已在 Hindsight-lite Phase C 落地。
+- recall：Memory 已能输出有序 `MemoryRecallResult` / `MemoryRecallTrace`；进入 Background 前仍保持旧兼容 API 供 Chat 使用。
+- reflect：Phase D 已落地最小 `MemoryReflectRequest` / `MemoryReflectObservation` contract；reflect LLM executor、UI 入口和 `memory_entry_link` 持久化仍是后续独立计划。
 
-优先顺序：
+已完成顺序：
 
 1. 修复 Memory recall ordering，避免 `importance` 覆盖语义相关性。
 2. 增加 `MemoryRecallTrace`，记录 distance、fallback reason、selected ids 和 omitted ids。
 3. 将 recent fallback 改为 keyword + recent high-value 分层 fallback。
 4. 增加 source range / provenance / dedupe metadata。
-5. 将 Memory 输出包装成 `BackgroundCandidate`。
-6. 低频 reflect 产出带 `basedOn` 的 observation。
+5. 验收当前 Responses API 下 `[Memories]` folding 后的 request shape。
+6. 建立低频 reflect 的最小 DTO contract。
+
+仍未做：
+
+- 将 Memory 输出包装成 `BackgroundCandidate`。
+- 实现 reflect LLM executor / UI 入口 / `memory_entry_link` migration。
 
 参考文档：
 
 - `arch/modules/memory/hindsight-lite.md`
 - `arch/AntiEntropy/problem.md`
+- `docs/superpowers/plans/2026-05-14-memory-hindsight-lite-repair/README.md`
 
 ## 9. 建议落地顺序
 
-### Phase 0：规划固化
+### Phase 0：规划固化（已完成）
 
 - 保持 `arch/modules/background/*` 为目标架构文档。
-- 明确所有 Background / LibMan 内容尚未实现。
+- 明确 Background / LibMan / Stage 内容尚未实现。
 - 后续修改源码前先更新对应计划或 issue。
 
-### Phase 1：Background DTO + deterministic worker
+### Phase 1：Memory Hindsight-lite repair（已完成）
+
+- Phase A：Memory prompt trim 保持 retrieval order，不再被 `importance` 重排覆盖。
+- Phase B：新增 `MemoryRecallResult` / `MemoryRecallTrace`，fallback 改为 semantic / keyword / recent high-value tiers。
+- Phase C：追加 `memory_entry_provenance`，升级 extraction prompt v2，补 source boundary、dedupe、atomic provenance 写入。
+- Phase D：新增 reflect 最小 contract，验收 Responses API `[Memories]` request shape。
+- Lead closeout：focused tests 与 full suite 已通过；full suite 记录为 251 tests / 46 suites passed。
+
+### Phase 2：世界书向量化（下一步）
+
+- 追加 `world_book_entry_embedding` migration；如需要审计增量重建，再追加 `world_book_entry_embedding_meta`。
+- 建立 `Core/WorldBook` 管理层，例如 `WorldBookVectorStore`、`WorldBookEmbeddingIndexer`、`WorldBookRecallModels`。
+- WorldBookSource 同时支持 keyword 和 semantic candidates。
+- CRUD / import / delete 世界书条目时同步维护或标记重建 embedding。
+- 保持当前 prompt 输出兼容：第一阶段仍可输出 `[World Book Entries]`，不提前切 BackgroundWorker。
+
+### Phase 3：Background DTO + deterministic worker
 
 - 新增 `Core/Background` DTO。
 - 用确定性规则实现 BackgroundWorker。
-- 先包装现有 Memory / WorldBook 结果，不改数据库 schema。
-
-### Phase 2：Memory ordering 修复
-
-- `PromptAssembler.trim(memories:)` 不再按 `importance` 覆盖 retrieval order。
-- 增加测试锁定语义相关性优先。
-
-### Phase 2.5：Hindsight-lite recall / retain 完善
-
-- 新增内部 `MemoryRecallResult` / `MemoryRecallTrace` contract。
-- 把 semantic failure、no hit、empty index、budget dropped 分成不同 fallback tier。
-- 追加 provenance companion table，记录 source sortOrder/message ids、confidence、tags、dedupeKey。
-- 升级 extraction prompt 到 retain v2，但兼容当前 v1 JSON。
-
-### Phase 3：世界书向量化
-
-- 追加 migration。
-- 建立 world book entry embedding。
-- WorldBookSource 同时支持 keyword 和 semantic candidates。
+- 包装已完成的 Memory recall result 与完成向量化后的 WorldBook candidates。
+- 不让 BackgroundWorker 直接拼最终 prompt 或调用网络。
 
 ### Phase 4：Prompt 切换到 BackgroundPacket
 
@@ -269,11 +298,12 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ## 10. 当前已知未完成
 
 - Background 系统尚未实现。
+- BackgroundWorker 前置的世界书向量化尚未实现。
 - LibMan 尚未实现。
 - Stage 系统尚未实现。
 - Director agent / 导演模式尚未实现。
 - 多角色同场参与尚未实现。
-- 世界书尚未向量化。
-- Memory recall ordering P1 仍打开。
+- Memory 输出尚未包装成 `BackgroundCandidate`。
+- reflect LLM executor / UI 入口 / `memory_entry_link` 持久化尚未实现。
 - Background diagnostics / 检索可观测性尚未实现。
 - Responses API system folding 对 Background block 的实际位置仍需单独审计。

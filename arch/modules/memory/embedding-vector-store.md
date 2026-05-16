@@ -101,7 +101,7 @@ enum MemoryError: LocalizedError, Sendable {
 错误策略：
 
 - 提取阶段 embedding/vector 失败：整批失败，Chat 显示 extraction failed，不推进 cutoff。
-- 检索阶段 embedding/vector 失败：`MemoryManager.retrieveMemories(...)` fallback 到近期记忆；fallback 也失败才向 Chat 抛出。
+- 检索阶段 embedding/vector 失败：`MemoryManager.retrieveMemories(...)` 通过 `recallMemories(...)` 标记 `semanticUnavailable`，fallback 到 keyword + recent high-value；fallback 查询也失败才向 Chat 抛出。
 
 ## 6. 实现证据
 

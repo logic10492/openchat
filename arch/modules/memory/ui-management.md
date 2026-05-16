@@ -70,6 +70,7 @@ final class MemoryListViewModel {
 
 - 检索阶段没有 UI 说明：用户看不到本轮命中了哪些记忆、哪些被 token budget 裁掉。
 - fallback 原因只写日志，不展示给用户。
+- Phase D 只新增 reflect DTO contract；普通 UI 还没有“整理记忆”入口，也没有展示 reflect observation / based-on 关系。
 - MemoryListView 目前没有按 type/importance 排序过滤。
 - `ProgressView(value:total:)` 当前 total 为 10，而 `importance` 存储语义是 0...100；这属于 UI 显示尺度风险，后续应修正为 total 100 或显示文本分值。
 - 自动提取的 `completed` summaries 来自本轮 LLM 输出，没有持久化为单独 UI 事件；刷新后只能从列表查看。

@@ -208,7 +208,7 @@
 
 - 写入链路从 `MemoryManager.extractMemories -> DatabaseManager.saveMemory -> VectorStore.insert(entryId:embedding:)` 收敛为 `MemoryManager.extractMemories -> EmbeddingProvider.embed -> MemoryVectorStore.insert(entries:)`，避免半索引记忆。
 - `MemoryVectorStore.insert(entries:)` 是协议必填方法，不提供非原子默认实现；生产 `VectorStore` 在所有维度校验和 blob 转换完成后进入单个 GRDB write transaction。
-- 检索链路从 Chat 层 `try?` 静默吞错，改为 `MemoryManager.retrieveMemories` 内部 fallback 到近期记忆；Chat 层只记录 fallback 仍失败的 warning。
+- 检索链路从 Chat 层 `try?` 静默吞错，改为 `MemoryManager.retrieveMemories` 内部 fallback；2026-05-14 Phase B 后 fallback 不再是任意 recent，而是 keyword + recent high-value tier，Chat 层只记录 fallback 仍失败的 warning。
 - Prompt 注入仍由 `PromptAssembler` 的 `memories: [MemoryEntryRecord]` 参数完成，段顺序没有改变。
 - 本次修复没有新增 Feature 间直接依赖，也没有改变 App -> Features -> Core -> Shared 的既有名义方向；实际影响集中在 `Core/Memory` 与 Chat 发送链路中的记忆检索错误处理。
 
@@ -267,7 +267,7 @@
 
 - `arch-src`：`arch/data-model.md`、`arch/modules/context-manager.md`、`.github/instructions/context-manager.instructions.md` 已写回 checkpoint schema、Codex 风格阈值语义、复用/失效/fallback 行为。
 - `arch-test`：新增 migration/database/context/chat 测试覆盖 v11 表、checkpoint CRUD、source hash、policy、summarizer、compactor、复用和编辑/删除失效。
-- `src-test`：focused suites 与 full suite 均通过，当前基线为 197 tests / 41 suites。
+- `src-test`：focused suites 与 full suite 均通过；该轮基线为 197 tests / 41 suites。
 
 ### 验证
 
@@ -305,7 +305,7 @@
 
 - `arch-src`：`arch/modules/context-manager.md`、`arch/data-model.md`、`arch/modules/settings/context-strategy.md`、`.github/instructions/context-manager.instructions.md` 已写回 compression mode、v12 schema、阈值公式和 checkpoint 阈值匹配复用规则。
 - `arch-test`：`CompressionPolicyTests`、`MigrationTests`、`CompressionCheckpointReuseTests`、`ChatViewModelPromptAssemblyTests` 覆盖阈值公式、v12 默认值、模式切换不复用旧 checkpoint、设置持久化。
-- `src-test`：focused compression mode suite 39 tests / 4 suites passed；当前 full suite 197 tests / 41 suites passed，`** TEST SUCCEEDED **`。
+- `src-test`：focused compression mode suite 39 tests / 4 suites passed；该轮 full suite 197 tests / 41 suites passed，`** TEST SUCCEEDED **`。
 
 ## 2026-04-30 Prompt Four-Layer Assembly Incremental Audit
 
@@ -424,7 +424,164 @@
 - `arch-test`：`PromptAssemblerTests.test_memory_trim_preserves_retrieval_order_when_budget_drops_high_importance_memory` 覆盖高 importance 低 relevance 第三条在预算不足时不会挤掉前两条 retrieval-order memory。
 - `src-test`：baseline focused suite 34 tests / 4 suites passed；Phase A `PromptAssemblerTests` 14 tests / 1 suite passed；post-change focused suite 35 tests / 4 suites passed；full suite 219 tests / 45 suites passed。2026-05-14 20:14-20:17 +0800 已重跑 Phase A focused、post-change focused 和 full suite，结果仍为 14 / 35 / 219 tests 全部通过。
 
+## 2026-05-14 Memory Hindsight-lite Phase B Incremental Audit
+
+范围：`OpenChat/Core/Memory/MemoryRecallModels.swift`（新增）、`OpenChat/Core/Memory/MemoryManager.swift`、`OpenChat/Core/Database/DatabaseManager+Memory.swift`、`OpenChat.xcodeproj/project.pbxproj`、`OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift`、`OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、Memory/AntiEntropy/harness 文档。
+
+审计模式：窄范围增量传播审计。OpenChat 当前仍没有 Swift AST import graph 脚本，本轮沿用静态 `rg` 引用面 + 行为链路 + focused tests。
+
+### 静态传播面
+
+- 新增 production Swift 文件 1 个：`Core/Memory/MemoryRecallModels.swift`，只定义 `Sendable` DTO / enum，没有新增外部框架依赖。
+- `MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 兼容接口保持不变；Chat 发送链路无需改签名。
+- `DatabaseManager+Memory` 新增 `fetchRecentHighValueMemories(...)`，不新增 migration，不修改 `memory_entry` schema。
+- `PromptAssembler`、`ContextManager`、`APIClient` 未修改；`PromptAssembler` 仍只消费 `[MemoryEntryRecord]`，不理解 semantic distance 或 fallback trace。
+- `OpenChat.xcodeproj/project.pbxproj` 只新增 `MemoryRecallModels.swift` 的 file reference 和 source build phase 引用；签名配置保持 `PRODUCT_BUNDLE_IDENTIFIER=fukujusou.openchat.com`、`DEVELOPMENT_TEAM=GZAC7644XS`、`CODE_SIGN_STYLE=Automatic`。
+
+### 行为传播结论
+
+链路：
+
+```text
+ChatViewModel+Support.generateResponse
+  -> MemoryManager.retrieveMemories
+  -> MemoryManager.recallMemories
+  -> semantic candidates + keyword candidates + recent high-value candidates
+  -> MemoryRecallResult(entries, trace)
+  -> PromptAssembler.preview/assemble
+```
+
+- semantic 正常命中时，semantic distance order 是主顺序；keyword / recent high-value 只补充未出现条目。
+- semantic unavailable 时，trace fallback 为 `semanticUnavailable`，返回 keyword + recent high-value。
+- semantic no hit 时，trace fallback 为 `noSemanticHit`；有 keyword 时不额外塞 recent high-value，没有 keyword 时才返回少量 high-value。
+- empty index 或所有候选为空时返回空 entries，trace fallback 为 `emptyIndex`。
+- 普通 `fetchRecentMemories(createdAt DESC)` 仍存在，但不再作为 prompt fallback 路径。
+
+结论：Phase B 关闭 P2 “fallback 不可解释”和“recent fallback 只按时间取最近 N 条”。传播面限定在 `Core/Memory` / `Core/Database` 和测试；Chat/Prompt 主链路只看到原有 `[MemoryEntryRecord]` 输出。
+
+### 验证
+
+- `MemoryManagerRetrievalTests` 覆盖 semantic order + keyword trace、semantic failure、no semantic hit、empty index、兼容 retrieve API。
+- `DatabaseManagerMemoryTests` 覆盖 recent high-value 查询筛掉普通 recent 噪声并按 type priority 排序。
+- `ChatViewModelPromptAssemblyTests` 覆盖 semantic failure 时 high-value memory 进入 request、普通 recent 噪声不进入 request。
+- Focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 28 tests / 3 suites passed，`** TEST SUCCEEDED **`。
+- Broader focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 49 tests / 5 suites passed，`** TEST SUCCEEDED **`。
+- 2026-05-14 22:49-22:52 +0800 按用户要求重新执行 B 阶段验收与后置传播评估：同一 `iPhone 17 Pro` destination 下 focused 28 tests / 3 suites、broader focused 49 tests / 5 suites、full suite 225 tests / 45 suites 均通过；`MemoryManager.retrieveMemories(...)`、`PromptAssembler`、`ContextManager`、`APIClient` 的接口传播边界未扩大。
+
+## 2026-05-15 Memory Hindsight-lite Phase C Incremental Audit
+
+范围：`OpenChat/Core/Database/Migrations.swift`、`OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`（新增）、`OpenChat/Core/Database/DatabaseManager+Memory.swift`、`OpenChat/Core/Memory/VectorStore.swift`、`OpenChat/Core/Memory/MemoryDependencies.swift`、`OpenChat/Core/Memory/MemoryManager.swift`、`OpenChatTests/Core/DatabaseTests/MigrationTests.swift`、`OpenChatTests/Core/MemoryExtractionParsingTests.swift`、`OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift`、`OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift`、Memory/AntiEntropy/harness 文档。
+
+审计模式：窄范围增量传播审计，解决 `arch/AntiEntropy/problem.md` 中 P2 “提取 prompt 缺少角色卡、已有记忆、source 边界和去重约束”。
+
+### 静态传播面
+
+- 新增 production Swift 文件 1 个：`Core/Database/Records/MemoryEntryProvenanceRecord.swift`，定义 companion table GRDB Record，无新增外部框架依赖。
+- `Migrations.swift` 追加 `v14_create_memory_entry_provenance`，只创建新表，不修改旧 migration。
+- `DatabaseManager+Memory.swift` 新增 provenance CRUD（save/fetch/delete），不修改 `memory_entry` schema。
+- `VectorStore.swift` 新增 `insert(entries:provenances:)`，在同一 GRDB transaction 中写入 entry + embedding + provenance。
+- `MemoryDependencies.swift` 在 `MemoryVectorStore` 协议中新增 `insert(entries:provenances:)` 要求，并提供默认空实现（向后兼容测试 mock）。
+- `MemoryManager.swift` 改动集中在 extraction pipeline：
+  - `callExtractionAPI(...)` 输入从纯文本改为结构化 JSON（character summary + existing memory hints + message id/sortOrder）。
+  - `ExtractedMemory` 扩展 v2 字段（sourceStartSortOrder、sourceEndSortOrder、sourceMessageIds、confidence、tags、dedupeKey、action）。
+  - 新增同批 dedupe、source range validation、source message id filtering、skip/reinforce suppression。
+  - `extractMemories(...)` 使用 `VectorStore.insert(entries:provenances:)` 原子写入。
+- `PromptAssembler`、`ContextManager`、`APIClient` 未修改；Chat 发送链路仍只消费 `[MemoryEntryRecord]`。
+- `OpenChat.xcodeproj/project.pbxproj` 已通过 `ruby scripts/generate_xcodeproj.rb` 重新生成，新增 `MemoryEntryProvenanceRecord.swift` 引用；签名配置保持原有值。
+
+### 行为传播链路
+
+链路：
+
+```text
+ChatViewModel+Support.generateResponse
+  -> MemoryManager.extractMemories
+    -> callExtractionAPI(character + existingHints + messages)
+    -> validateAndFilter(source range, message ids, skip/reinforce)
+    -> dedupeWithinBatch(dedupeKey / normalized content)
+    -> EmbeddingProvider.embed
+    -> VectorStore.insert(entries:provenances:)
+      -> GRDB transaction: memory_entry + memory_embedding + memory_entry_provenance
+    -> update conversation.lastExtractedSortOrder
+```
+
+- 结构化输入帮助 LLM 判断重复、强化或跳过；fallback 到纯文本时仍兼容旧路径。
+- `action == skip` 的条目在 validation 阶段丢弃，不进入 DB。
+- `action == reinforce` 第一版不覆盖旧记忆，也不新增重复记忆，直接跳过插入（后续 reflect 计划可扩展）。
+- 同批 dedupe 保留 importance 更高或 content 更短的条目；不自动删除旧 memory。
+- 越界 source range 的条目丢弃；无效 sourceMessageIds 从 provenance 中过滤。
+- confidence 在 provenance 中 clamp 到 0...1；tags 去空去重并限制 10 条。
+- 原子写入保证 embedding/vector 失败时 entry 和 provenance 一起回滚，不留半成品。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/memory/data-model.md` 已新增 `memory_entry_provenance` schema；`arch/modules/memory/extraction.md` 已更新为 retain v2 流程；`arch/modules/memory/hindsight-lite.md` 已标记 Phase C implemented；`arch/AntiEntropy/problem.md` 已关闭 P2 “提取 prompt 缺 source/dedupe”。
+- `arch-test`：`MigrationTests` 覆盖 v14 表存在、列集合、外键 cascade；`MemoryExtractionParsingTests` 覆盖 v2 字段解析、provenance CRUD、旧 memory 无 provenance 兼容；`MemoryManagerRetrievalTests` 覆盖同批 dedupe、越界 source range 丢弃、无效 sourceMessageIds 过滤、skip/reinforce 不插入、向量失败不留下 entry/provenance 半成品。
+- `src-test`：Phase C focused suite 107 tests / 7 suites passed；full suite 244 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
+### 验证
+
+- Focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryExtractionParsingTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests'`，结果 107 tests / 7 suites passed，`** TEST SUCCEEDED **`。
+- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 244 tests / 45 suites passed，`** TEST SUCCEEDED **`。
+
 ### Durable Evidence
 
 - `harness/2026.05.14/memory-hindsight-lite-repair/index.md`
 - `harness/2026.05.14/memory-hindsight-lite-repair/evidence.txt`
+
+## 2026-05-16 Memory Hindsight-lite Phase D Incremental Audit
+
+范围：`OpenChat/Core/Memory/MemoryReflectModels.swift`（新增）、`OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift`（新增）、`OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`、`arch/modules/api-client.md`、`arch/modules/memory/*`、`arch/AntiEntropy/problem.md`、Memory Hindsight-lite 计划包和 harness evidence。
+
+审计模式：窄范围增量传播审计，解决 `arch/AntiEntropy/problem.md` 中 P2 Responses system folding request-shape 风险，并为 reflect 建立 Memory 层最小 contract。
+
+### 静态传播面
+
+- 新增 production Swift 文件 1 个：`Core/Memory/MemoryReflectModels.swift`，只定义 `Sendable` DTO / enum / typed LocalizedError，不引入 DB、Networking、Prompt 或 UI 依赖。
+- 新增测试文件 1 个：`MemoryReflectModelsTests.swift`，覆盖 source/basedOn ids 非空、observation content 非空、confidence clamp 和 relation 最小集合。
+- `ResponsesAPITests.swift` 新增 request-level test，确认 `[Memories]` folding 到 `instructions`，不进入 user input。
+- `ChatViewModelPromptAssemblyTests.swift` 新增 Responses 模式端到端 request 捕获，确认 Chat 发送链路下 current input 只出现一次，`[Memories]` 在 `instructions` 中。
+- `ResponsesAPIRequest.swift` 未修改；测试确认当前 shape 符合 Phase D 目标。
+- 未新增 migration；`memory_entry_link` 仍未持久化，只有 relation enum contract。
+- 未新增 `Core/Background`、Background worker 或 PromptAssembler-to-Background 依赖。
+
+### 行为传播链路
+
+Responses request shape：
+
+```text
+PromptAssembler.assemble
+  -> stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage
+  -> APIClient.streamMessage(... endpoint.apiMode == .responses)
+  -> ResponsesAPIRequest.init
+  -> system messages joined into instructions
+  -> non-system messages kept in input
+```
+
+Reflect contract：
+
+```text
+MemoryReflectRequest(characterCardId, task, sourceMemoryIds)
+  -> source ids must be non-empty
+MemoryReflectObservation(content, type, basedOnMemoryIds, confidence, action)
+  -> basedOn ids must be non-empty
+  -> confidence clamped to 0...1
+```
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/api-client.md` 记录 Responses folding；`arch/modules/memory/hindsight-lite.md` 记录 Phase D DTO contract 和未实现边界；`arch/modules/memory/index.md` / `ui-management.md` 记录 reflect contract 不等于 UI/executor。
+- `arch-test`：`MemoryReflectModelsTests`、`ResponsesAPIRequestTests`、`ChatViewModelPromptAssemblyTests` 覆盖本阶段 contract / request shape；文档明确 Swift Testing 选择器需要 suite 名称。
+- `src-test`：Phase D focused verification 已通过（reflect contract 5 tests / 1 suite、Responses suites 21 tests / 5 suites、Chat + reflect 17 tests / 2 suites）；Lead closeout full suite 251 tests / 46 suites passed。
+
+### 验证
+
+- Reflect contract command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=4435A025-9E0B-40AF-9BE0-DE0648F77AED' '-only-testing:OpenChatTests/MemoryReflectModelsTests'`，结果 5 tests / 1 suite passed，`** TEST SUCCEEDED **`。
+- Responses suites command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=6F61E759-8E3C-4951-B929-0A63AA47BFBB' '-only-testing:OpenChatTests/ResponsesAPIRequestTests' '-only-testing:OpenChatTests/ResponsesAPIResponseTests' '-only-testing:OpenChatTests/SSEParserTypedEventsTests' '-only-testing:OpenChatTests/APIClientResponsesModeTests' '-only-testing:OpenChatTests/ModelParametersAPIModeTests'`，结果 21 tests / 5 suites passed，`** TEST SUCCEEDED **`。
+- Chat + reflect focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'`，结果 17 tests / 2 suites passed，`** TEST SUCCEEDED **`。
+- 两次中间重试被 simulator runner launch preflight `Busy` 拒绝，未进入测试断言；未作为代码失败处理。
+- Full-suite closeout：第一次成功启动的 full suite 暴露 `MemoryManagerRetrievalTests` 两个 retain v2 测试在并发运行时触碰真实 Keychain 的 `-25299` duplicate item；已将该测试文件内 `MemoryManager` 构造统一注入 `InMemoryAPIKeyStore()`。随后 `MemoryManagerRetrievalTests` 15 tests / 1 suite passed，最终 full suite 251 tests / 46 suites passed，`** TEST SUCCEEDED **`。
+
+### 结论
+
+Phase D 关闭当前 Memory 包内的 Responses `[Memories]` request-shape 风险，并为 low-frequency reflect 建立最小 DTO contract。剩余 reflect executor、`memory_entry_link` 持久化、Background block request-shape 和 BackgroundWorker 统一调度均属于后续独立计划，不应写成当前实现。

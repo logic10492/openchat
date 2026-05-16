@@ -388,8 +388,20 @@ DeepSeek V4 使用 OpenAI-compatible Chat Completions 路由，但请求体不�
   - `response.output_text.delta`
   - `response.reasoning.delta`（当前实现兼容的 reasoning 增量事件）
   - `response.completed`
-  - `response.failed`
-  - `response.incomplete`
+- `response.failed`
+- `response.incomplete`
+
+Request-shape 约束：
+
+- Chat Completions 模式保持原始 `messages` 序列；`[Memories]` 是 Current-Turn Context 中的 system block，位于当前 turn user message 前。
+- Responses 模式会把所有 system message 按原序 join 到 `instructions`，因此 `[Memories]` 作为 `instructions` 内的一段出现，而不会作为单独的 `input` message。
+- Responses 模式的 `input` 只包含非 system messages；当前 turn user message 只出现一次，且 `[Memories]` 不会被拼进 user content。
+- 这种 folding 是 provider adapter 行为，不等同于 Memory 丢失；未来 Background block 的 request-shape 需要在 Background 独立计划中重新验收。
+
+实现证据：
+- `OpenChat/Core/Networking/ResponsesAPIRequest.swift`：system → `instructions` folding，非 system → `input`。
+- `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift`：`ResponsesAPIRequestTests.test_memory_block_folds_to_instructions_without_user_duplication`。
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`：Chat Completions 四层顺序与 Responses 模式 `[Memories]` folding 端到端 request 捕获。
 
 当前未覆盖 Responses API 全量能力，例如 `previous_response_id` / `conversation`、`tools` / `tool_choice` / `parallel_tool_calls`、`include`、多模态 input、文件输入、structured output / `text.format`、background、truncation、全部 streaming event 类型等。
 

@@ -9,11 +9,12 @@
 
 - 以角色卡为单位保存跨对话记忆，同一角色的不同 conversation 共享 `memory_entry`。
 - 在 Chat 发送链路中，用户消息持久化后按 `conversation.lastExtractedSortOrder` 计算待处理消息数；达到 4 条后，在检索记忆之前同步调用 `MemoryManager.extractMemories(from:)`。
-- 记忆条目内容由当前会话配置的聊天 API 以 JSON 形式抽取，字段为 `content`、`type`、`importance`。
-- 条目保存前使用本地 CoreML MultilingualE5Small 生成 384 维 embedding，生产 `VectorStore` 在一个 GRDB write transaction 内同时写入 `memory_entry` 与 `memory_embedding`。
-- 每次发送消息时，当前输入先生成 query embedding，再通过 sqlite-vec KNN 检索相关记忆；语义检索异常或结果低于阈值时 fallback 到近期记忆。
+- 记忆条目内容由当前会话配置的聊天 API 以结构化 JSON 抽取，输入包含角色卡摘要、已有记忆 hints 和消息 id/sortOrder；输出字段为 `content`、`type`、`importance`，并支持 v2 来源元数据（source range、confidence、tags、dedupeKey、action）。
+- 条目保存前使用本地 CoreML MultilingualE5Small 生成 384 维 embedding，生产 `VectorStore` 在一个 GRDB write transaction 内同时写入 `memory_entry`、`memory_embedding` 与 `memory_entry_provenance`（retain v2）。
+- 每次发送消息时，当前输入先生成 query embedding，再通过 sqlite-vec KNN 检索相关记忆；语义检索异常或结果低于阈值时进入 fallback tier：keyword candidate 优先，必要时补少量 relationship / summary / high-importance recent high-value 记忆。
 - 检索结果按 `MemoryManager` 输出顺序作为 `[Memories] ... [/Memories]` labeled system block 注入 Current-Turn Context；`PromptAssembler` 只按输入顺序和 token budget 裁剪，不再按 `importance` 重排。
 - 角色详情页提供记忆列表、搜索、单条删除和清空入口；Chat 内联显示提取中、已提取和失败状态。
+- Phase D 已新增低频 reflect 的 Memory 层 contract（request / observation / relation），但尚未接入 UI、LLM executor 或 `memory_entry_link` 持久化。
 
 ## 2. 文档结构
 
@@ -38,7 +39,7 @@ ChatViewModel.generateResponse
   -> save user MessageRecord
   -> shouldExtractMemories(conversation.lastExtractedSortOrder, messages)
   -> MemoryManager.extractMemories       // threshold reached; pre-retrieval
-  -> MemoryManager.retrieveMemories      // semantic KNN + recent fallback
+  -> MemoryManager.retrieveMemories      // recall result + fallback tiers
   -> PromptAssembler.preview
   -> ContextManager.prepareHistory
   -> PromptAssembler.assemble            // inject [Memories]
@@ -52,9 +53,11 @@ MemoryManager.extractMemories
   -> fetch latest ConversationRecord
   -> fetch messages where sortOrder > lastExtractedSortOrder
   -> APIClient.sendMessage               // LLM returns JSON memories
-  -> parse [ExtractedMemory]
+  -> parse [ExtractedMemory] with v2 field support
+  -> validateAndFilter(source range, message ids, skip/reinforce)
+  -> dedupeWithinBatch(dedupeKey / normalized content)
   -> EmbeddingProvider.embed(content, isQuery: false)
-  -> MemoryVectorStore.insert(entries:)  // atomic memory + vector write
+  -> MemoryVectorStore.insert(entries:provenances:)  // atomic memory + vector + provenance write
   -> update conversation.lastExtractedSortOrder
 ```
 
@@ -62,21 +65,20 @@ MemoryManager.extractMemories
 
 ```
 MemoryManager.retrieveMemories
-  -> EmbeddingProvider.embed(query, isQuery: true)
-  -> MemoryVectorStore.search(query, characterCardId, limit)
-  -> filter distance < 1.5
-  -> fetch MemoryEntryRecord by ids, restore KNN order
-  -> merge recent memories, deduplicate
+  -> MemoryManager.recallMemories
+  -> semantic candidates + keyword candidates + recent high-value candidates
+  -> MemoryRecallResult(entries, trace)
+  -> entries.map(\.memory)
   -> PromptAssembler.trim(memories:)     // preserve input order
   -> [Memories] system block
 ```
 
 ## 4. 设计原则
 
-1. **聊天主流程优先**：检索失败应降级为近期记忆或空记忆，不阻断用户发送；提取失败通过 UI 和日志可观测。
+1. **聊天主流程优先**：检索失败应降级为 keyword / recent high-value 记忆或空记忆，不阻断用户发送；提取失败通过 UI 和日志可观测。
 2. **写入原子性优先**：自动提取生成的 `memory_entry` 必须和 `memory_embedding` 同事务写入，避免半索引记忆。
 3. **角色隔离**：KNN 检索必须限定 `characterCardId`，避免跨角色污染。
-4. **事实与计划分离**：当前实现只承诺扁平 `event/fact/relationship/summary` 条目；Hindsight-lite 的 provenance、recall trace、fallback tiers、reflect observation 都还只是规划。
+4. **事实与计划分离**：当前实现承诺扁平 `event/fact/relationship/summary` 条目、recall trace、fallback tiers、retain v2 provenance、同批 dedupe 和 reflect DTO contract；reflect executor、`memory_entry_link` 持久化和跨批自动合并仍是规划。
 5. **文档与源码同步**：涉及触发时机、迁移、prompt 注入顺序、错误处理和测试结论的变更必须同步更新本目录及相关 `arch/AntiEntropy/*` 文档。
 
 ## 5. Background 目标关系
@@ -87,8 +89,10 @@ MemoryManager.retrieveMemories
 
 迁移要求：
 
-- 已完成 retrieval ordering Phase A：`PromptAssembler` 不再用 `importance` 重排 memory，后续可把 recall trace / fallback diagnostics 暴露给 Background。
-- 引入 `MemoryRecallResult` / trace 后，Memory source 可以向 Background 暴露 fallback、distance、omission diagnostics。
+- 已完成 retrieval ordering Phase A：`PromptAssembler` 不再用 `importance` 重排 memory。
+- 已完成 recall trace / fallback Phase B：`MemoryRecallResult` / trace 能向后续 Background 暴露 fallback、distance、selected ids 和 omission diagnostics。
+- 已完成 retain v2 provenance / dedupe Phase C：`memory_entry_provenance` 保存来源和提取元数据；结构化输入帮助 LLM 判断重复/强化/跳过；同批 dedupe 和 source validation 减少噪声。
+- 已完成 Phase D 最小 contract / request-shape：`MemoryReflectModels` 锁定 based-on 约束；Responses API folding 已测试当前 `[Memories]` 不丢失且不进入 user message。
 - 后续 Background 计划再把 memory retrieval 输出包装为 `BackgroundCandidate(sourceType: .memory)`。
 - 后续 Background 计划由 `BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选排序和裁剪。
 - 后续 Background 计划再让 `PromptAssembler` 消费 `BackgroundPacket` 或由 `BackgroundAssembler` 生成的 prompt block。
@@ -99,10 +103,12 @@ MemoryManager.retrieveMemories
 |---|---|
 | 自动提取触发 | `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` |
 | 提取/检索编排 | `OpenChat/Core/Memory/MemoryManager.swift` |
+| recall DTO / trace | `OpenChat/Core/Memory/MemoryRecallModels.swift` |
+| reflect DTO contract | `OpenChat/Core/Memory/MemoryReflectModels.swift` |
 | embedding 协议边界 | `OpenChat/Core/Memory/MemoryDependencies.swift` |
 | CoreML embedding | `OpenChat/Core/Memory/EmbeddingService.swift` |
 | sqlite-vec 存储 | `OpenChat/Core/Memory/VectorStore.swift` |
-| DB record/CRUD | `OpenChat/Core/Database/Records/MemoryEntryRecord.swift`, `OpenChat/Core/Database/DatabaseManager+Memory.swift` |
+| DB record/CRUD | `OpenChat/Core/Database/Records/MemoryEntryRecord.swift`, `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift`, `OpenChat/Core/Database/DatabaseManager+Memory.swift` |
 | migrations | `OpenChat/Core/Database/Migrations.swift` |
 | prompt 注入 | `OpenChat/Core/PromptEngine/PromptAssembler.swift`, `OpenChat/Core/PromptEngine/TokenBudget.swift` |
 | Chat 状态 UI | `OpenChat/Features/Chat/Models/MemoryExtractionPhase.swift`, `OpenChat/Features/Chat/Views/MemoryExtractionIndicator.swift` |
