@@ -27,7 +27,7 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前自动化测试基线：最近 full suite 为 289 个 Swift Testing 测试 / 54 个 suites 全部通过；2026-05-16 WorldBook Vectorization focused acceptance 覆盖 Phase A/B/C/D。覆盖面包括数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Responses request shape、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract 可靠性，以及 WorldBook Vectorization Phase A/B/C/D 的 schema、vector store、embedding text/hash、existing-entry rebuild/backfill indexer、keyword + semantic source recall、prompt 兼容接入、CRUD/import/delete/eraseAllData lifecycle maintenance 和 Data Management 手动 rebuild。
+- 当前自动化测试基线：最近 full suite 为 303 个 Swift Testing 测试 / 58 个 suites 全部通过；2026-05-17 AgentCore foundation closeout 覆盖 descriptor、policy profile、deterministic executor denial 和 diagnostics。覆盖面包括数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Responses request shape、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract 可靠性，WorldBook Vectorization Phase A/B/C/D 的 schema、vector store、embedding text/hash、existing-entry rebuild/backfill indexer、keyword + semantic source recall、prompt 兼容接入、CRUD/import/delete/eraseAllData lifecycle maintenance 和 Data Management 手动 rebuild，以及 AgentCore foundation 的 identity、capability/policy、task/result、diagnostics 和 deterministic executor contract。
 
 ## 功能需求
 
@@ -148,6 +148,7 @@ ChatViewModel
 | [modules/api-client.md](modules/api-client.md) | API 客户端模块（SSE 流式 / 多端点） |
 | [modules/character-card.md](modules/character-card.md) | 角色卡模块（CRUD / 编辑器 / 导入导出） |
 | [modules/world-book.md](modules/world-book.md) | 世界书模块（条目管理 / 关键词触发 / 导入） |
+| [modules/agent-core.md](modules/agent-core.md) | AgentCore 基座设计（后台 agent/worker 的身份、权限、策略、执行、诊断共享骨架） |
 | [modules/background/index.md](modules/background/index.md) | Background 目标架构（后台员工 / 世界书与记忆统一调度 / LibMan） |
 | [modules/stage/index.md](modules/stage/index.md) | Stage 目标架构（多角色参与 / 导演 agent / 用户导演输入） |
 | [modules/prompt-assembly.md](modules/prompt-assembly.md) | Prompt 拼装引擎（顺序 / token 预算 / 接口） |

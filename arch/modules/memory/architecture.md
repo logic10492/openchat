@@ -76,7 +76,9 @@ Core/PromptEngine
 Background 目标架构中，Memory 不再直接进入 prompt，而是作为 `MemoryBackgroundSource` 产出候选条目：
 
 ```text
-MemoryManager / MemoryBackgroundSource
+MemoryManager.recallMemories(...)
+  -> MemoryRecallTool
+  -> MemoryBackgroundSource
   -> BackgroundCandidate(sourceType: .memory)
   -> BackgroundWorker
   -> BackgroundPacket
@@ -85,4 +87,4 @@ MemoryManager / MemoryBackgroundSource
 
 这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。改变的是 recall 结果的消费方：从 `PromptAssembler.trim(memories:)` 迁移到 Background 统一调度。
 
-已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息，再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。
+已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息；下一步用 read-only `MemoryRecallTool` 暴露该 result；再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。

@@ -859,3 +859,138 @@ DataManagementView
 
 - `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度仍未实现。
 - Prompt 输出仍保持 `[World Book Entries]` 兼容 block；本阶段不切换 Background packet。
+
+## AgentCore Foundation 增量传播审计（2026-05-17）
+
+范围：`OpenChat/Core/AgentCore/*`、`OpenChatTests/Core/AgentCoreTests/*`、`OpenChat.xcodeproj/*`、AgentCore / Background / Stage / LibMan 相关 arch 文档、`PLANING.md`、`docs/superpowers/plans/2026-05-17-agent-core-foundation/*`、`harness/2026.05.17/agent-core-foundation/index.md`。
+
+审计模式：窄范围新增基座审计。OpenChat 当前没有 Swift AST import graph 脚本，本轮沿用文件级传播审计 + 行为链路审计：`git diff --name-only`、`rg` source symbol scan、project membership scan、focused tests 和 full suite。
+
+### 静态传播面
+
+- 新增 `OpenChat/Core/AgentCore/` 下 13 个 Swift source 文件，覆盖 identity、capability/policy、task/context/result、diagnostics/schema、executor 和 typed error。
+- 新增 `OpenChatTests/Core/AgentCoreTests/` 下 4 个 focused test 文件，覆盖 descriptor、policy、deterministic executor 和 diagnostics。
+- `ruby scripts/generate_xcodeproj.rb` 已重新生成 project；`OpenChat.xcodeproj/project.pbxproj` 包含 AgentCore source/test membership，`OpenChat.xcodeproj/xcshareddata/xcschemes/OpenChat.xcscheme` 的 target `BlueprintIdentifier` 随 generator target UUID 更新。
+- 签名关键值仍由脚本保持：`PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com`、`DEVELOPMENT_TEAM = GZAC7644XS`、`CODE_SIGN_STYLE = Automatic`；test bundle id 仍为 `com.openchat.app.tests`。
+
+未触达的禁止传播面：
+
+- `OpenChat/App/DependencyContainer.swift`
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`
+- `OpenChat/Core/PromptEngine/*`
+- `OpenChat/Core/Memory/*`
+- `OpenChat/Core/WorldBook/*`
+- `OpenChat/Core/Database/*`
+- `OpenChat/Core/Networking/*`
+- `OpenChat/Features/*/Views/*`
+- `OpenChat/Resources/Localizable.xcstrings`
+
+### 行为传播链路
+
+AgentCore 当前只提供 zero-runtime-consumer Core contract：
+
+```text
+AgentTask
+  -> DeterministicAgentExecutor.execute(...)
+  -> policy/capability/network/database-write preflight
+  -> task.run(...)
+  -> AgentExecutionResult(output, diagnostics)
+```
+
+主聊天链路未接入 AgentCore，仍保持：
+
+```text
+ChatViewModel.generateResponse
+  -> MemoryManager.retrieveMemories / WorldBookSource.recallEntries
+  -> PromptAssembler.preview / assemble
+  -> ContextManager.prepareHistory
+  -> APIClient.streamMessage
+```
+
+结论：
+
+- `AgentPolicy.backgroundWorkerDefault()` 只允许 deterministic/internal diagnostics，不开放 LLM、web search 或 database write。
+- `AgentPolicy.directorDefault(allowsLLM:)` 可选 LLM，但不开放 web search 或 database write。
+- `AgentPolicy.librarianDraftDefault()` 允许 LLM/webSearch/userVisibleDraft，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。
+- `DeterministicAgentExecutor` 会在执行 task 前拒绝 unsupported capability、network tool 和 database write。
+- `AgentDiagnostics` 随 execution result 返回，不写 DB，不拼入 prompt，不展示到聊天 UI。
+
+### 三边一致性
+
+- `arch-src`：`arch/modules/agent-core.md` 已从目标架构更新为 AgentCore foundation 已落地；BackgroundWorker、Director、LibMan 文档只标记为可复用 AgentCore contract，runtime 仍未实现。
+- `arch-test`：`AgentDescriptorTests`、`AgentPolicyTests`、`DeterministicAgentExecutorTests`、`AgentDiagnosticsTests` 覆盖 stable raw values、policy profile、denial behavior、diagnostics shape 和 `LocalizedError` 文案。
+- `src-test`：AgentCore focused 12 tests / 4 suites passed；主链路 focused 50 tests / 4 suites passed；full suite 303 tests / 58 suites passed，`** TEST SUCCEEDED **`。
+
+### 验证
+
+- Simulator discovery：`xcrun simctl list devices available | rg 'iPhone'`，实际使用 `iPhone 17 Pro`。
+- 主链路 focused baseline / regression：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests'`，结果 50 tests / 4 suites passed。
+- AgentCore focused：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/AgentDescriptorTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests' '-only-testing:OpenChatTests/AgentDiagnosticsTests'`，结果 12 tests / 4 suites passed。
+- Full suite：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，结果 303 tests / 58 suites passed。
+
+### 未完成边界
+
+- `Core/Background`、`BackgroundWorker`、`BackgroundPacket` 未实现。
+- `MemoryBackgroundSource` / `WorldBookBackgroundSource` 未实现。
+- Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
+- `PromptAssembler` 未消费 `BackgroundPacket`。
+- Director runtime / LibMan runtime / Exa broker 未实现。
+- 未新增 database migration。
+
+## Background Source Tool 顺序修正传播审计（2026-05-17）
+
+范围：`PLANING.md`、`arch/modules/agent-core.md`、`arch/modules/background/*`、`arch/modules/memory/*`、`arch/modules/world-book.md`、`docs/superpowers/plans/2026-05-17-agent-core-foundation/*`。
+
+审计模式：docs-only 窄范围传播审计。触发原因是计划顺序修正：AgentCore foundation 已完成后，不应直接进入 `Core/Background` DTO / BackgroundWorker；应先暴露 Memory / WorldBook 的内部 read-only source tool。
+
+### 静态传播面
+
+- 本次不修改 Swift 源码、Xcode project、数据库 migration、测试文件或资源。
+- 文档传播面限定在 Background / AgentCore / Memory / WorldBook 架构说明、AgentCore 计划包 closeout 文档和本 AntiEntropy 写回。
+- 现有源码事实保持不变：`MemoryManager.recallMemories(...)` 与 `WorldBookSource.recallEntries(...)` 是下一步 source tool 应包装的对象。
+
+### 行为传播结论
+
+当前主聊天链路仍保持：
+
+```text
+ChatViewModel.generateResponse
+  -> MemoryManager.retrieveMemories / WorldBookSource.recallEntries
+  -> PromptAssembler.preview / assemble
+  -> ContextManager.prepareHistory
+  -> APIClient.streamMessage
+```
+
+本次文档修正后的目标顺序为：
+
+```text
+AgentCore foundation
+  -> MemoryRecallTool / WorldBookRecallTool
+  -> MemoryBackgroundSource / WorldBookBackgroundSource
+  -> Core/Background DTO
+  -> deterministic BackgroundWorker
+  -> Chat / Prompt switch to BackgroundPacket
+```
+
+结论：
+
+- BackgroundWorker 仍是 AgentCore 的受限 consumer，但不是紧邻下一步实现入口。
+- `MemoryRecallTool` / `WorldBookRecallTool` 是内部 read-only source tool，不是普通角色 tool call，不向用户暴露，不生成 assistant message。
+- Memory tool 只能包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`，不复制 Memory rank fusion。
+- WorldBook tool 只能包装 `WorldBookSource.recallEntries(...)` / `WorldBookRecallResult`，不复制 keyword + semantic fusion，也不通过 BackgroundWorker 触发索引 rebuild。
+- BackgroundWorker 后续只消费 `BackgroundCandidate` 和 diagnostics metadata，不直接读写 Memory / WorldBook 数据库。
+
+### 三边一致性
+
+- `arch-src`：文档已把“下一步直接 BackgroundWorker”修正为“先 source tool 暴露，再 Background DTO / worker”；未把 source tool 或 BackgroundWorker 写成当前已实现。
+- `arch-test`：本次无源码变更，不新增测试；仍沿用 AgentCore closeout 的 303 tests / 58 suites 基线作为上一轮实现证据。
+- `src-test`：未运行。docs-only 改动不改变 runtime；后续 source tool 计划包需要新增 focused tests。
+
+### 未完成边界
+
+- `MemoryRecallTool` / `WorldBookRecallTool` 未实现。
+- `Core/Background`、`BackgroundWorker`、`BackgroundPacket` 未实现。
+- `MemoryBackgroundSource` / `WorldBookBackgroundSource` 未实现。
+- Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
+- `PromptAssembler` 未消费 `BackgroundPacket`。

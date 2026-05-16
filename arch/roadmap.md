@@ -4,13 +4,13 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-05-16）
+## 当前落地状态（2026-05-17）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前通过的 Swift Testing 测试（289 个 / 54 suites）覆盖：
+- 当前通过的 Swift Testing 测试（303 个 / 58 suites）覆盖：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -50,6 +50,10 @@
   - `ChatViewModelPromptAssemblyTests`
   - `CriticalSaveFlowTests`
   - `APIEndpointEditorViewModelSecurityTests`
+  - `AgentDescriptorTests`
+  - `AgentPolicyTests`
+  - `DeterministicAgentExecutorTests`
+  - `AgentDiagnosticsTests`
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
   - App 装配：`OpenChat/OpenChatApp.swift`、`OpenChat/App/DependencyContainer.swift`
@@ -57,6 +61,7 @@
   - Core 网络：`OpenChat/Core/Networking/*`
   - Core Prompt/Context：`OpenChat/Core/PromptEngine/*`、`OpenChat/Core/ContextManager/*`
   - Core WorldBook vectorization：`OpenChat/Core/WorldBook/*`
+  - Core AgentCore foundation：`OpenChat/Core/AgentCore/*`
   - Features：`OpenChat/Features/Chat/*`、`OpenChat/Features/CharacterCard/*`、`OpenChat/Features/WorldBook/*`、`OpenChat/Features/Settings/*`
 - 说明：当前代码已经具备后续 Phase 所需的大部分骨架与核心实现，但仍建议继续按本路线图做逐阶段 UI 冒烟、交互完善与文档收口，不把“已编译/已测试”误判为“所有用户路径都已验收”
 

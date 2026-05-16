@@ -6,6 +6,8 @@
 
 - 明确 Chat 是当前实现，Stage 是目标扩展。
 - 明确角色不是 agent。
+- 明确角色回复第一阶段保持自然流式文本，不强制动作/台词 schema，也不开放普通角色 tool call。
+- 明确 AgentCore 服务后台 agent/worker，不把普通角色纳入 runtime agent。
 - 明确 Director 有三种模式：闭嘴、agent、用户接管。
 - 明确用户随时可以以导演身份说话。
 
@@ -48,6 +50,7 @@
 
 目标：
 
+- Director agent 复用 AgentCore policy / diagnostics。
 - Director agent 生成结构化 `DirectorPlan`。
 - DirectorPlan 只用于 stage control，不直接显示为 assistant 回复。
 - silent mode 下完全跳过 Director agent。

@@ -1,8 +1,12 @@
 # Director / 导演
 
-> 状态：目标架构规划，尚未实现。
+> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在；Director runtime / `DirectorPlan` executor 尚未实现。
 
 Director 是 Stage 的舞台调度者。它可以影响场景节奏、参与角色和发言计划，但不能替角色成为用户正在对话的 persona。
+
+Director agent 模式后续应复用 `AgentCore`，但只输出结构化 `DirectorPlan`。它不能替角色写台词，也不能把内部分析作为主聊天 assistant message。
+
+2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.directorDefault(allowsLLM:)`，默认不开放 web / database write；AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。这只是后续 Director 的 policy contract，不代表 Stage / Director runtime 已接入。
 
 ## 1. 三种工作模式
 
@@ -40,6 +44,7 @@ Director 是 Stage 的舞台调度者。它可以影响场景节奏、参与角�
 - 替角色写台词。
 - 静默修改角色卡、世界书或长期记忆。
 - 把内部分析暴露给主聊天 UI，除非用户打开调试/导演面板。
+- 绕过 AgentCore policy 临时获得写库、联网或角色回复权限。
 
 ### 1.3 `userControlled` / 用户接管模式
 
@@ -105,3 +110,4 @@ enum DirectorMode: String, Codable, Sendable {
 | 是否能决定发言角色 | 可以建议 | 不可以 |
 | 是否能选择背景条目 | 不直接选择 | 可以 |
 | 是否能写角色台词 | 不可以 | 不可以 |
+| AgentCore capability | 可选 `llm`，不联网、不写库 | 第一阶段仅 `deterministic` |

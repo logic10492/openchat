@@ -84,7 +84,7 @@ historyBudget = remaining - exampleDialogsBudget - worldBookBudget - memoryBudge
 排序权属：
 
 - 当前由 `MemoryManager` 输出最终 prompt memory 顺序。
-- `MemoryRecallResult` 负责 rank fusion；未来独立 Background 计划可由 `MemoryBackgroundSource` 包装该结果。
+- `MemoryRecallResult` 负责 rank fusion；未来独立 Background 计划应先由 read-only `MemoryRecallTool` 暴露该结果，再由 `MemoryBackgroundSource` 包装。
 - `importance` 只作为同等相关性时的 tie-breaker、fallback 策略输入或 UI 展示元数据，不再由 `PromptAssembler` 用来重排 prompt memory。
 
 实现与测试证据：

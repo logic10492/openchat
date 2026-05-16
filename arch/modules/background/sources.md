@@ -1,6 +1,6 @@
 # BackgroundSource 统一候选来源
 
-> 状态：BackgroundWorker 目标架构规划尚未实现；`WorldBookSource` keyword + semantic 最小闭环已在 2026-05-16 Phase C 落地。
+> 状态：BackgroundWorker 目标架构规划尚未实现；Memory / WorldBook read-only source tool 尚未实现；`WorldBookSource` keyword + semantic 最小闭环已在 2026-05-16 Phase C 落地。
 
 ## 1. Source 类型
 
@@ -13,6 +13,17 @@ enum BackgroundSourceType: String, Codable, Sendable {
 }
 ```
 
+## 1.1 Source tool 前置边界
+
+在实现 `BackgroundWorker` 前，Memory 与 WorldBook 应先暴露内部 read-only source tool：
+
+| Tool | 包装对象 | 输出 | 禁止事项 |
+|---|---|---|---|
+| `MemoryRecallTool` | `MemoryManager.recallMemories(...)` | `MemoryRecallResult` / trace | 不复制 rank fusion、不写 DB、不拼 prompt |
+| `WorldBookRecallTool` | `WorldBookSource.recallEntries(...)` | `WorldBookRecallResult` / trace | 不复制 keyword+semantic fusion、不触发索引 rebuild、不拼 prompt |
+
+这些 tool 不是普通角色工具，不进入角色回复的 tool call，也不向用户暴露。它们只作为 BackgroundSource adapter 的输入边界，让后续 `BackgroundWorker` 消费统一候选，而不是直接依赖 Memory / WorldBook 的内部实现。
+
 ## 2. MemoryBackgroundSource
 
 来源：`memory_entry` + `memory_embedding`。
@@ -23,6 +34,14 @@ enum BackgroundSourceType: String, Codable, Sendable {
 - 保留 recent high-value fallback，并作为 fallback metadata 标记；不得恢复任意最近 N 条 prompt 注入。
 - 返回 `BackgroundCandidate(sourceType: .memory)`。
 - 不再直接把 memories 传给 `PromptAssembler`。
+
+实现顺序：
+
+1. 先实现 `MemoryRecallTool`，只调用 `MemoryManager.recallMemories(...)` 并返回 `MemoryRecallResult`。
+2. 再实现 `MemoryBackgroundSource`，把 result entries 与 trace 映射到 `BackgroundCandidate` metadata。
+3. 最后由 `BackgroundWorker` 对不同 source 的 candidates 做跨源预算裁剪。
+
+`MemoryBackgroundSource` 不应重新实现 semantic / keyword / recent high-value fallback，也不应让 `importance` 覆盖 Memory 层已经确定的相关性顺序。
 
 2026-05-14 Phase A 已在现有 `PromptAssembler.trim(memories:)` 关闭 Memory P1 排序问题：prompt 裁剪保持 recall 输入顺序，不再按 `importance` 重排。Background 接入后仍必须保持该契约，semantic retrieval order 是主排序信号，`importance` 只能做 tie-breaker。
 
@@ -38,6 +57,14 @@ enum BackgroundSourceType: String, Codable, Sendable {
 - 增加 semantic KNN。
 - 融合 `priority`、keyword hit 和 semantic rank。
 - 返回 `BackgroundCandidate(sourceType: .worldBook)`。
+
+实现顺序：
+
+1. 先实现 `WorldBookRecallTool`，只调用 `WorldBookSource.recallEntries(...)` 并返回 `WorldBookRecallResult`。
+2. 再实现 `WorldBookBackgroundSource`，把 recall entries / trace / omissions 映射到 `BackgroundCandidate` metadata。
+3. 最后由 `BackgroundWorker` 与 Memory / CharacterState / ConversationState 候选统一裁剪。
+
+`WorldBookBackgroundSource` 不应复制 `WorldBookSource` 的 keyword + semantic fusion；索引 rebuild / save-import-delete 维护仍属于既有 WorldBook lifecycle，不由 BackgroundWorker 触发。
 
 WorldBook 的 `position` 字段继续作为旧数据兼容字段，不参与最终 prompt 位置决策。
 

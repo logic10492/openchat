@@ -1,6 +1,6 @@
 # OpenChat Planning
 
-> 更新时间：2026-05-16
+> 更新时间：2026-05-17
 > 状态：规划入口 + 当前执行状态。本文记录目标架构、已完成计划包和下一步落地顺序；未标记完成的阶段不代表当前源码已实现。
 
 ## 1. 当前重点
@@ -15,20 +15,26 @@ OpenChat 下一阶段的重点有两条主线：
 ```text
 Memory Hindsight-lite repair
   -> WorldBook vectorization
-  -> BackgroundSource / BackgroundWorker
+  -> AgentCore foundation contract
+  -> Memory / WorldBook read-only source tools
+  -> BackgroundSource adapters / Core Background DTO
+  -> deterministic BackgroundWorker
   -> Prompt switches to BackgroundPacket
   -> LibMan / Stage
 ```
 
-2026-05-16 状态：
+2026-05-17 状态：
 
 - Memory Hindsight-lite A/B/C/D 与 Lead closeout 已完成并通过 full suite。
-- BackgroundWorker 尚未开始实现。
-- BackgroundWorker 前置工作是世界书向量化，让 WorldBook 像 Memory 一样具备 embedding、semantic recall、trace 和候选管理能力。
+- WorldBook vectorization A/B/C/D 与 closeout 已完成并通过 full suite。WorldBook 已具备 embedding、semantic recall、trace、候选管理和 CRUD/import/delete/rebuild 维护能力。
+- AgentCore foundation 已完成：`OpenChat/Core/AgentCore/` 与 `OpenChatTests/Core/AgentCoreTests/` 已进入 Xcode target；AgentCore focused 12 tests / 4 suites、主链路 focused 50 tests / 4 suites、full suite 303 tests / 58 suites 均通过。
+- BackgroundWorker 尚未开始实现；在进入 `Core/Background` DTO / worker 之前，下一项工程入口应先完成 Memory 与 WorldBook 的 read-only source tool 暴露。
+- 当前下一步不是继续做 WorldBook，也不是直接写 BackgroundWorker，而是把现有 `MemoryRecallResult` / `WorldBookRecallResult` 暴露成内部 source tool contract，再由后续 BackgroundSource adapter 消费。
 - LibMan、Stage、Director、多角色同场仍是后续阶段。
 
 ```text
 WorldBook + Memory + Character State + Conversation State
+  -> source tools / source adapters
   -> BackgroundSource candidates
   -> BackgroundWorker / 后台员工
   -> BackgroundPacket
@@ -39,6 +45,10 @@ WorldBook + Memory + Character State + Conversation State
 核心边界：
 
 - 对话角色不是 agent，而是 persona。
+- 角色回复第一阶段保持自然流式文本；动作感由模型自然输出和 UI 轻量适配处理，不给普通角色回复开放 tool call，也不把角色纳入 AgentCore runtime。
+- 动作/台词拆分、标签化输出、JSON/schema 输出和 streaming parser 先挂起；当前重点继续做 AgentCore，不在本阶段处理角色输出适配。
+- AgentCore 是后台 agent/worker 的共享运行时基座，暴露 identity、capability/policy、task/result、diagnostics、executor、tool/side-effect boundary。
+- Memory / WorldBook 的 tool 暴露指内部 read-only source tool，不是普通角色 tool call，也不是用户可见工具栏。
 - BackgroundWorker / 后台员工无权直接输出，只能返回要注入的 background 条目。
 - LibMan / 图书管理员可以用 Exa 搜索构建素材，但不参与实时 RP 输出。
 - Stage 可以有导演 agent，但导演也不替角色发言。
@@ -69,6 +79,7 @@ WorldBook + Memory + Character State + Conversation State
 - 选择、排序、去重、冲突标记和预算裁剪。
 - 返回 `BackgroundPacket`。
 - 记录 diagnostics，供调试或详细统计使用。
+- 作为 `AgentCore` 的受限 consumer，第一阶段只启用 deterministic capability。
 
 禁止：
 
@@ -78,28 +89,40 @@ WorldBook + Memory + Character State + Conversation State
 - 直接拼接最终 prompt 文本。
 - 调用 Exa 或其他 web search。
 
+接入前置条件：
+
+- `MemoryRecallTool` / `WorldBookRecallTool` 或等价内部 source tool contract 先完成，并保持 read-only。
+- Memory tool 只包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`，不复制 Memory 层排序、fallback 或 trace 逻辑。
+- WorldBook tool 只包装 `WorldBookSource.recallEntries(...)` / `WorldBookRecallResult`；索引维护仍由既有 lifecycle / rebuild 入口负责，不让 BackgroundWorker 通过 tool 触发写库 side effect。
+- BackgroundWorker 后续只消费 `BackgroundCandidate`，不能绕过 tool/source boundary 直接重排 Memory 或 WorldBook 的内部候选。
+
 参考文档：
 
+- `arch/modules/agent-core.md`
 - `arch/modules/background/index.md`
 - `arch/modules/background/architecture.md`
 - `arch/modules/background/background-worker.md`
 - `arch/modules/background/sources.md`
+- `docs/superpowers/plans/2026-05-17-agent-core-foundation/README.md`
 
-## 4. Memory 与 WorldBook 统一为 BackgroundSource
+## 4. Memory 与 WorldBook 先暴露为 source tool，再统一为 BackgroundSource
 
 目标：
 
+- `MemoryRecallTool` 负责把现有 Memory recall result 暴露给后台调度层。
+- `WorldBookRecallTool` 负责把现有 WorldBook recall result 暴露给后台调度层。
 - `MemoryBackgroundSource` 负责长期记忆候选。
 - `WorldBookBackgroundSource` 负责世界书候选。
-- 两者都输出 `BackgroundCandidate`，由 BackgroundWorker 统一调度。
+- BackgroundSource adapter 读取 tool result，输出 `BackgroundCandidate`，再由 BackgroundWorker 统一调度。
 - Memory 和 WorldBook 不再分别拥有最终 prompt 注入权。
 
 当前差异：
 
 - 当前 Memory 已完成 Hindsight-lite 修复：`MemoryManager` 能输出 `MemoryRecallResult` / `MemoryRecallTrace`，fallback 改为 semantic / keyword / recent high-value 分层，retain v2 已有 provenance / dedupe metadata。
-- 但当前 Memory 仍由 `ChatViewModel` 调 `MemoryManager.retrieveMemories(...)`，再由 `PromptAssembler` 注入 `[Memories]`；尚未包装成 `MemoryBackgroundSource`。
-- 当前 WorldBook 仍由 `PromptAssembler` keyword trigger 后注入 `[World Book Entries]`。
-- 目标架构会把这两条路径收敛到 Background。
+- 但当前 Memory 仍由 `ChatViewModel` 调 `MemoryManager.retrieveMemories(...)`，再由 `PromptAssembler` 注入 `[Memories]`；尚未暴露为内部 source tool，也尚未包装成 `MemoryBackgroundSource`。
+- 当前 WorldBook 已完成 keyword + semantic 融合召回：`WorldBookSource` 输出 recall result / trace，Chat 主链路会先执行 bounded rebuild，再把 selected entries 传给 `PromptAssembler`。
+- 但当前 WorldBook 仍通过兼容路径注入 `[World Book Entries]`；尚未暴露为内部 source tool，也尚未包装成 `WorldBookBackgroundSource`，也尚未交给 BackgroundWorker 统一排序和裁剪。
+- 目标架构会先把这两条路径收敛到 read-only source tool / adapter，再进入 Background。
 
 参考文档：
 
@@ -108,28 +131,24 @@ WorldBook + Memory + Character State + Conversation State
 - `arch/modules/world-book.md`
 - `arch/modules/background/sources.md`
 
-## 5. 世界书向量化
+## 5. 世界书向量化（已完成）
 
-> 当前状态：尚未实现，是进入 BackgroundWorker 前的下一项前置工作。
+> 当前状态：已完成，是 BackgroundWorker 的已完成前置工作。
 
-目标：
+已完成目标：
 
 - 为 `world_book_entry` 建立 embedding 索引。
 - 让世界书支持 keyword + semantic 双路召回。
 - 让 BackgroundWorker 能公平比较世界书候选和记忆候选。
 - 让 WorldBook 像 Memory 一样由专门 Core 层管理：embedding、索引重建、召回结果、trace、禁用过滤和 CRUD/import/delete 同步维护。
 
-建议目标表：
+已落地 schema：
 
 ```text
 world_book_entry_embedding
   entry_id TEXT PRIMARY KEY
   embedding float[384]
-```
 
-可选审计表：
-
-```text
 world_book_entry_embedding_meta
   entryId TEXT PRIMARY KEY
   contentHash TEXT
@@ -141,8 +160,10 @@ world_book_entry_embedding_meta
 
 - `arch/modules/background/world-book-vectorization.md`
 - `arch/modules/world-book.md`
+- `docs/superpowers/plans/2026-05-16-world-book-vectorization/README.md`
+- `harness/2026.05.16/world-book-vectorization/index.md`
 
-第一阶段不切换到 BackgroundWorker，也不立即取消当前 `[World Book Entries]` block。目标是先建立 WorldBook 的向量检索能力和可测试管理边界，之后再由 Background 计划包统一消费。
+本阶段没有切换到 BackgroundWorker，也没有取消当前 `[World Book Entries]` block。它只建立 WorldBook 的向量检索能力和可测试管理边界，接下来由 Background 计划包统一消费。
 
 ## 6. LibMan / 图书管理员
 
@@ -243,20 +264,40 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - Phase D：新增 reflect 最小 contract，验收 Responses API `[Memories]` request shape。
 - Lead closeout：focused tests 与 full suite 已通过；full suite 记录为 251 tests / 46 suites passed。
 
-### Phase 2：世界书向量化（下一步）
+### Phase 2：世界书向量化（已完成）
 
-- 追加 `world_book_entry_embedding` migration；如需要审计增量重建，再追加 `world_book_entry_embedding_meta`。
-- 建立 `Core/WorldBook` 管理层，例如 `WorldBookVectorStore`、`WorldBookEmbeddingIndexer`、`WorldBookRecallModels`。
-- WorldBookSource 同时支持 keyword 和 semantic candidates。
-- CRUD / import / delete 世界书条目时同步维护或标记重建 embedding。
-- 保持当前 prompt 输出兼容：第一阶段仍可输出 `[World Book Entries]`，不提前切 BackgroundWorker。
+- 已追加 `world_book_entry_embedding` 与 `world_book_entry_embedding_meta`。
+- 已建立 `Core/WorldBook` 管理层：`WorldBookVectorStore`、`WorldBookEmbeddingIndexer`、`WorldBookRecallModels`、`WorldBookSource`。
+- `WorldBookSource` 已支持 keyword + semantic 融合召回，并输出 recall result / trace。
+- CRUD / import / delete / eraseAllData 已维护 vector/meta；Data Management 已提供手动 rebuild。
+- 仍保持当前 prompt 输出兼容：semantic 结果继续进入 `[World Book Entries]`，尚未提前切 BackgroundWorker。
+- Closeout full suite：291 tests / 54 suites passed。
 
-### Phase 3：Background DTO + deterministic worker
+### Phase 3：AgentCore foundation + source tool exposure + Background worker（当前大阶段）
+
+#### Phase 3a：AgentCore foundation contract（已完成）
+
+- 已落地 `Core/AgentCore` 基座 contract：identity、capability/policy、task/result、diagnostics、executor、tool/side-effect boundary。
+- 已落地 focused tests：descriptor、policy profile、deterministic executor、diagnostics。
+- Closeout：AgentCore focused 12 tests / 4 suites passed；主链路 regression focused 50 tests / 4 suites passed；full suite 303 tests / 58 suites passed。
+- 不接入 Chat / Prompt / Memory / WorldBook / Database / Networking / UI runtime。
+
+#### Phase 3b：Memory / WorldBook read-only source tool 暴露（下一计划包）
+
+- 为 Memory 暴露内部 source tool contract，包装 `MemoryManager.recallMemories(...)` 与 `MemoryRecallResult` / trace。
+- 为 WorldBook 暴露内部 source tool contract，包装 `WorldBookSource.recallEntries(...)` 与 `WorldBookRecallResult` / trace。
+- tool 输出必须结构化、read-only、可诊断；不拼 prompt、不写 DB、不调用网络、不生成 assistant message。
+- 该 tool 暴露只服务后续 BackgroundSource / 后台 worker，不给普通角色回复开放 tool call。
+- 保留当前 Chat 兼容路径：`[Memories]` 与 `[World Book Entries]` 仍由现有链路注入。
+
+#### Phase 3c：Background DTO + deterministic worker（后续计划包）
 
 - 新增 `Core/Background` DTO。
 - 用确定性规则实现 BackgroundWorker。
-- 包装已完成的 Memory recall result 与完成向量化后的 WorldBook candidates。
+- 通过 Phase 3b 的 source tool / adapter 包装已完成的 Memory recall result 与完成向量化后的 WorldBook candidates。
 - 不让 BackgroundWorker 直接拼最终 prompt 或调用网络。
+- 先只落 Core 层闭环与 tests，不在同一阶段切 Chat prompt 主链路。
+- 不处理角色回复动作/台词结构化，也不引入普通角色 tool call；标签化输出相对 JSON 更适合未来流式文本，但需要单独设计 streaming adapter 后再决定。
 
 ### Phase 4：Prompt 切换到 BackgroundPacket
 
@@ -298,12 +339,17 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ## 10. 当前已知未完成
 
 - Background 系统尚未实现。
-- BackgroundWorker 前置的世界书向量化尚未实现。
+- `Core/Background` DTO / `BackgroundWorker` / `BackgroundPacket` 尚未实现。
+- `Core/AgentCore` foundation 已完成；下一步是 Memory / WorldBook read-only source tool 暴露。
+- Memory / WorldBook source tool contract 尚未实现。
+- Memory 输出尚未包装成 `MemoryBackgroundSource` / `BackgroundCandidate`。
+- WorldBook 输出尚未包装成 `WorldBookBackgroundSource` / `BackgroundCandidate`。
+- Prompt 仍通过 `[Memories]` 与 `[World Book Entries]` 兼容 block 注入，尚未切到 `BackgroundPacket`。
 - LibMan 尚未实现。
 - Stage 系统尚未实现。
 - Director agent / 导演模式尚未实现。
 - 多角色同场参与尚未实现。
-- Memory 输出尚未包装成 `BackgroundCandidate`。
 - reflect LLM executor / UI 入口 / `memory_entry_link` 持久化尚未实现。
 - Background diagnostics / 检索可观测性尚未实现。
 - Responses API system folding 对 Background block 的实际位置仍需单独审计。
+- 角色动作/台词拆分、标签化输出、JSON/schema 输出和 streaming parser 尚未设计；当前只保留自然流式文本 + UI 轻量适配。

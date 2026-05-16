@@ -1,10 +1,16 @@
 # BackgroundWorker / 后台员工
 
-> 状态：目标架构规划，尚未实现。
+> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在，可作为后续 consumer contract；BackgroundWorker runtime / `Core/Background` DTO / `BackgroundPacket` 尚未实现。
 
 ## 1. 定义
 
 后台员工是一个无发言权的上下文整理器。它可以根据当前输入、候选条目和预算做选择，但不能直接对用户说话。
+
+实现上，BackgroundWorker 应是 `AgentCore` 的受限 consumer：复用 `AgentPolicy`、capability 和 diagnostics contract，但第一阶段只启用 deterministic capability，不调用 LLM、不联网、不写数据库。
+
+2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.backgroundWorkerDefault()`，`OpenChat/Core/AgentCore/DeterministicAgentExecutor.swift` 已提供 deterministic executor 的 capability / network / database write denial。AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。后续 BackgroundWorker 只能复用这些 contract，不能临时扩大权限。
+
+接入顺序：BackgroundWorker 不直接接 raw Memory / WorldBook 内部实现。下一步应先暴露 `MemoryRecallTool` / `WorldBookRecallTool` 或等价内部 read-only source tool，再由 `MemoryBackgroundSource` / `WorldBookBackgroundSource` 把 tool result 转成 `BackgroundCandidate`。BackgroundWorker 只处理候选和预算，不复制 Memory / WorldBook 的召回排序。
 
 中文命名建议：
 
@@ -22,6 +28,8 @@ BackgroundWorker 可以：
 - 标记冲突或低置信条目。
 - 根据 token budget 裁剪。
 - 返回 omission diagnostics，说明为什么某些候选没进 prompt。
+- 复用 AgentCore diagnostics 记录策略、输入规模、选中/省略、fallback 和耗时。
+- 消费 source tool / source adapter 已经结构化的候选和 trace metadata。
 
 BackgroundWorker 不可以：
 
@@ -31,6 +39,9 @@ BackgroundWorker 不可以：
 - 静默修改角色卡、世界书或记忆。
 - 直接拼接最终 prompt 文本。
 - 调用 Exa 或其他 web search 工具。
+- 临时扩大自己的 AgentCore capability。
+- 绕过 source tool 直接读取/写入 Memory 或 WorldBook 数据库。
+- 触发 WorldBook embedding rebuild、Memory retain 或其他持久化 side effect。
 
 ## 3. 输入输出 contract
 
@@ -41,6 +52,7 @@ struct BackgroundWorkerInput: Sendable {
     let request: BackgroundRequest
     let candidates: [BackgroundCandidate]
     let policy: BackgroundPolicy
+    let agentPolicy: AgentPolicy
 }
 ```
 
@@ -68,7 +80,7 @@ struct BackgroundEntry: Identifiable, Sendable {
 
 ### Level 0：Deterministic Worker
 
-不调用 LLM。根据分数规则排序：
+不调用 LLM。只需要 AgentCore 的 deterministic capability，根据分数规则排序：
 
 - semantic relevance
 - keyword hit
@@ -89,10 +101,13 @@ struct BackgroundEntry: Identifiable, Sendable {
 - 只能引用 candidate ids。
 - 不允许生成新 facts。
 - 必须带 omission reason。
+- 必须显式启用 AgentCore `llm` capability。
 
 ### Level 2：Synthesis Worker
 
 低频使用，可把多个条目合成为 observation，但不能直接进主聊天链路。产物需要 `based_on` 源 ids，并经过用户确认或后台审计策略。
+
+Level 2 更接近 reflect / observation synthesis，不应混进每轮 BackgroundWorker 默认路径；如果落地，应作为单独 AgentCore task 审计。
 
 ## 5. 排序策略草案
 

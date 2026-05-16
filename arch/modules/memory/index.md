@@ -83,7 +83,7 @@ MemoryManager.retrieveMemories
 
 ## 5. Background 目标关系
 
-当前 Memory 仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)` 后传给 `PromptAssembler` 注入 `[Memories]`。目标架构中，Memory 会变成 `MemoryBackgroundSource`：负责产生长期记忆候选，不再直接拥有 prompt 注入权。
+当前 Memory 仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)` 后传给 `PromptAssembler` 注入 `[Memories]`。目标架构中，Memory 会先暴露内部 read-only `MemoryRecallTool`，包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`；随后 `MemoryBackgroundSource` 读取该 result，负责产生长期记忆候选，不再直接拥有 prompt 注入权。
 
 边界：当前 Memory 完善计划只补 Memory 层能力。世界书向量化、`Core/Background`、`BackgroundWorker` 和 `PromptAssembler` 切换到 `BackgroundPacket` 属于后续独立计划包。
 
@@ -93,7 +93,8 @@ MemoryManager.retrieveMemories
 - 已完成 recall trace / fallback Phase B：`MemoryRecallResult` / trace 能向后续 Background 暴露 fallback、distance、selected ids 和 omission diagnostics。
 - 已完成 retain v2 provenance / dedupe Phase C：`memory_entry_provenance` 保存来源和提取元数据；结构化输入帮助 LLM 判断重复/强化/跳过；同批 dedupe 和 source validation 减少噪声。
 - 已完成 Phase D 最小 contract / request-shape：`MemoryReflectModels` 锁定 based-on 约束；Responses API folding 已测试当前 `[Memories]` 不丢失且不进入 user message。
-- 后续 Background 计划再把 memory retrieval 输出包装为 `BackgroundCandidate(sourceType: .memory)`。
+- 后续先把 memory recall 输出暴露为 read-only source tool；该 tool 不写 DB、不联网、不拼 prompt，也不重新实现 Memory rank fusion。
+- 后续 Background 计划再由 `MemoryBackgroundSource` 把 tool result 包装为 `BackgroundCandidate(sourceType: .memory)`。
 - 后续 Background 计划由 `BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选排序和裁剪。
 - 后续 Background 计划再让 `PromptAssembler` 消费 `BackgroundPacket` 或由 `BackgroundAssembler` 生成的 prompt block。
 

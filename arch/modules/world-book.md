@@ -396,7 +396,7 @@ Phase D 行为：
 
 当前没有实现：
 
-- `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
+- `WorldBookRecallTool` / `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
 
 实现证据：
 
@@ -423,12 +423,14 @@ Phase D 行为：
 
 ## 9. Background 目标架构
 
-当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。目标 Background 架构中，世界书会变成 `WorldBookBackgroundSource`：
+当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。目标 Background 架构中，世界书会先暴露内部 read-only `WorldBookRecallTool`，再变成 `WorldBookBackgroundSource`：
 
 ```text
 WorldBookEntryRecord
   -> keyword trigger
   -> semantic KNN over world_book_entry_embedding
+  -> WorldBookSource.recallEntries(...)
+  -> WorldBookRecallTool
   -> BackgroundCandidate(sourceType: .worldBook)
   -> BackgroundWorker
   -> BackgroundPacket
@@ -439,7 +441,7 @@ WorldBookEntryRecord
 - 世界书不再单独拥有 prompt 注入权。
 - `priority` 继续作为排序信号，但不再单独决定注入。
 - `position` 保留为旧数据兼容字段，不参与最终 background 位置。
-- 世界书条目需要向量化，便于和 Memory 候选统一调度。
+- 世界书条目已完成向量化；下一步的 tool/adapter 只能包装 `WorldBookSource` result，不复制 keyword + semantic fusion，不通过 BackgroundWorker 触发索引 rebuild。
 
 详见：
 

@@ -5,13 +5,18 @@
 
 Background 系统不是新的对话角色，也不是让多个 agent 轮流发言。它把后台劳动拆给无发言权的 worker：它们只能选择、整理、排序和返回条目，最终回复仍由主聊天模型根据角色卡和当前输入生成。
 
+BackgroundWorker 后续应复用 `AgentCore` 的 identity、policy、diagnostics 和 execution result contract，但只启用 deterministic capability；这不会把对话角色 agent 化。
+
+顺序约束：BackgroundWorker 不应直接成为下一步实现入口。AgentCore foundation 之后，应先把 Memory 与 WorldBook 的现有召回能力暴露为内部 read-only source tool / adapter，再由 `BackgroundSource` 产出候选，最后实现 BackgroundWorker。这里的 tool 是后台源码边界，不是普通角色 tool call，也不是用户可见工具。
+
 ## 1. 核心原则
 
 1. **角色不是 agent**：对话角色是由角色卡、关系状态、长期记忆、世界背景和当前会话状态共同渲染出的 persona，不拥有工具权、任务队列或自治输出权。
 2. **后台员工无发言权**：`BackgroundWorker` 只能返回结构化 background 条目，不能产生 assistant message，不能改写用户输入。
 3. **图书管理员不参与 RP 输出**：`LibMan` 可用 Exa 搜索帮助用户创建角色卡/世界书素材，但输出是可审阅草稿，不进入主聊天实时链路。
 4. **Prompt 文本确定性生成**：worker 返回 `BackgroundPacket`，最终 `[Background]` 文本由 deterministic assembler 生成。
-5. **事实与计划分离**：当前源码仍是 WorldBook keyword block + Memory block 直接进入 `PromptAssembler`；本目录描述的是下一阶段改造方向。
+5. **AgentCore 不等于角色 agent 化**：`AgentCore` 是后台能力共享运行时基座；角色回复第一阶段保持自然流式文本，不给普通角色回复开放 tool call。
+6. **事实与计划分离**：当前源码仍是 WorldBook keyword + semantic selected entries block + Memory block 直接进入 `PromptAssembler`；本目录描述的是下一阶段改造方向。
 
 ## 2. 目标数据流
 
@@ -19,8 +24,8 @@ Background 系统不是新的对话角色，也不是让多个 agent 轮流发�
 User input
   -> ChatViewModel
   -> BackgroundManager.prepare(...)
-       -> MemoryBackgroundSource.candidates(...)
-       -> WorldBookBackgroundSource.candidates(...)
+       -> MemoryRecallTool / MemoryBackgroundSource.candidates(...)
+       -> WorldBookRecallTool / WorldBookBackgroundSource.candidates(...)
        -> CharacterBackgroundSource.candidates(...)
        -> ConversationStateBackgroundSource.candidates(...)
        -> BackgroundWorker.select(...)
@@ -34,6 +39,7 @@ User input
 
 | 文档 | 内容 |
 |---|---|
+| [../agent-core.md](../agent-core.md) | AgentCore 基座：后台 agent/worker 的 identity、policy、capability、diagnostics、executor 共享骨架 |
 | [architecture.md](architecture.md) | Background 层模块边界、依赖方向和与 PromptAssembler 的关系 |
 | [background-worker.md](background-worker.md) | 后台员工职责、无输出权约束、选择/排序/裁剪 contract |
 | [sources.md](sources.md) | Memory、WorldBook、Character、ConversationState 作为 BackgroundSource 的统一候选接口 |
@@ -48,8 +54,10 @@ User input
 |---|---|
 | `Background` | 主模型回复前需要知道的背景上下文，不等同于角色回复 |
 | `BackgroundSource` | 候选条目来源，例如 Memory 或 WorldBook |
+| `SourceTool` / source tool | 后台 read-only source 暴露层，包装现有 Memory/WorldBook recall result，供 BackgroundSource adapter 消费 |
 | `BackgroundCandidate` | 来源返回的可选条目，带 source、id、content、score metadata |
 | `BackgroundWorker` / 后台员工 | 无发言权的后台选择器，只能返回 packet |
 | `BackgroundPacket` | 本轮要注入 prompt 的最终条目集合和诊断信息 |
 | `BackgroundAssembler` | 把 packet 确定性转换成 `[Background]` prompt block |
 | `LibMan` / 图书管理员 | 有 web search 工具权的素材构建 agent，不参与主聊天输出 |
+| `AgentCore` | 后台 agent/worker 共享的任务、权限、执行和诊断基座，不用于普通角色回复自治 |

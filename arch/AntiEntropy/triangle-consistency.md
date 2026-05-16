@@ -15,9 +15,9 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。实际设备 iOS 26.5 `iPhone 17 Pro`，Swift Testing 最新报告 `289 tests in 54 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。同日一次早先 full-suite 重试在 `EmbeddingServiceTests.test_embedding_outputs_384_finite_normalized_values` 处出现 app bundle 内 `MultilingualE5Small.mlmodelc` runtime lookup 失败；随后 `EmbeddingServiceTests` 4 tests / 1 suite passed，后续 full suite 281 tests / 51 suites 和最终 full suite 289 tests / 54 suites 均通过。
+结果：成功。实际设备 iOS 26.5 `iPhone 17 Pro`，Swift Testing 最新报告 `303 tests in 58 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。同日较早的 WorldBook Vectorization closeout 基线为 289 tests / 54 suites；AgentCore foundation 落地后新增 12 个 focused tests，当前全量基线更新为 303 tests / 58 suites。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 289 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression、compression mode 与 WorldBook Vectorization Phase A/B/C/D 测试均已纳入当前基线。2026-05-16 又补充了 Phase D focused coverage 与 full-suite closeout：reflect DTO contract 与 Responses `[Memories]` request-shape；同日补充了世界书向量化 Phase A/B/C schema、vector store、embedding text/hash、indexer/backfill、WorldBookSource、Chat semantic prompt path、CRUD/import/delete/eraseAllData lifecycle maintenance 和 Data Management 手动 rebuild coverage。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 303 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression、compression mode、WorldBook Vectorization Phase A/B/C/D 与 AgentCore foundation tests 均已纳入当前基线。2026-05-17 补充了 AgentCore descriptor、policy profile、deterministic executor denial 和 diagnostics focused coverage。
 
 2026-05-16 世界书向量化 Phase A 追加验证：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759'` 在 iOS 26.5 `iPhone 17` 通过，结果为 `261 tests in 47 suites passed`，`** TEST SUCCEEDED **`。
 
@@ -27,7 +27,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|
 | `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路当前输入重复风险已有 Feature 级测试覆盖，但仍缺少 UI 自动化测试。 |
 | `arch-src` | 局部不一致 | Prompt 时间格式、Memory 目录/触发时机、migration 约束已按当前源码回写；Feature 分层说明仍有漂移，留待 Task 6。 |
-| `arch-test` | 基本一致 | 测试数量已回写为 289；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses request-shape、WorldBook Vectorization Phase A/B/C/D 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 303；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses request-shape、WorldBook Vectorization Phase A/B/C/D 可靠性、AgentCore foundation contract 均已补测试，Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -36,11 +36,12 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖四层顺序、labeled context blocks、ISO8601 时间位于 Current Turn；Chat 发送链路覆盖 API request 四层顺序和当前输入去重。 |
 | ContextManager | 一致 | 一致 | Truncation、CompressionPolicy、source hash、PreparedHistory、CompressionSummarizer、CheckpointCompactor、checkpoint reuse 与 fallback 均有测试覆盖；Prompt 端到端仍通过 Chat 发送链路测试间接覆盖。 |
-| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；当前 full suite 为 289 tests / 54 suites。 |
+| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；当前 full suite 为 303 tests / 58 suites。 |
 | WorldBook Vectorization Phase A/B/C/D | 一致 | 一致 | `Migrations.swift` v15/v16、`WorldBookEntryEmbeddingMetaRecord`、`WorldBookVectorStore`、`WorldBookEmbeddingTextBuilder`、`WorldBookEntryHasher`、`WorldBookEmbeddingIndexer`、`WorldBookSource`、editor save/import lifecycle wiring、delete cleanup、eraseAllData cleanup 和 Data Management 手动 rebuild 已与 `arch/data-model.md`、`arch/modules/world-book.md`、`arch/modules/background/world-book-vectorization.md`、`arch/modules/background/sources.md`、`arch/modules/prompt-assembly.md` 同步；`MigrationTests`、`WorldBookVectorStoreTests`、`WorldBookEmbeddingTextBuilderTests`、`WorldBookEntryHasherTests`、`WorldBookEmbeddingIndexerTests`、`WorldBookSourceTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests`、`WorldBookEditorViewModelTests`、`DatabaseManagerWorldBookTests`、`SettingsViewModelWorldBookIndexTests`、`CriticalSaveFlowTests` 覆盖 schema、索引、cascade、worldBook-scoped KNN、disabled entry 过滤、delete、invalid dimension、text/hash、existing-entry rebuild/backfill、fresh skip、hash mismatch reindex、failure meta、batch continue、keyword + semantic recall、semantic-only prompt 注入、block 兼容、save/import indexing、index failure non-blocking、delete/erase cleanup 和 manual rebuild。BackgroundWorker / BackgroundPacket 仍为后续边界。 |
+| AgentCore Foundation | 一致 | 一致 | `OpenChat/Core/AgentCore/*` 已实现 identity、capability/policy、task/result、diagnostics、schema validation、deterministic executor 和 typed `AgentError`；`AgentDescriptorTests`、`AgentPolicyTests`、`DeterministicAgentExecutorTests`、`AgentDiagnosticsTests` 覆盖 Codable/raw value、三类 policy profile、LLM/web/network/database-write denial、diagnostics selected/omitted/fallback/errors。AgentCore focused 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。BackgroundWorker / Director / LibMan runtime 仍未实现。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 289 tests；Data Management 世界书 semantic index 手动 rebuild 已有 ViewModel 测试覆盖，其他 Settings UI/manual 路径仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 303 tests；Data Management 世界书 semantic index 手动 rebuild 已有 ViewModel 测试覆盖，其他 Settings UI/manual 路径仍需后续验收。 |
 
 ## 关键不一致
 
@@ -173,13 +174,13 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：2026-04-30 该轮曾把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试已纳入当时基线。当前全局基线见本文顶部的 289 tests。
+结论：2026-04-30 该轮曾把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试已纳入当时基线。当前全局基线见本文顶部的 303 tests。
 
 证据：
 
-- `arch/index.md` 当前已回写为“289 个 Swift Testing 测试 / 54 个 suites 全部通过”。
-- `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（289 个 / 54 suites）”。
-- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与该计划波次的 251-test full suite 历史结果；当前全局基线见本文顶部的 289-test full suite。
+- `arch/index.md` 当前已回写为“303 个 Swift Testing 测试 / 58 个 suites 全部通过”。
+- `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（303 个 / 58 suites）”。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与该计划波次的 251-test full suite 历史结果；当前全局基线见本文顶部的 303-test full suite。
 - `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
@@ -191,10 +192,11 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：289 tests passed。
+1. 当前工作区能编译并通过全量 Swift Testing：303 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
 3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重、Responses `[Memories]` folding 与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试，retain v2 provenance/dedupe/source validation 和 reflect DTO contract 已有测试覆盖；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、WorldBook Vectorization Phase A/B/C/D、migration 约束、checkpoint compression/compression mode 语义和 289-test 基线；Feature 边界漂移留待后续分层修复计划。
+4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、WorldBook Vectorization Phase A/B/C/D、AgentCore foundation、migration 约束、checkpoint compression/compression mode 语义和 303-test 基线；Feature 边界漂移留待后续分层修复计划。
+5. 2026-05-17 docs-only 顺序修正后，BackgroundWorker 仍记录为 AgentCore 受限 consumer，但下一步入口已调整为 Memory / WorldBook read-only source tool 暴露；`Core/Background` DTO、BackgroundWorker、BackgroundPacket、MemoryBackgroundSource、WorldBookBackgroundSource 和 Chat/Prompt switch 仍未实现。
 
 ## 修复顺序状态
 
@@ -204,7 +206,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Prompt 四层顺序与 Current-Turn Context | Closed：统一为四层顺序，PromptAssemblerTests 与 ChatViewModelPromptAssemblyTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回前置同步提取、onDisappear 兜底、sortOrder cutoff 增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 289 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 303 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
@@ -213,6 +215,28 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - `arch-src`：Prompt 时间上下文统一为当前输入后的 `[Time] <ISO8601> [/Time]`；Prompt 段顺序统一为四层顺序；migration 源码不再引用 runtime Record/enum 符号。
 - `arch-test`：PromptAssemblerTests 覆盖四层顺序、ISO8601、labeled blocks 和 world book position 兼容；MigrationTests 覆盖 migration 源码约束；EmbeddingServiceTests / VectorStoreTests / MemoryManagerRetrievalTests / ChatViewModelPromptAssemblyTests 覆盖 Memory 可靠性。
 - 分层漂移：Task 6 将单独处理，不在本次 prompt/db/doc 修复中混入跨层搬迁。
+
+## Background Source Tool 顺序修正三边写回（2026-05-17）
+
+范围：`PLANING.md`、`arch/modules/agent-core.md`、`arch/modules/background/*`、`arch/modules/memory/*`、`arch/modules/world-book.md`、`docs/superpowers/plans/2026-05-17-agent-core-foundation/*`。
+
+### arch-src
+
+- 文档现已明确：AgentCore foundation 已完成；BackgroundWorker 后续复用 AgentCore identity / policy / diagnostics / execution result contract。
+- 文档现已明确：AgentCore 后的下一步不是直接开发 `Core/Background` DTO / BackgroundWorker，而是先暴露 `MemoryRecallTool` / `WorldBookRecallTool` 或等价内部 read-only source tool。
+- 文档现已明确：source tool 只包装 `MemoryManager.recallMemories(...)` / `WorldBookSource.recallEntries(...)` 的 result，不复制排序/融合逻辑，不写 DB，不联网，不拼 prompt，不向普通角色开放 tool call。
+- 当前源码现实仍保持：Memory 和 WorldBook 由 Chat 兼容链路消费，Prompt 输出仍是 `[Memories]` / `[World Book Entries]`。
+
+### arch-test
+
+- 本轮为 docs-only 顺序修正，不新增测试。
+- AgentCore foundation 的 descriptor、policy profile、deterministic executor denial、diagnostics focused tests 仍是已实现基线。
+- 后续 source tool 计划包需要新增 focused tests，锁定 read-only、result order preserving 和 trace metadata mapping。
+
+### src-test
+
+- 未运行。该轮没有 Swift source / project / migration 变更。
+- 当前最近可信 runtime 基线仍是 AgentCore closeout 的 full suite：303 tests / 58 suites passed。
 
 ## Checkpoint Compression 三边一致性写回（2026-04-30）
 

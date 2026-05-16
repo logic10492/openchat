@@ -1,9 +1,13 @@
 # LibMan / 图书管理员
 
-> 状态：目标架构规划，尚未实现。
+> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在；LibMan runtime / Exa tool broker 尚未实现。
 > 依赖规划：`arch/modules/exa.md` 中的 Exa web search 能力。
 
 LibMan 是素材构建 agent，不是聊天 agent。它帮助用户查资料、整理引用、生成角色卡和世界书草稿，但不参与主 RP 回复。
+
+实现上，LibMan 应复用 `AgentCore`：显式启用 `llm`、`webSearch`、`userVisibleDraft` capability；数据库写入仍必须由用户确认流程触发，不由 LibMan 静默执行。
+
+2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.librarianDraftDefault()`，允许 `llm` / `webSearch` / `userVisibleDraft`，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。该实现只证明 AgentCore policy profile 已可用，不代表 LibMan、Exa broker 或写入流程已实现。
 
 ## 1. 职责
 
@@ -23,6 +27,7 @@ LibMan 不可以：
 - 无引用地声称来自某个作品或资料源。
 - 替用户决定角色设定的最终版本。
 - 每轮 RP 对话都联网搜索。
+- 绕过 AgentCore policy 临时扩大 tool / DB 权限。
 
 ## 2. 与 Exa 的关系
 
@@ -110,3 +115,4 @@ UI 应明确展示：
 | 是否输出用户可见文本 | 输出草稿 | 默认不输出，只返回 packet |
 | 是否写数据库 | 用户确认后写 | 不写 |
 | 是否能生成新设定 | 可生成草稿 | 不生成新事实 |
+| AgentCore capability | `llm` / `webSearch` / `userVisibleDraft`，确认后才进入写入流程 | 第一阶段仅 `deterministic` |
