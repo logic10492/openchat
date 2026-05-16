@@ -83,7 +83,7 @@ struct WorldBookEditorView: View {
                     }
 
                     Button(String(localized: "Add Entry")) {
-                        let worldBookId = viewModel.editingWorldBook?.id ?? UUID().uuidString
+                        let worldBookId = viewModel.currentWorldBookId ?? UUID().uuidString
                         editingEntry = WorldBookEntryRecord(
                             id: UUID().uuidString,
                             worldBookId: worldBookId,
@@ -108,6 +108,14 @@ struct WorldBookEditorView: View {
                         Text(errorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
+                    }
+                }
+
+                if let indexingWarningMessage = viewModel.indexingWarningMessage {
+                    Section {
+                        Text(indexingWarningMessage)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
                 }
             }
@@ -144,23 +152,7 @@ struct WorldBookEditorView: View {
             }
             .sheet(isPresented: $isShowingImport) {
                 WorldBookImportView { parsedEntries in
-                    let worldBook = try await viewModel.save()
-                    for parsed in parsedEntries {
-                        let entry = WorldBookEntryRecord(
-                            id: UUID().uuidString,
-                            worldBookId: worldBook.id,
-                            title: parsed.title,
-                            content: parsed.content,
-                            keywords: RecordCoders.encode(parsed.keywords) ?? "[]",
-                            priority: parsed.priority,
-                            isEnabled: true,
-                            position: parsed.position,
-                            createdAt: .now,
-                            updatedAt: .now
-                        )
-                        try await viewModel.saveEntry(entry)
-                    }
-                    await viewModel.loadEntries()
+                    _ = try await viewModel.importEntries(parsedEntries)
                 }
             }
             .sheet(item: $editingCharacterCard, onDismiss: reloadCharacters) { card in

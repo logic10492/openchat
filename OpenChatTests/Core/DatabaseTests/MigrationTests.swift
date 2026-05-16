@@ -25,7 +25,8 @@ struct MigrationTests {
             "APIMode.",
             "WorldBookEntryPosition.",
             "ContextStrategy.",
-            "CompressionMode."
+            "CompressionMode.",
+            "EmbeddingService."
         ]
         let violations = forbiddenReferences.filter { source.contains($0) }
 
@@ -522,6 +523,104 @@ struct MigrationTests {
 
         let count = try await manager.read { db in
             try MemoryEntryProvenanceRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
+
+    // MARK: - v15 world_book_entry_embedding
+
+    @Test func test_v15_creates_world_book_entry_embedding_table() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+
+        #expect(tableNames.contains("world_book_entry_embedding"))
+    }
+
+    @Test func test_v15_world_book_entry_embedding_accepts_384_dimension_vectors() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let embedding = Array(repeating: Float(0), count: 384)
+        let blob = embedding.withUnsafeBufferPointer { buffer in
+            Data(buffer: buffer)
+        }
+
+        try await manager.write { db in
+            try db.execute(
+                sql: "INSERT INTO world_book_entry_embedding(entry_id, embedding) VALUES (?, ?)",
+                arguments: ["entry-vector-dimension", blob]
+            )
+        }
+
+        let count = try await manager.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM world_book_entry_embedding WHERE entry_id = ?",
+                arguments: ["entry-vector-dimension"]
+            ) ?? 0
+        }
+        #expect(count == 1)
+    }
+
+    // MARK: - v16 world_book_entry_embedding_meta
+
+    @Test func test_v16_creates_world_book_embedding_meta_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let columns = try await manager.read { db in
+            try db.columns(in: "world_book_entry_embedding_meta").map(\.name)
+        }
+
+        #expect(columns.contains("entryId"))
+        #expect(columns.contains("contentHash"))
+        #expect(columns.contains("embeddingModel"))
+        #expect(columns.contains("embeddingDimension"))
+        #expect(columns.contains("status"))
+        #expect(columns.contains("embeddedAt"))
+        #expect(columns.contains("lastAttemptAt"))
+        #expect(columns.contains("lastError"))
+        #expect(columns.contains("updatedAt"))
+    }
+
+    @Test func test_v16_world_book_embedding_meta_has_status_and_model_indexes() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let indexNames = try await manager.read { db in
+            try Row.fetchAll(
+                db,
+                sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+                arguments: ["world_book_entry_embedding_meta"]
+            ).compactMap { $0["name"] as String? }
+        }
+
+        #expect(indexNames.contains("idx_world_book_entry_embedding_meta_status"))
+        #expect(indexNames.contains("idx_world_book_entry_embedding_meta_model"))
+    }
+
+    @Test func test_v16_world_book_embedding_meta_cascade_on_entry_delete() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let worldBook = TestHelpers.makeWorldBook()
+        let entry = TestHelpers.makeWorldBookEntry(worldBookId: worldBook.id)
+        let meta = WorldBookEntryEmbeddingMetaRecord(
+            entryId: entry.id,
+            contentHash: "hash-a",
+            embeddingModel: "MultilingualE5Small",
+            embeddingDimension: 384,
+            status: WorldBookEmbeddingStatus.indexed.rawValue,
+            embeddedAt: Date(),
+            lastAttemptAt: Date(),
+            lastError: nil,
+            updatedAt: Date()
+        )
+
+        try await manager.write { db in
+            try worldBook.insert(db)
+            try entry.insert(db)
+            try meta.insert(db)
+            try db.execute(sql: "DELETE FROM world_book_entry WHERE id = ?", arguments: [entry.id])
+        }
+
+        let count = try await manager.read { db in
+            try WorldBookEntryEmbeddingMetaRecord.fetchCount(db)
         }
         #expect(count == 0)
     }

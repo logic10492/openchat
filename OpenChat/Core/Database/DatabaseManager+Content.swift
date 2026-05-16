@@ -81,15 +81,48 @@ extension DatabaseManager {
         }
     }
 
+    func saveWorldBookEntries(_ entries: [WorldBookEntryRecord]) async throws {
+        try await write { db in
+            for entry in entries {
+                try entry.save(db)
+            }
+        }
+    }
+
     func deleteWorldBook(id: String) async throws {
         try await write { db in
+            try self.deleteWorldBookEntryEmbeddings(worldBookId: id, in: db)
             _ = try WorldBookRecord.deleteOne(db, key: id)
         }
     }
 
     func deleteWorldBookEntry(id: String) async throws {
         try await write { db in
+            try self.deleteWorldBookEntryEmbedding(entryId: id, in: db)
             _ = try WorldBookEntryRecord.deleteOne(db, key: id)
         }
+    }
+
+    func deleteWorldBookEntryEmbedding(entryId: String, in db: Database) throws {
+        try db.execute(
+            sql: "DELETE FROM world_book_entry_embedding WHERE entry_id = ?",
+            arguments: [entryId]
+        )
+        _ = try WorldBookEntryEmbeddingMetaRecord.deleteOne(db, key: entryId)
+    }
+
+    func deleteWorldBookEntryEmbeddings(worldBookId: String, in db: Database) throws {
+        try db.execute(sql: """
+            DELETE FROM world_book_entry_embedding
+            WHERE entry_id IN (
+                SELECT id FROM world_book_entry WHERE worldBookId = ?
+            )
+            """, arguments: [worldBookId])
+        try db.execute(sql: """
+            DELETE FROM world_book_entry_embedding_meta
+            WHERE entryId IN (
+                SELECT id FROM world_book_entry WHERE worldBookId = ?
+            )
+            """, arguments: [worldBookId])
     }
 }

@@ -11,8 +11,11 @@ enum Migrations {
         static let messageTable = "message"
         static let memoryEntryTable = "memory_entry"
         static let memoryEmbeddingTable = "memory_embedding"
+        static let worldBookEntryEmbeddingTable = "world_book_entry_embedding"
+        static let worldBookEntryEmbeddingMetaTable = "world_book_entry_embedding_meta"
         static let endpointModelTable = "endpoint_model"
         static let compressionCheckpointTable = "conversation_compression_checkpoint"
+        static let embeddingDimension = 384
 
         static let apiModeChatCompletions = "chatCompletions"
         static let providerDialectOpenAICompatible = "openAICompatible"
@@ -235,6 +238,38 @@ enum Migrations {
                 t.column("createdAt", .datetime).notNull()
                 t.column("updatedAt", .datetime).notNull()
             }
+        }
+        migrator.registerMigration("v15_create_world_book_entry_embedding") { db in
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE \(Historical.worldBookEntryEmbeddingTable) USING vec0(
+                    entry_id TEXT PRIMARY KEY,
+                    embedding float[\(Historical.embeddingDimension)]
+                )
+                """)
+        }
+        migrator.registerMigration("v16_create_world_book_entry_embedding_meta") { db in
+            try db.create(table: Historical.worldBookEntryEmbeddingMetaTable) { t in
+                t.column("entryId", .text).notNull().primaryKey()
+                    .references(Historical.worldBookEntryTable, onDelete: .cascade)
+                t.column("contentHash", .text).notNull()
+                t.column("embeddingModel", .text).notNull()
+                t.column("embeddingDimension", .integer).notNull()
+                t.column("status", .text).notNull()
+                t.column("embeddedAt", .datetime)
+                t.column("lastAttemptAt", .datetime)
+                t.column("lastError", .text)
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_world_book_entry_embedding_meta_status",
+                on: Historical.worldBookEntryEmbeddingMetaTable,
+                columns: ["status"]
+            )
+            try db.create(
+                index: "idx_world_book_entry_embedding_meta_model",
+                on: Historical.worldBookEntryEmbeddingMetaTable,
+                columns: ["embeddingModel"]
+            )
         }
         return migrator
     }

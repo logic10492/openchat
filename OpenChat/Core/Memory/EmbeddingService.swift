@@ -2,6 +2,7 @@ import CoreML
 import Foundation
 
 final class EmbeddingService: @unchecked Sendable {
+    static let embeddingModelId = "multilingual-e5-small-384:v1"
     static let embeddingDimension = 384
     private static let modelInputLength = 256
 

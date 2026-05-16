@@ -71,6 +71,7 @@ struct SidebarView: View {
                         databaseManager: container.databaseManager,
                         apiClient: container.apiClient,
                         apiKeyStore: container.apiKeyStore,
+                        worldBookEmbeddingIndexer: container.worldBookEmbeddingIndexer,
                         appState: appState
                     )
                 )

@@ -781,6 +781,256 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(messages.filter { $0.role == "user" && $0.content.contains("CURRENT_INPUT_UNIQUE_TEXT") }.count == 1)
     }
 
+    @Test func test_semantic_world_book_entry_reaches_world_book_entries_block() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-world-book-semantic",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-world-book-semantic",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let worldBook = TestHelpers.makeWorldBook(id: "world-book-semantic")
+        let baseCard = TestHelpers.makeCharacterCard(id: "card-world-book-semantic")
+        let card = CharacterCardRecord(
+            id: baseCard.id,
+            name: baseCard.name,
+            avatar: baseCard.avatar,
+            personality: baseCard.personality,
+            appearance: baseCard.appearance,
+            physique: baseCard.physique,
+            speechStyle: baseCard.speechStyle,
+            backstory: baseCard.backstory,
+            systemPrompt: baseCard.systemPrompt,
+            scenario: baseCard.scenario,
+            exampleDialogs: baseCard.exampleDialogs,
+            creatorNotes: baseCard.creatorNotes,
+            tags: baseCard.tags,
+            worldBookId: worldBook.id,
+            createdAt: baseCard.createdAt,
+            updatedAt: baseCard.updatedAt
+        )
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        let semanticEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: worldBook.id,
+            id: "semantic-only-world-book-entry",
+            title: "Moon Archive",
+            keywords: ["selenite-vault"],
+            content: "The moon archive stores silent maps."
+        )
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try worldBook.insert(db)
+            try card.insert(db)
+            try semanticEntry.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let worldBookVectorStore = WorldBookVectorStore(databaseManager: databaseManager)
+        let worldBookEmbeddingIndexer = WorldBookEmbeddingIndexer(
+            databaseManager: databaseManager,
+            embeddingProvider: ChatFixedEmbeddingProvider(),
+            vectorStore: worldBookVectorStore
+        )
+        let worldBookSource = WorldBookSource(
+            embeddingProvider: ChatFixedEmbeddingProvider(),
+            vectorStore: worldBookVectorStore
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            worldBookEmbeddingIndexer: worldBookEmbeddingIndexer,
+            worldBookSource: worldBookSource,
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Where are the old maps kept?"
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        let worldBookBlock = try #require(request.messages.first {
+            $0.role == "system" && $0.content.contains("[World Book Entries]")
+        })
+        #expect(worldBookBlock.content.contains("[World Book: Moon Archive]"))
+        #expect(worldBookBlock.content.contains("The moon archive stores silent maps."))
+    }
+
+    @Test func test_world_book_source_semantic_failure_falls_back_to_keyword_block() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-world-book-keyword-fallback",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-world-book-keyword-fallback",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let worldBook = TestHelpers.makeWorldBook(id: "world-book-keyword-fallback")
+        let baseCard = TestHelpers.makeCharacterCard(id: "card-world-book-keyword-fallback")
+        let card = CharacterCardRecord(
+            id: baseCard.id,
+            name: baseCard.name,
+            avatar: baseCard.avatar,
+            personality: baseCard.personality,
+            appearance: baseCard.appearance,
+            physique: baseCard.physique,
+            speechStyle: baseCard.speechStyle,
+            backstory: baseCard.backstory,
+            systemPrompt: baseCard.systemPrompt,
+            scenario: baseCard.scenario,
+            exampleDialogs: baseCard.exampleDialogs,
+            creatorNotes: baseCard.creatorNotes,
+            tags: baseCard.tags,
+            worldBookId: worldBook.id,
+            createdAt: baseCard.createdAt,
+            updatedAt: baseCard.updatedAt
+        )
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        let keywordEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: worldBook.id,
+            id: "keyword-fallback-world-book-entry",
+            title: "Dragon Treaty",
+            keywords: ["dragon"],
+            content: "Dragon treaties are stored in the west hall."
+        )
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try worldBook.insert(db)
+            try card.insert(db)
+            try keywordEntry.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let worldBookSource = WorldBookSource(
+            embeddingProvider: ChatFailingEmbeddingProvider(),
+            vectorStore: WorldBookVectorStore(databaseManager: databaseManager)
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            worldBookSource: worldBookSource,
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Tell me about the dragon agreement."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        let worldBookBlock = try #require(request.messages.first {
+            $0.role == "system" && $0.content.contains("[World Book Entries]")
+        })
+        #expect(worldBookBlock.content.contains("[World Book: Dragon Treaty]"))
+        #expect(worldBookBlock.content.contains("Dragon treaties are stored in the west hall."))
+        #expect(request.messages.filter { $0.content.contains("[World Book Entries]") }.count == 1)
+    }
+
     @Test func test_sendMessage_responses_mode_folds_memories_into_instructions_without_user_duplication() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()

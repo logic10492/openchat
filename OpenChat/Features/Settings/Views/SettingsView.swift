@@ -115,6 +115,7 @@ struct SettingsView: View {
                 databaseManager: DependencyContainer.preview().databaseManager,
                 apiClient: DependencyContainer.preview().apiClient,
                 apiKeyStore: DependencyContainer.preview().apiKeyStore,
+                worldBookEmbeddingIndexer: DependencyContainer.preview().worldBookEmbeddingIndexer,
                 appState: AppState()
             )
         )

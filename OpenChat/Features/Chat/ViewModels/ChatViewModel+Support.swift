@@ -99,6 +99,14 @@ extension ChatViewModel {
             persistedUserMessage: userMessageRecord
         )
 
+        let recalledWorldBookEntries = await recallWorldBookEntries(
+            worldBook: worldBook,
+            entries: worldBookEntries,
+            recentMessages: promptHistoryMessages,
+            currentInput: prompt
+        )
+        let usesPreselectedWorldBookEntries = worldBookSource != nil
+
         var memories: [MemoryEntryRecord] = []
         if let characterCardId = characterCard?.id {
             do {
@@ -112,16 +120,29 @@ extension ChatViewModel {
             }
         }
 
-        let preview = PromptAssembler.preview(
-            conversation: conversation,
-            characterCard: characterCard,
-            worldBook: worldBook,
-            worldBookEntries: worldBookEntries,
-            memories: memories,
-            recentMessages: promptHistoryMessages,
-            currentInput: prompt,
-            endpoint: endpoint
-        )
+        let preview: PromptAssemblyPreview
+        if usesPreselectedWorldBookEntries {
+            preview = PromptAssembler.previewWithPreselectedWorldBookEntries(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        } else {
+            preview = PromptAssembler.preview(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                recentMessages: promptHistoryMessages,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        }
 
         let history = try await contextManager.prepareHistory(
             messages: promptHistoryMessages,
@@ -130,17 +151,31 @@ extension ChatViewModel {
             fixedTokens: preview.fixedTokens
         )
 
-        let assembly = PromptAssembler.assemble(
-            conversation: conversation,
-            characterCard: characterCard,
-            worldBook: worldBook,
-            worldBookEntries: worldBookEntries,
-            memories: memories,
-            recentMessages: promptHistoryMessages,
-            processedHistory: history,
-            currentInput: prompt,
-            endpoint: endpoint
-        )
+        let assembly: AssemblyResult
+        if usesPreselectedWorldBookEntries {
+            assembly = PromptAssembler.assembleWithPreselectedWorldBookEntries(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                processedHistory: history,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        } else {
+            assembly = PromptAssembler.assemble(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                recentMessages: promptHistoryMessages,
+                processedHistory: history,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        }
         tokenUsage = assembly.tokenUsage
 
         let baseSortOrder: Int
@@ -281,6 +316,53 @@ extension ChatViewModel {
             return record.sortOrder > cutoff
         }.count
         return pendingCount >= Self.minimumPendingMessagesForExtraction
+    }
+
+    private func recallWorldBookEntries(
+        worldBook: WorldBookRecord?,
+        entries: [WorldBookEntryRecord],
+        recentMessages: [MessageRecord],
+        currentInput: String
+    ) async -> [WorldBookEntryRecord] {
+        guard let worldBookSource else {
+            return entries
+        }
+
+        if let worldBookId = worldBook?.id, let worldBookEmbeddingIndexer {
+            do {
+                let result = try await worldBookEmbeddingIndexer.rebuildMissingOrStale(
+                    worldBookId: worldBookId,
+                    limit: 8
+                )
+                if !result.failed.isEmpty {
+                    logger.warning("World book bounded rebuild had \(result.failed.count) failed entries for world book \(worldBookId)")
+                }
+            } catch {
+                logger.warning("World book bounded rebuild failed for world book \(worldBookId): \(error.localizedDescription)")
+            }
+        }
+
+        do {
+            let result = try await worldBookSource.recallEntries(
+                worldBook: worldBook,
+                entries: entries,
+                recentMessages: recentMessages,
+                currentInput: currentInput,
+                limit: 10
+            )
+            if result.trace.omissions.contains(where: { $0.reason == .semanticUnavailable }) {
+                logger.warning("World book semantic recall unavailable; keyword recall fallback used")
+            }
+            return result.entries.map(\.entry)
+        } catch {
+            logger.warning("World book recall failed; falling back to prompt keyword path: \(error.localizedDescription)")
+            guard worldBook?.isEnabled ?? false else { return [] }
+            let contextText = [
+                recentMessages.suffix(5).map(\.content).joined(separator: "\n"),
+                currentInput,
+            ].filter { !$0.isEmpty }.joined(separator: "\n")
+            return KeywordMatcher.triggeredEntries(entries, contextText: contextText)
+        }
     }
 
     private func removeAssistantPlaceholder(id: String) {

@@ -83,6 +83,8 @@ private struct ChatDetailContainer: View {
                         apiClient: container.apiClient,
                         contextManager: container.contextManager,
                         memoryManager: container.memoryManager,
+                        worldBookEmbeddingIndexer: container.worldBookEmbeddingIndexer,
+                        worldBookSource: container.worldBookSource,
                         titleGenerator: container.titleGenerator,
                         appState: appState
                     )

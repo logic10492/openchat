@@ -9,6 +9,8 @@ final class ChatViewModel {
     let apiClient: APIClient
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer?
+    let worldBookSource: WorldBookSource?
     let titleGenerator: TitleGenerator
     let apiKeyStore: any APIKeyStore
     let appState: AppState
@@ -62,6 +64,8 @@ final class ChatViewModel {
         apiClient: APIClient,
         contextManager: ContextManager,
         memoryManager: MemoryManager,
+        worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer? = nil,
+        worldBookSource: WorldBookSource? = nil,
         titleGenerator: TitleGenerator,
         apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
         appState: AppState
@@ -71,6 +75,8 @@ final class ChatViewModel {
         self.apiClient = apiClient
         self.contextManager = contextManager
         self.memoryManager = memoryManager
+        self.worldBookEmbeddingIndexer = worldBookEmbeddingIndexer
+        self.worldBookSource = worldBookSource
         self.titleGenerator = titleGenerator
         self.apiKeyStore = apiKeyStore
         self.appState = appState

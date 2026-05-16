@@ -7,6 +7,7 @@ final class SettingsViewModel {
     private let databaseManager: DatabaseManager
     private let apiClient: APIClient
     private let apiKeyStore: any APIKeyStore
+    private let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
     private let appState: AppState
     private let defaults = UserDefaults.standard
 
@@ -19,16 +20,20 @@ final class SettingsViewModel {
     var defaultContextStrategy = ContextStrategy.truncation
     var compressionEndpointId: String?
     var showDetailedStats = false
+    private(set) var isRebuildingWorldBookIndex = false
+    var worldBookIndexStatusMessage: String?
 
     init(
         databaseManager: DatabaseManager,
         apiClient: APIClient,
         apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
+        worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer,
         appState: AppState
     ) {
         self.databaseManager = databaseManager
         self.apiClient = apiClient
         self.apiKeyStore = apiKeyStore
+        self.worldBookEmbeddingIndexer = worldBookEmbeddingIndexer
         self.appState = appState
         loadDefaults()
     }
@@ -97,6 +102,26 @@ final class SettingsViewModel {
         do {
             try await databaseManager.eraseAllData()
         } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func rebuildWorldBookSemanticIndex() async {
+        guard !isRebuildingWorldBookIndex else { return }
+        isRebuildingWorldBookIndex = true
+        worldBookIndexStatusMessage = nil
+        defer { isRebuildingWorldBookIndex = false }
+
+        do {
+            let result = try await worldBookEmbeddingIndexer.rebuildAllMissingOrStale(limit: nil)
+            worldBookIndexStatusMessage = String.localizedStringWithFormat(
+                String(localized: "World book semantic index rebuilt: %lld indexed, %lld skipped, %lld failed."),
+                result.indexedCount,
+                result.skippedFreshCount,
+                result.failed.count
+            )
+        } catch {
+            worldBookIndexStatusMessage = error.localizedDescription
             appState.present(error: error.localizedDescription)
         }
     }

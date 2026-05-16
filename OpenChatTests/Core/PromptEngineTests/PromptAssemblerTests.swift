@@ -273,6 +273,36 @@ struct PromptAssemblerTests {
         #expect(worldBookMessage.content.range(of: "Before history note.")!.lowerBound < worldBookMessage.content.range(of: "After system note.")!.lowerBound)
     }
 
+    @Test func test_world_book_block_shape_remains_compatible_for_semantic_candidates() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard()
+        let book = TestHelpers.makeWorldBook(isEnabled: true)
+        let semanticEntry = TestHelpers.makeWorldBookEntry(
+            worldBookId: book.id,
+            title: "Moon Archive",
+            keywords: ["never-triggered-keyword"],
+            content: "The semantic-only lore survives prompt assembly."
+        )
+
+        let result = PromptAssembler.assembleWithPreselectedWorldBookEntries(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: book,
+            worldBookEntries: [semanticEntry],
+            processedHistory: [],
+            currentInput: "Where are the old maps kept?",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
+        )
+
+        let worldBookMessage = try #require(result.messages.first { $0.content.contains("[World Book Entries]") })
+        #expect(worldBookMessage.role == "system")
+        #expect(worldBookMessage.content.contains("[World Book Entries]"))
+        #expect(worldBookMessage.content.contains("[World Book: Moon Archive]"))
+        #expect(worldBookMessage.content.contains("The semantic-only lore survives prompt assembly."))
+        #expect(worldBookMessage.content.contains("[/World Book Entries]"))
+        #expect(result.triggeredEntries == [semanticEntry.id])
+    }
+
     @Test func test_example_dialogs_are_labeled_system_block() throws {
         let conversation = TestHelpers.makeConversation(slowPlotMode: false)
         let card = TestHelpers.makeCharacterCard()

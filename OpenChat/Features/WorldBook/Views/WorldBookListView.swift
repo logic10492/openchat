@@ -83,12 +83,13 @@ struct WorldBookListView: View {
             await viewModel.loadWorldBooks()
         }
         .sheet(item: $editingWorldBook, onDismiss: reload) { worldBook in
-            WorldBookEditorView(
-                viewModel: WorldBookEditorViewModel(
-                    databaseManager: container.databaseManager,
-                    editingWorldBook: worldBook.id.isEmpty ? nil : worldBook
+                WorldBookEditorView(
+                    viewModel: WorldBookEditorViewModel(
+                        databaseManager: container.databaseManager,
+                        worldBookEmbeddingIndexer: container.worldBookEmbeddingIndexer,
+                        editingWorldBook: worldBook.id.isEmpty ? nil : worldBook
+                    )
                 )
-            )
         }
     }
 

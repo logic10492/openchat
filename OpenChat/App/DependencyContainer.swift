@@ -8,6 +8,9 @@ final class DependencyContainer {
     let apiKeyStore: any APIKeyStore
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let worldBookVectorStore: WorldBookVectorStore
+    let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
+    let worldBookSource: WorldBookSource
     let titleGenerator: TitleGenerator
 
     init(
@@ -19,16 +22,28 @@ final class DependencyContainer {
         let resolvedClient = apiClient ?? APIClient()
         self.apiClient = resolvedClient
         self.apiKeyStore = apiKeyStore
+        let embeddingService = EmbeddingService()
+        let worldBookVectorStore = WorldBookVectorStore(databaseManager: databaseManager)
         self.contextManager = ContextManager(
             databaseManager: databaseManager,
             apiClient: resolvedClient
         )
         self.memoryManager = MemoryManager(
             databaseManager: databaseManager,
-            embeddingService: EmbeddingService(),
+            embeddingService: embeddingService,
             vectorStore: VectorStore(databaseManager: databaseManager),
             apiClient: resolvedClient,
             apiKeyStore: apiKeyStore
+        )
+        self.worldBookVectorStore = worldBookVectorStore
+        self.worldBookEmbeddingIndexer = WorldBookEmbeddingIndexer(
+            databaseManager: databaseManager,
+            embeddingProvider: embeddingService,
+            vectorStore: worldBookVectorStore
+        )
+        self.worldBookSource = WorldBookSource(
+            embeddingProvider: embeddingService,
+            vectorStore: worldBookVectorStore
         )
         self.titleGenerator = TitleGenerator(apiClient: resolvedClient)
     }

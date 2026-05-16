@@ -289,6 +289,46 @@
         }
       }
     },
+    "Rebuild World Book Semantic Index" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重建世界书语义索引"
+          }
+        }
+      }
+    },
+    "Rebuilding World Book Semantic Index..." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重建世界书语义索引..."
+          }
+        }
+      }
+    },
+    "World book index warning: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书索引警告：%@"
+          }
+        }
+      }
+    },
+    "World book semantic index rebuilt: %lld indexed, %lld skipped, %lld failed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书语义索引已重建：%lld 个已索引，%lld 个已跳过，%lld 个失败。"
+          }
+        }
+      }
+    },
     "Compression" : {
       "extractionState" : "stale",
       "localizations" : {

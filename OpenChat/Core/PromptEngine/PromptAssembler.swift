@@ -13,15 +13,63 @@ struct PromptAssembler {
     ) -> PromptAssemblyPreview {
         let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
         let contextText = makeContextText(recentMessages: recentMessages, currentInput: currentInput)
+        let selectedWorldBookEntries = selectWorldBookEntries(
+            worldBook: worldBook,
+            entries: worldBookEntries,
+            contextText: contextText,
+            selectionMode: .keywordTriggered
+        )
+        return preview(
+            conversation: conversation,
+            characterCard: characterCard,
+            selectedWorldBookEntries: selectedWorldBookEntries,
+            memories: memories,
+            currentInput: currentInput,
+            endpoint: endpoint,
+            totalBudget: totalBudget
+        )
+    }
+
+    static func previewWithPreselectedWorldBookEntries(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        worldBook: WorldBookRecord?,
+        worldBookEntries: [WorldBookEntryRecord],
+        memories: [MemoryEntryRecord] = [],
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> PromptAssemblyPreview {
+        let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
+        let selectedWorldBookEntries = selectWorldBookEntries(
+            worldBook: worldBook,
+            entries: worldBookEntries,
+            contextText: "",
+            selectionMode: .preselected
+        )
+        return preview(
+            conversation: conversation,
+            characterCard: characterCard,
+            selectedWorldBookEntries: selectedWorldBookEntries,
+            memories: memories,
+            currentInput: currentInput,
+            endpoint: endpoint,
+            totalBudget: totalBudget
+        )
+    }
+
+    private static func preview(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        selectedWorldBookEntries: [WorldBookEntryRecord],
+        memories: [MemoryEntryRecord],
+        currentInput: String,
+        endpoint: APIEndpointConfig,
+        totalBudget: Int
+    ) -> PromptAssemblyPreview {
         let systemPrompt = makeSystemPrompt(characterCard: characterCard)
         let characterDescription = buildCharacterDescription(characterCard)
         let scenario = makeScenario(conversation: conversation, characterCard: characterCard)
         let timeContext = makeTimeContext()
-        let triggeredWorldBookEntries = makeTriggeredEntries(
-            worldBook: worldBook,
-            entries: worldBookEntries,
-            contextText: contextText
-        )
         let exampleDialogs = makeExampleDialogs(characterCard: characterCard)
 
         let systemMessage = ChatMessage(role: "system", content: systemPrompt)
@@ -45,7 +93,7 @@ struct PromptAssembler {
         let fixedTokens =
             stableIdentityMessages.reduce(0) { $0 + TokenCounter.count(message: $1) } +
             TokenCounter.count(message: currentTurnMessage)
-        let worldBookTokens = triggeredWorldBookEntries.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
+        let worldBookTokens = selectedWorldBookEntries.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
         let memoryTokens = memories.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent($1))) }
         let exampleTokens = exampleDialogs.reduce(0) { $0 + TokenCounter.count(message: $1) }
         let tokenBudget = TokenBudget.calculate(
@@ -57,7 +105,7 @@ struct PromptAssembler {
         )
 
         let trimmedExampleDialogs = trim(messages: exampleDialogs, within: tokenBudget.exampleDialogsBudget)
-        let trimmedWorldBookEntries = trim(entries: triggeredWorldBookEntries, within: tokenBudget.worldBookBudget)
+        let trimmedWorldBookEntries = trim(entries: selectedWorldBookEntries, within: tokenBudget.worldBookBudget)
         let trimmedMemories = trim(memories: memories, within: tokenBudget.memoryBudget)
 
         let exampleDialogsBlock = makeExampleDialogsBlock(trimmedExampleDialogs)
@@ -123,7 +171,35 @@ struct PromptAssembler {
             currentInput: currentInput,
             endpoint: endpoint
         )
+        return assemble(processedHistory: processedHistory, context: context)
+    }
 
+    static func assembleWithPreselectedWorldBookEntries(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        worldBook: WorldBookRecord?,
+        worldBookEntries: [WorldBookEntryRecord],
+        memories: [MemoryEntryRecord] = [],
+        processedHistory: [MessageRecord],
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> AssemblyResult {
+        let context = previewWithPreselectedWorldBookEntries(
+            conversation: conversation,
+            characterCard: characterCard,
+            worldBook: worldBook,
+            worldBookEntries: worldBookEntries,
+            memories: memories,
+            currentInput: currentInput,
+            endpoint: endpoint
+        )
+        return assemble(processedHistory: processedHistory, context: context)
+    }
+
+    private static func assemble(
+        processedHistory: [MessageRecord],
+        context: PromptAssemblyPreview
+    ) -> AssemblyResult {
         var messages = context.stableIdentityMessages
         messages.append(contentsOf: processedHistory.map(\.chatMessage))
         messages.append(contentsOf: context.currentTurnContextMessages)
@@ -240,8 +316,27 @@ struct PromptAssembler {
         entries: [WorldBookEntryRecord],
         contextText: String
     ) -> [WorldBookEntryRecord] {
+        selectWorldBookEntries(
+            worldBook: worldBook,
+            entries: entries,
+            contextText: contextText,
+            selectionMode: .keywordTriggered
+        )
+    }
+
+    private static func selectWorldBookEntries(
+        worldBook: WorldBookRecord?,
+        entries: [WorldBookEntryRecord],
+        contextText: String,
+        selectionMode: WorldBookSelectionMode
+    ) -> [WorldBookEntryRecord] {
         guard worldBook?.isEnabled ?? false else { return [] }
-        return KeywordMatcher.triggeredEntries(entries, contextText: contextText)
+        switch selectionMode {
+        case .keywordTriggered:
+            return KeywordMatcher.triggeredEntries(entries, contextText: contextText)
+        case .preselected:
+            return entries.filter(\.isEnabled)
+        }
     }
 
     private static func makeExampleDialogs(characterCard: CharacterCardRecord?) -> [ChatMessage] {
@@ -292,4 +387,9 @@ struct PromptAssembler {
         }
         return result
     }
+}
+
+private enum WorldBookSelectionMode {
+    case keywordTriggered
+    case preselected
 }

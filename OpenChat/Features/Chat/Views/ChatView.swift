@@ -183,6 +183,8 @@ struct ChatView: View {
                 apiClient: DependencyContainer.preview().apiClient,
                 contextManager: DependencyContainer.preview().contextManager,
                 memoryManager: DependencyContainer.preview().memoryManager,
+                worldBookEmbeddingIndexer: DependencyContainer.preview().worldBookEmbeddingIndexer,
+                worldBookSource: DependencyContainer.preview().worldBookSource,
                 titleGenerator: DependencyContainer.preview().titleGenerator,
                 appState: AppState()
             )
