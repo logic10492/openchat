@@ -1,0 +1,106 @@
+World Book Vectorization Evidence
+Date: 2026-05-16
+Scope: Phase D closeout with A/B/C/D drift verification
+
+Focused Phase C command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+34 tests / 3 suites passed.
+** TEST SUCCEEDED **
+
+Broader A/B/C drift command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+92 tests / 9 suites passed.
+** TEST SUCCEEDED **
+
+Phase C full suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result:
+281 tests / 51 suites passed.
+** TEST SUCCEEDED **
+
+Phase D propagation-audit baseline command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+69 tests / 4 suites passed.
+** TEST SUCCEEDED **
+
+Phase D focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/DatabaseManagerWorldBookTests' '-only-testing:OpenChatTests/CriticalSaveFlowTests' '-only-testing:OpenChatTests/SettingsViewModelWorldBookIndexTests'
+
+Result:
+9 tests / 4 suites passed.
+** TEST SUCCEEDED **
+
+Final A/B/C/D focused acceptance command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/DatabaseManagerWorldBookTests' '-only-testing:OpenChatTests/CriticalSaveFlowTests' '-only-testing:OpenChatTests/SettingsViewModelWorldBookIndexTests'
+
+Result:
+94 tests / 12 suites passed.
+** TEST SUCCEEDED **
+
+Final full suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result:
+289 tests / 54 suites passed.
+** TEST SUCCEEDED **
+
+Closeout recheck change:
+- Fixed new-world-book direct Add Entry wiring: WorldBookEditorViewModel.saveEntry(_:) now saves the parent world book first, rebinds the entry to the persisted worldBook.id, then saves and indexes the entry.
+- Added WorldBookEditorViewModelTests.test_save_entry_for_new_world_book_persists_parent_and_rebinds_entry.
+- Added ChatViewModelPromptAssemblyTests.test_world_book_source_semantic_failure_falls_back_to_keyword_block.
+
+Closeout recheck focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+19 tests / 2 suites passed.
+** TEST SUCCEEDED **
+
+Closeout recheck final A/B/C/D focused acceptance command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/DatabaseManagerWorldBookTests' '-only-testing:OpenChatTests/CriticalSaveFlowTests' '-only-testing:OpenChatTests/SettingsViewModelWorldBookIndexTests'
+
+Actual simulator:
+iOS 26.5 iPhone 17, 2277CB75-AF36-4ABF-84EE-7444C1DD6759.
+
+Result:
+96 tests / 12 suites passed.
+** TEST SUCCEEDED **
+
+Closeout recheck full suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=B20ADF19-7ADC-427D-9EBE-A76712A3E2AE'
+
+Actual simulator:
+iOS 26.5 iPhone 17 Pro Max, B20ADF19-7ADC-427D-9EBE-A76712A3E2AE.
+
+Result:
+291 tests / 54 suites passed.
+** TEST SUCCEEDED **
+
+Phase D completed behavior:
+- save entry indexes or records non-blocking failed meta/warning without deleting entry.
+- direct Add Entry for a new world book persists the parent first, rebinds entry.worldBookId, indexes the entry, and reloads entries from the persisted id.
+- import saves worldBook + entries in batch, indexes entries, reloads once, and reuses the new worldBook id on later save.
+- Chat prompt path includes semantic-only world book entries and falls back to keyword world book entries when semantic embedding is unavailable.
+- delete entry, delete worldBook, and eraseAllData remove world_book_entry_embedding and world_book_entry_embedding_meta rows.
+- Data Management manual rebuild backfills existing world_book_entry rows.
+
+Intermediate non-final result:
+One earlier full-suite run reached tests and failed once in EmbeddingServiceTests.test_embedding_outputs_384_finite_normalized_values with CoreML reporting that MultilingualE5Small.mlmodelc was not found at the installed app URL. The generated build product contained OpenChat.app/MultilingualE5Small.mlmodelc. A focused EmbeddingServiceTests rerun passed 4 tests / 1 suite, a following full suite passed 281 tests / 51 suites, and final closeout full suite passed 289 tests / 54 suites. Current closeout treats this as non-reproduced simulator/app-install resource lookup flake, not a stable source failure.
+
+Closeout recheck non-final simulator launch results:
+- iOS 26.5 iPhone 17 Pro, 6F61E759-8E3C-4951-B929-0A63AA47BFBB: final focused acceptance did not enter tests; Simulator failed app launch with Busy ("Application failed preflight checks").
+- iOS 26.5 iPhone 17, 2277CB75-AF36-4ABF-84EE-7444C1DD6759: full suite after focused pass did not enter tests; Simulator failed app launch with Busy ("Application failed preflight checks").
+- These were launch/preflight failures before test execution, not source test failures. The successful re-runs above provide the current closeout signal.
+
+Whitespace:
+git diff --check passed.
+
+Known remaining scope:
+BackgroundWorker / BackgroundPacket / unified background scheduling is not implemented.

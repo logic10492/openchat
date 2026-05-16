@@ -11,7 +11,9 @@
 | tokenizer 类型 | XLM-RoBERTa Unigram vocab |
 | 输入长度 | 固定 256 tokens |
 | 输出维度 | 384 |
+| 模型标识 | `EmbeddingService.embeddingModelId == "multilingual-e5-small-384:v1"` |
 | 加载方式 | 实例内 lazy load，`NSLock` 保护 |
+| Core ML compute units | Simulator 使用 `.cpuOnly`；真机使用 `.all`，允许 Core ML 调度 CPU / GPU / Neural Engine |
 | 查询/文档区分 | E5 prefix |
 
 E5 prefix：
@@ -19,6 +21,7 @@ E5 prefix：
 | 场景 | `isQuery` | 前缀 |
 |---|---:|---|
 | 保存记忆 | `false` | `passage: ` |
+| 保存世界书条目 embedding | `false` | `passage: ` |
 | 检索查询 | `true` | `query: ` |
 
 接口：
@@ -109,6 +112,9 @@ enum MemoryError: LocalizedError, Sendable {
 - `OpenChat/Core/Memory/XLMRobertaTokenizer.swift`
 - `OpenChat/Core/Memory/MemoryDependencies.swift`
 - `OpenChat/Core/Memory/VectorStore.swift`
+- `OpenChat/App/DependencyContainer.swift`：生产路径让 Memory 与 WorldBook 共享同一个 `EmbeddingService` 实例。
+- `OpenChat/Core/WorldBook/WorldBookEmbeddingIndexer.swift`：世界书条目复用 `EmbeddingProvider` 生成 passage embedding。
 - `OpenChatTests/Core/MemoryTests/VectorStoreTests.swift`
 - `OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift`
 - `OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookEmbeddingIndexerTests.swift`

@@ -39,11 +39,12 @@ applyTo: "**/PromptEngine/**/*.swift"
 
 ## 世界书注入规则
 
-- 仅注入关键词匹配命中且 `isEnabled` 的条目
-- 关键词匹配基于当前输入 + 最近 5 条消息的文本
+- Chat 主链路优先注入 `WorldBookSource` 已预选的 `isEnabled` 条目；这些条目可以来自 keyword、semantic 或二者合并。
+- `PromptAssembler` 仍保留 keyword fallback path，供旧调用方和直接单元测试使用。
+- fallback 关键词匹配基于当前输入 + 最近 5 条消息的文本。
 - CJK 关键词: 子串匹配（大小写不敏感）
 - 英文关键词: 全词匹配（前后为空格/标点/行首行尾）
-- 条目按 priority 降序注入，超出 token 预算时停止
+- `WorldBookSource` 已负责 keyword/semantic 融合排序；`PromptAssembler` 不重新做 embedding/KNN/DB 访问，只按输入顺序和 token 预算裁剪。
 
 ## PromptAssembler 约束
 

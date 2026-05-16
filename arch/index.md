@@ -27,13 +27,13 @@
 - 已验证命令：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前自动化测试结果：251 个 Swift Testing 测试全部通过，覆盖数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Responses request shape、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract 可靠性。
+- 当前自动化测试基线：最近 full suite 为 289 个 Swift Testing 测试 / 54 个 suites 全部通过；2026-05-16 WorldBook Vectorization focused acceptance 覆盖 Phase A/B/C/D。覆盖面包括数据库迁移、compression checkpoint schema/API、SSE 解析、API 客户端、Responses request shape、Prompt 四层组装、关键词匹配、Token 计数、上下文截断与 checkpoint 压缩、会话级 compression mode、Chat 发送链路当前输入去重与四层 request 顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract 可靠性，以及 WorldBook Vectorization Phase A/B/C/D 的 schema、vector store、embedding text/hash、existing-entry rebuild/backfill indexer、keyword + semantic source recall、prompt 兼容接入、CRUD/import/delete/eraseAllData lifecycle maintenance 和 Data Management 手动 rebuild。
 
 ## 功能需求
 
 ### 1. 角色扮演系统
 - **角色卡**：定义角色的性格、外貌、身材、语调、背景故事、示例对话
-- **世界书**：定义世界设定，条目通过关键词触发动态注入 prompt
+- **世界书**：定义世界设定，条目通过 keyword + semantic 召回动态注入 prompt，输出仍保持 `[World Book Entries]`
 - **世界→角色层级**：角色卡归属于世界书，先选择世界再选择角色，支持跨世界导入角色
 - **编辑器**：分 section 的表单化编辑，支持导入/导出
 - **结构化导入**：世界书支持 Markdown 格式粘贴导入（方便从 ChatGPT 等工具生成后导入）

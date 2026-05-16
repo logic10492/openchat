@@ -7,10 +7,11 @@
 
 - 世界书的 CRUD（创建、查看、编辑、删除）
 - 世界书条目的 CRUD
-- 条目关键词触发机制（决定哪些条目注入 prompt）
+- 条目 keyword + semantic 召回机制（决定哪些条目注入 prompt）
 - 结构化文本粘贴导入（方便用户从外部工具批量导入）
 - 世界书与会话的绑定
 - 世界书的启用/禁用管理
+- 世界书条目向量化的 Phase A/B/C/D 基础设施：schema、meta record、`WorldBookVectorStore`、embedding text builder、content hash、existing-entry rebuild/backfill indexer、`WorldBookSource` keyword + semantic 融合召回，以及 CRUD/import/delete/eraseAllData 维护
 
 ## 2. 文件清单与职责
 
@@ -23,6 +24,19 @@
 | `WorldBookListViewModel.swift` | 列表数据管理 |
 | `WorldBookEditorViewModel.swift` | 世界书及条目的编辑状态管理 |
 | `WorldBookImportFormat.swift` | 导入格式定义与解析逻辑 |
+
+Core 层当前已新增世界书向量化基础设施：
+
+| 文件 | 职责 |
+|---|---|
+| `OpenChat/Core/WorldBook/WorldBookEmbeddingIndexer.swift` | 单条/批量 index、existing world book missing/stale rebuild、failed meta 写入、manual needs-rebuild 标记 |
+| `OpenChat/Core/WorldBook/WorldBookEmbeddingTextBuilder.swift` | 对 title / keywords / content 做稳定拼接；keywords JSON decode 失败抛 typed error |
+| `OpenChat/Core/WorldBook/WorldBookError.swift` | 世界书 Core 层 typed `LocalizedError` |
+| `OpenChat/Core/WorldBook/WorldBookEntryHasher.swift` | 对 embedding text + model id + dimension 生成 content hash |
+| `OpenChat/Core/WorldBook/WorldBookRecallModels.swift` | `WorldBookEmbeddingStatus`、recall result/entry/trace/reason/omission DTO |
+| `OpenChat/Core/WorldBook/WorldBookSource.swift` | keyword candidates + semantic KNN 候选融合，输出 Chat prompt 当前轮预选条目 |
+| `OpenChat/Core/WorldBook/WorldBookVectorStore.swift` | `world_book_entry_embedding` upsert/search/delete/deleteAll |
+| `OpenChat/Core/Database/Records/WorldBookEntryEmbeddingMetaRecord.swift` | `world_book_entry_embedding_meta` GRDB Record |
 
 ## 3. 数据层级关系
 
@@ -48,11 +62,23 @@ WorldBook (世界书)
 ]
 ```
 
-## 4. 关键词触发机制
+## 4. 世界书召回机制
+
+> 当前 Chat prompt 主链路已在 2026-05-16 Phase C 接入 `WorldBookSource`。Phase A/B 已落地世界书向量表、meta 表、`WorldBookVectorStore`、embedding text/hash 与 existing world-book rebuild/backfill indexer；Phase C 已落地 semantic + keyword 融合、Chat prompt 兼容接入；Phase D 已落地 CRUD/import/delete/eraseAllData 维护和 Data Management 手动 rebuild。
 
 ### 4.1 触发时机
 
-在 PromptAssembler 拼装 prompt 时执行关键词匹配：
+在 Chat 生成回复时执行世界书召回：
+
+1. `ChatViewModel` 根据角色卡 `worldBookId` 读取当前世界书和条目。
+2. 对当前 world book 执行 bounded `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)`；失败只记录 warning。
+3. `WorldBookSource` 收集当前上下文中的文本（最近 5 条消息 + 当前用户输入）
+4. keyword 路径检查条目的 keywords 是否出现在上下文文本中。
+5. semantic 路径用 `EmbeddingProvider.embed(..., isQuery: true)` 生成 query embedding，并通过 `WorldBookVectorStore.search(query:worldBookId:limit:)` 检索当前 worldBook 内 enabled 条目。
+6. 同一条目同时被 keyword 和 semantic 命中时去重并合并 reasons。
+7. 输出预选条目给 `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)`，避免 semantic-only entry 被二次 keyword 过滤。
+
+旧 keyword fallback path 仍保留给直接调用 `PromptAssembler.preview(...)` / `assemble(...)` 的旧调用方：
 
 1. 收集当前上下文中的文本（最近 N 条消息 + 当前用户输入）
 2. 遍历当前会话绑定的世界书中所有已启用条目
@@ -92,8 +118,15 @@ struct KeywordMatcher {
 ### 4.4 token 预算
 
 - 世界书条目共享一个 token 预算池（由 PromptEngine 的 TokenBudget 分配）
-- 按 priority 降序逐条扣减预算
+- Chat 主链路按 `WorldBookSource` 输出顺序逐条扣减预算；fallback keyword path 按 priority 降序
 - 预算耗尽时停止注入，低优先级条目被丢弃
+
+### 4.5 keyword + semantic 融合规则
+
+- disabled world book / disabled entry 不进入候选。
+- keyword-only、semantic-only、keyword+semantic 都可以进入 recall result。
+- semantic embedding/vector 失败时 trace 写 `semanticUnavailable`，结果 fallback 到 keyword-only。
+- 排序稳定：keyword+semantic > keyword-only > semantic-only；同组内按 semantic rank、keyword rank、priority、updatedAt、title tie-break。
 
 ## 5. 视图设计
 
@@ -298,25 +331,33 @@ final class WorldBookListViewModel {
 ```swift
 @Observable
 final class WorldBookEditorViewModel {
+    private let databaseManager: DatabaseManager
+    private let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
+
     // 世界书基本信息
     var name: String = ""
     var description: String = ""
 
     // 条目列表
     private(set) var entries: [WorldBookEntryRecord] = []
-    var searchText: String = ""
-    var filteredEntries: [WorldBookEntryRecord]
+    var errorMessage: String?
+    var indexingWarningMessage: String?
 
     let editingWorldBook: WorldBookRecord?  // nil = 创建模式
+    var currentWorldBookId: String?
 
     func loadEntries() async
-    func saveWorldBook() async throws -> WorldBookRecord
-    func deleteEntry(_ id: String) async throws
-    func toggleEntryEnabled(_ id: String) async throws
-    func importEntries(from text: String) async throws -> [WorldBookImportFormat.ParsedEntry]
-    func confirmImport(_ entries: [WorldBookImportFormat.ParsedEntry]) async throws
+    func loadCharacters() async
+    func save() async throws -> WorldBookRecord
+    func saveEntry(_ entry: WorldBookEntryRecord) async throws
+    func importEntries(_ parsedEntries: [WorldBookImportFormat.ParsedEntry]) async throws -> WorldBookImportResult
 }
 ```
+
+Phase D 行为：
+
+- `saveEntry(_:)` 内容保存优先；保存成功后调用 `WorldBookEmbeddingIndexer.index(entry:)`。index 失败不会阻止 entry 保存，会展示 `indexingWarningMessage` 并由 indexer 写 `failed` meta。
+- `importEntries(_:)` 先保存 worldBook，再批量保存 entries，之后调用 `index(entries:)` 并统一 reload entries；新建世界书导入后会复用已保存 id，避免后续保存重复创建 worldBook。
 
 ## 8. 与其他模块的交互
 
@@ -324,12 +365,65 @@ final class WorldBookEditorViewModel {
 |---|---|
 | `CharacterCard` | 角色卡通过 `worldBookId` 归属于世界书，世界书详情页展示归属角色列表，支持跨世界导入角色 |
 | `Conversation` | 对话不再直接关联世界书，世界书通过角色卡间接关联到对话 |
-| `PromptEngine` | 拼装时通过角色卡的 worldBookId 查询已启用条目 → KeywordMatcher 匹配 → 按 priority 注入 |
+| `PromptEngine` | Chat 主链路传入 `WorldBookSource` 已预选条目；PromptAssembler 只负责 `[World Book Entries]` block 生成与预算裁剪，旧调用方仍有 keyword fallback |
 | `Chat` | ChatView 中可查看当前绑定的世界书和触发的条目（调试用） |
+
+## 8.1 世界书向量化 Phase A/B/C/D 当前实现
+
+当前源码已追加：
+
+- `v15_create_world_book_entry_embedding`：创建 sqlite-vec virtual table `world_book_entry_embedding(entry_id, embedding float[384])`。
+- `v16_create_world_book_entry_embedding_meta`：创建普通表 `world_book_entry_embedding_meta`，字段包括 `contentHash`、`embeddingModel`、`embeddingDimension`、`status`、`embeddedAt`、`lastAttemptAt`、`lastError`、`updatedAt`，并建立 status/model 索引。
+- `WorldBookVectorStore.upsert(entryId:embedding:)`：维度校验后先删旧向量再插入新向量。
+- `WorldBookVectorStore.upsert(entryId:embedding:meta:)`：在同一 `DatabaseManager.write` 内写入向量和 indexed meta。
+- `WorldBookVectorStore.search(query:worldBookId:limit:)`：先限定当前 `worldBookId` 且 `isEnabled = 1` 的 entries，再执行 sqlite-vec KNN。
+- `WorldBookVectorStore.delete(entryId:)` / `deleteAll(worldBookId:)`：删除向量和 meta。
+- `DatabaseManager.deleteWorldBookEntryEmbedding(...)` / `deleteWorldBookEntryEmbeddings(...)`：底层 cleanup helper。
+- `WorldBookEmbeddingTextBuilder.text(for:)`：输出 `Title:`、`Keywords:`、`Content:` 三段稳定文本；title/content/keyword item 会 trim，keywords JSON decode 失败抛 `WorldBookError.invalidKeywords(...)`。
+- `WorldBookEntryHasher.hash(...)`：对 embedding text、`EmbeddingService.embeddingModelId` 和 `EmbeddingService.embeddingDimension` 生成 SHA-256 content hash；priority、isEnabled、position、updatedAt 不进入 hash。
+- `WorldBookEmbeddingIndexer.index(entry:)`：若 meta 为 `indexed` 且 hash/model/dimension 均一致则跳过；否则事务外生成 passage embedding，再用同一 write 写向量和 indexed meta。
+- `WorldBookEmbeddingIndexer.rebuildAllMissingOrStale(limit:)` / `rebuildMissingOrStale(worldBookId:limit:)`：扫描 existing `world_book_entry`，把无 meta、failed、needs_rebuild 或 hash/model/dimension mismatch 的条目向量化；单条失败继续后续条目并写 `failed` meta，不删除用户 entry。
+- `WorldBookEmbeddingIndexer.markNeedsRebuild(entryId:reason:)`：写入或更新 `needs_rebuild` meta，供后续 CRUD/import wiring 复用。
+- `DependencyContainer` 共享同一个 `EmbeddingService` 给 `MemoryManager` 与 `WorldBookEmbeddingIndexer`，避免生产路径重复 lazy-load CoreML model/tokenizer。
+- `WorldBookRecallModels.swift`：定义 `WorldBookRecallResult`、`WorldBookRecallEntry`、`WorldBookRecallTrace`、reason 和 omission DTO。
+- `WorldBookSource.recallEntries(...)`：融合 keyword candidates 与 semantic candidates，处理 duplicate、disabled、limitExceeded、semanticUnavailable、staleEmbedding trace。
+- `ChatViewModel.generateResponse(...)`：在 prompt preview 前执行 bounded lazy rebuild + `WorldBookSource.recallEntries(...)`，并让 preview/assemble 使用同一批 recalled entries。
+- `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)`：消费已经预选的世界书条目，只做 block 生成和 token 预算裁剪。
+- `WorldBookEditorViewModel.saveEntry(_:)` / `importEntries(_:)`：保存世界书内容后维护或标记 world book semantic index；index 失败不回滚用户内容。
+- `DatabaseManager.deleteWorldBookEntry(id:)` / `deleteWorldBook(id:)`：删除业务 record 前显式清理 sqlite-vec virtual table 和 meta。
+- `DatabaseManager.eraseAllData(...)`：清理 Memory vector 后同步清理 world book vector/meta。
+- `SettingsViewModel.rebuildWorldBookSemanticIndex()` + `DataManagementView`：Data Management 手动 rebuild existing world book semantic index。
+
+当前没有实现：
+
+- `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
+
+实现证据：
+
+- `OpenChat/App/DependencyContainer.swift`
+- `OpenChat/Core/Database/Migrations.swift`
+- `OpenChat/Core/Database/Records/WorldBookEntryEmbeddingMetaRecord.swift`
+- `OpenChat/Core/Memory/EmbeddingService.swift`
+- `OpenChat/Core/WorldBook/WorldBookEmbeddingIndexer.swift`
+- `OpenChat/Core/WorldBook/WorldBookEmbeddingTextBuilder.swift`
+- `OpenChat/Core/WorldBook/WorldBookEntryHasher.swift`
+- `OpenChat/Core/WorldBook/WorldBookRecallModels.swift`
+- `OpenChat/Core/WorldBook/WorldBookSource.swift`
+- `OpenChat/Core/WorldBook/WorldBookVectorStore.swift`
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookEmbeddingIndexerTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookEmbeddingTextBuilderTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookEntryHasherTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`
+- `OpenChatTests/Core/WorldBookTests/WorldBookVectorStoreTests.swift`
+- `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`
 
 ## 9. Background 目标架构
 
-当前世界书由 `PromptAssembler` 通过关键词触发直接注入 `[World Book Entries]`。目标 Background 架构中，世界书会变成 `WorldBookBackgroundSource`：
+当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。目标 Background 架构中，世界书会变成 `WorldBookBackgroundSource`：
 
 ```text
 WorldBookEntryRecord

@@ -15,9 +15,11 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。Swift Testing 最新报告 `251 tests in 46 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。
+结果：成功。实际设备 iOS 26.5 `iPhone 17 Pro`，Swift Testing 最新报告 `289 tests in 54 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。同日一次早先 full-suite 重试在 `EmbeddingServiceTests.test_embedding_outputs_384_finite_normalized_values` 处出现 app bundle 内 `MultilingualE5Small.mlmodelc` runtime lookup 失败；随后 `EmbeddingServiceTests` 4 tests / 1 suite passed，后续 full suite 281 tests / 51 suites 和最终 full suite 289 tests / 54 suites 均通过。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 251 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression 与 compression mode 测试均已纳入当前基线。2026-05-16 又补充了 Phase D focused coverage 与 full-suite closeout：reflect DTO contract 与 Responses `[Memories]` request-shape。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 289 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression、compression mode 与 WorldBook Vectorization Phase A/B/C/D 测试均已纳入当前基线。2026-05-16 又补充了 Phase D focused coverage 与 full-suite closeout：reflect DTO contract 与 Responses `[Memories]` request-shape；同日补充了世界书向量化 Phase A/B/C schema、vector store、embedding text/hash、indexer/backfill、WorldBookSource、Chat semantic prompt path、CRUD/import/delete/eraseAllData lifecycle maintenance 和 Data Management 手动 rebuild coverage。
+
+2026-05-16 世界书向量化 Phase A 追加验证：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759'` 在 iOS 26.5 `iPhone 17` 通过，结果为 `261 tests in 47 suites passed`，`** TEST SUCCEEDED **`。
 
 ## 总体结论
 
@@ -25,7 +27,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 |---|---|---|
 | `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路当前输入重复风险已有 Feature 级测试覆盖，但仍缺少 UI 自动化测试。 |
 | `arch-src` | 局部不一致 | Prompt 时间格式、Memory 目录/触发时机、migration 约束已按当前源码回写；Feature 分层说明仍有漂移，留待 Task 6。 |
-| `arch-test` | 基本一致 | 测试数量已回写为 251；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses request-shape 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 289；Prompt 四层顺序、migration 源码约束、Chat 当前输入去重、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses request-shape、WorldBook Vectorization Phase A/B/C/D 可靠性已补测试，Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -34,10 +36,11 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖四层顺序、labeled context blocks、ISO8601 时间位于 Current Turn；Chat 发送链路覆盖 API request 四层顺序和当前输入去重。 |
 | ContextManager | 一致 | 一致 | Truncation、CompressionPolicy、source hash、PreparedHistory、CompressionSummarizer、CheckpointCompactor、checkpoint reuse 与 fallback 均有测试覆盖；Prompt 端到端仍通过 Chat 发送链路测试间接覆盖。 |
-| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；Phase D closeout full suite 为 251 tests / 46 suites。 |
+| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；当前 full suite 为 289 tests / 54 suites。 |
+| WorldBook Vectorization Phase A/B/C/D | 一致 | 一致 | `Migrations.swift` v15/v16、`WorldBookEntryEmbeddingMetaRecord`、`WorldBookVectorStore`、`WorldBookEmbeddingTextBuilder`、`WorldBookEntryHasher`、`WorldBookEmbeddingIndexer`、`WorldBookSource`、editor save/import lifecycle wiring、delete cleanup、eraseAllData cleanup 和 Data Management 手动 rebuild 已与 `arch/data-model.md`、`arch/modules/world-book.md`、`arch/modules/background/world-book-vectorization.md`、`arch/modules/background/sources.md`、`arch/modules/prompt-assembly.md` 同步；`MigrationTests`、`WorldBookVectorStoreTests`、`WorldBookEmbeddingTextBuilderTests`、`WorldBookEntryHasherTests`、`WorldBookEmbeddingIndexerTests`、`WorldBookSourceTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests`、`WorldBookEditorViewModelTests`、`DatabaseManagerWorldBookTests`、`SettingsViewModelWorldBookIndexTests`、`CriticalSaveFlowTests` 覆盖 schema、索引、cascade、worldBook-scoped KNN、disabled entry 过滤、delete、invalid dimension、text/hash、existing-entry rebuild/backfill、fresh skip、hash mismatch reindex、failure meta、batch continue、keyword + semantic recall、semantic-only prompt 注入、block 兼容、save/import indexing、index failure non-blocking、delete/erase cleanup 和 manual rebuild。BackgroundWorker / BackgroundPacket 仍为后续边界。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
-| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 251 tests，Settings UI/manual 覆盖仍需后续验收。 |
+| Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 289 tests；Data Management 世界书 semantic index 手动 rebuild 已有 ViewModel 测试覆盖，其他 Settings UI/manual 路径仍需后续验收。 |
 
 ## 关键不一致
 
@@ -170,13 +173,13 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 7. arch 中测试数量和状态说明回写
 
-结论：2026-04-30 该轮曾把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试已纳入当时基线。当前全局基线见本文顶部的 251 tests。
+结论：2026-04-30 该轮曾把基线回写为 197 tests；API-client 对齐测试、Prompt 四层顺序测试、Memory embedding/vector/retrieval 可靠性测试和 compression mode 测试已纳入当时基线。当前全局基线见本文顶部的 289 tests。
 
 证据：
 
-- `arch/index.md` 当前已回写为“251 个 Swift Testing 测试全部通过”。
-- `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（251 个）”。
-- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与当前 251-test full suite 结果。
+- `arch/index.md` 当前已回写为“289 个 Swift Testing 测试 / 54 个 suites 全部通过”。
+- `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（289 个 / 54 suites）”。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与该计划波次的 251-test full suite 历史结果；当前全局基线见本文顶部的 289-test full suite。
 - `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
@@ -188,10 +191,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：251 tests passed。
+1. 当前工作区能编译并通过全量 Swift Testing：289 tests passed。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
 3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重、Responses `[Memories]` folding 与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试，retain v2 provenance/dedupe/source validation 和 reflect DTO contract 已有测试覆盖；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、migration 约束、checkpoint compression/compression mode 语义和 251-test 基线；Feature 边界漂移留待后续分层修复计划。
+4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、WorldBook Vectorization Phase A/B/C/D、migration 约束、checkpoint compression/compression mode 语义和 289-test 基线；Feature 边界漂移留待后续分层修复计划。
 
 ## 修复顺序状态
 
@@ -201,7 +204,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Prompt 四层顺序与 Current-Turn Context | Closed：统一为四层顺序，PromptAssemblerTests 与 ChatViewModelPromptAssemblyTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回前置同步提取、onDisappear 兜底、sortOrder cutoff 增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 251 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 289 tests 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
@@ -306,3 +309,123 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - Broader focused suite：49 tests / 5 suites passed。
 - Full suite：225 tests / 45 suites passed，`** TEST SUCCEEDED **`。
 - 2026-05-14 22:49-22:52 +0800 重新执行同一 B 阶段 focused、broader focused 和 full suite，结果仍为 28 / 49 / 225 tests 全部通过。
+
+## WorldBook Vectorization Phase A 三边一致性写回（2026-05-16）
+
+范围：`OpenChat/Core/Database/Migrations.swift`、`OpenChat/Core/Database/Records/WorldBookEntryEmbeddingMetaRecord.swift`、`OpenChat/Core/Database/DatabaseManager+Content.swift`、`OpenChat/Core/WorldBook/*`、`OpenChatTests/Core/DatabaseTests/MigrationTests.swift`、`OpenChatTests/Core/WorldBookTests/WorldBookVectorStoreTests.swift`、世界书向量化相关 arch/plan 文档。
+
+### arch-src
+
+- `arch/data-model.md` 已新增 `world_book_entry_embedding` 和 `world_book_entry_embedding_meta`，字段与 v15/v16 migration 和 `WorldBookEntryEmbeddingMetaRecord` 一致。
+- `arch/source-tree.md` 已新增 `Core/WorldBook` 与 `WorldBookEntryEmbeddingMetaRecord`。
+- `arch/modules/world-book.md` 已记录 Phase A 当前能力：schema、meta record、`WorldBookVectorStore`，并明确 B/C/D 当时未实现；B/C 已在后续同日写回中完成。
+- `arch/modules/background/world-book-vectorization.md` 和 `arch/modules/background/sources.md` 已从“完全未实现”更新为“Phase A 已实现，Background/Source 当时未实现”；C 已在后续同日写回中完成。
+- `arch/modules/prompt-assembly.md` 已明确 Prompt 输出形态未变；semantic-only 世界书条目在后续 Phase C 已进入 prompt。
+
+### arch-test
+
+- `MigrationTests` 覆盖 v15 table、384 维 vector insert、v16 columns、status/model index、meta cascade，并把 `EmbeddingService.` 加入 migration runtime reference forbidden list。
+- `WorldBookVectorStoreTests` 覆盖 upsert、KNN 限定当前 worldBook、disabled entry 过滤、delete 同步清理 vector/meta、invalid dimension 不写入。
+
+### src-test
+
+- Baseline focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 62 tests / 4 suites passed。
+- Phase A focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests'`，结果 39 tests / 2 suites passed。
+- Phase A broader focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 72 tests / 5 suites passed。
+- Full suite command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759'`，实际设备 iOS 26.5 `iPhone 17`，结果 261 tests / 47 suites passed，`** TEST SUCCEEDED **`。
+- 同日一次 `iPhone 17 Pro` full-suite 尝试在测试体执行前被 Simulator 拒绝启动，错误为 `Busy ("Application failed preflight checks")`；换用上述 `iPhone 17` 设备后通过。
+
+### 未完成边界
+
+- Phase B：embedding text builder、hash、indexer/backfill 已在后续同日写回中完成。
+- Phase C 已在后续同日写回中完成。
+- 当时边界：D 阶段 lifecycle maintenance 不在 Phase A 范围；当前已由后续 Phase D 写回关闭，见本文 `WorldBook Vectorization Phase D 三边一致性写回`。
+
+## WorldBook Vectorization Phase B 三边一致性写回（2026-05-16）
+
+范围：`OpenChat/App/DependencyContainer.swift`、`OpenChat/Core/Memory/EmbeddingService.swift`、`OpenChat/Core/WorldBook/WorldBookEmbeddingTextBuilder.swift`、`WorldBookEntryHasher.swift`、`WorldBookEmbeddingIndexer.swift`、`WorldBookVectorStore.swift`、`OpenChatTests/Core/WorldBookTests/*`、世界书向量化相关 arch/plan 文档。
+
+### arch-src
+
+- `arch/modules/world-book.md` 已从 Phase A 更新为 Phase A/B 当前能力：stable embedding text、content hash、indexer/backfill、failed meta 和 `DependencyContainer` 共享 embedding service。
+- `arch/modules/background/world-book-vectorization.md` 已把 indexer/backfill 从未实现目标改为当前源码事实，同时保留当时未实现的 Background、WorldBookSource、Chat semantic recall、CRUD/import/delete wiring；WorldBookSource / Chat semantic recall 已在后续 Phase C 写回中完成。
+- `arch/modules/memory/embedding-vector-store.md` 已记录 `EmbeddingService.embeddingModelId == "multilingual-e5-small-384:v1"`，以及 Memory 与 WorldBook 共用 `EmbeddingProvider` / E5 passage embedding。
+- `arch/source-tree.md`、`arch/data-model.md`、`arch/modules/background/sources.md` 已同步新增 Phase B 文件和现有边界。
+
+### arch-test
+
+- `WorldBookEmbeddingTextBuilderTests` 覆盖 title/keywords/content trim 拼接、空 keywords 兼容和 bad keywords JSON typed error。
+- `WorldBookEntryHasherTests` 覆盖 hash 稳定性、title/keywords/content 变化会变、priority/isEnabled/position/updatedAt 不影响 hash。
+- `WorldBookEmbeddingIndexerTests` 覆盖 migration 后 existing entries backfill、fresh meta skip、hash mismatch reindex、embedding failure 写 failed meta 不删除 entry、bad keywords JSON 写 failed meta、batch rebuild 单条失败后继续。
+
+### src-test
+
+- Phase B focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests'`，结果 12 tests / 3 suites passed，`** TEST SUCCEEDED **`。
+- Phase B broader focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 84 tests / 8 suites passed，`** TEST SUCCEEDED **`。
+- Full suite command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759'`，实际设备 iOS 26.5 `iPhone 17`，结果 273 tests / 50 suites passed，`** TEST SUCCEEDED **`。
+- 同日一次 `iPhone 17 Pro` full-suite 尝试在测试体执行前被 Simulator 拒绝启动，错误为 `Busy ("Application failed preflight checks")`；换用上述 `iPhone 17` 设备后通过。
+
+### 未完成边界
+
+- Phase C 已在后续同日写回中完成。
+- 当时边界：D 阶段 lifecycle maintenance 不在 Phase B 范围；当前已由后续 Phase D 写回关闭。
+
+## WorldBook Vectorization Phase C 三边一致性写回（2026-05-16）
+
+范围：`OpenChat/Core/WorldBook/WorldBookRecallModels.swift`、`WorldBookSource.swift`、`OpenChat/Core/PromptEngine/PromptAssembler.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`、`ChatViewModel+Support.swift`、`OpenChat/App/DependencyContainer.swift`、`OpenChat/ContentView.swift`、`OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`、`PromptAssemblerTests.swift`、`ChatViewModelPromptAssemblyTests.swift`、世界书向量化相关 arch/plan 文档。
+
+### arch-src
+
+- `arch/modules/world-book.md` 已记录 `WorldBookSource` keyword + semantic 融合、bounded lazy rebuild、preselected prompt path；后续 Phase D 写回已补充 save/import/delete/eraseAllData lifecycle maintenance。
+- `arch/modules/prompt-assembly.md` 已记录 Chat 主链路使用 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)`，旧调用方保留 keyword fallback。
+- `arch/modules/background/sources.md` 与 `arch/modules/background/world-book-vectorization.md` 已把 Phase C 从未实现目标更新为当前源码事实，同时保留 BackgroundWorker 未实现。
+- `arch/data-model.md` 在该阶段记录 Phase A-C source reality；后续 Phase D 写回已补充 CRUD/import/delete/eraseAllData 当前实现。
+- `.github/instructions/prompt-engine.instructions.md` 已同步规则：PromptAssembler 不做 embedding/KNN/DB 访问，Chat 主链路消费 WorldBookSource 预选条目。
+
+### arch-test
+
+- `WorldBookSourceTests` 覆盖 keyword-only、semantic-only、keyword+semantic duplicate merge、disabled world book、disabled entry、semantic failure fallback。
+- `PromptAssemblerTests` 覆盖 semantic candidate 仍输出兼容 `[World Book Entries]` block。
+- `ChatViewModelPromptAssemblyTests` 覆盖 semantic-only world book entry 通过真实 Chat 主链路进入 API request。
+
+### src-test
+
+- Baseline focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 67 tests / 4 suites passed。
+- Phase C focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 34 tests / 3 suites passed，`** TEST SUCCEEDED **`。
+- Phase A/B/C broader focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 92 tests / 9 suites passed，`** TEST SUCCEEDED **`。
+- Full suite command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，实际设备 iOS 26.5 `iPhone 17 Pro`，结果 281 tests / 51 suites passed，`** TEST SUCCEEDED **`。
+- 同日一次 full-suite 重试在 `EmbeddingServiceTests.test_embedding_outputs_384_finite_normalized_values` 处出现 app bundle 内 `MultilingualE5Small.mlmodelc` runtime lookup 失败；随后 `EmbeddingServiceTests` 4 tests / 1 suite passed，最终 full suite 281 tests / 51 suites passed。当前未复现为稳定失败。
+
+### 未完成边界
+
+- 当时边界：Chat lazy rebuild 能补 existing/missing/stale，但该阶段尚未负责 CRUD/delete 清理；当前已由后续 Phase D 写回关闭。
+- BackgroundWorker / BackgroundPacket 未切换；Prompt 输出仍是 `[World Book Entries]`。
+
+## WorldBook Vectorization Phase D 三边一致性写回（2026-05-16）
+
+范围：`DatabaseManager` cleanup、WorldBook editor save/import、Settings Data Management rebuild、Phase D focused tests、世界书向量化相关 arch/harness 文档。
+
+### arch-src
+
+- `arch/data-model.md` 已把世界书向量化状态更新为 Phase A-D 当前实现，并记录 delete / eraseAllData 不能只依赖 FK cascade，必须显式清理 sqlite-vec virtual table。
+- `arch/modules/world-book.md` 已记录 `WorldBookEditorViewModel.saveEntry(_:)` / `importEntries(_:)` 的 non-blocking indexing policy、delete/clear cleanup 和 Data Management rebuild 入口。
+- `arch/modules/background/world-book-vectorization.md` 与 `arch/modules/background/sources.md` 已把 CRUD/import/delete/eraseAllData 从 Phase D 目标更新为当前源码事实，同时保留 BackgroundWorker / BackgroundPacket 未实现边界。
+
+### arch-test
+
+- `WorldBookEditorViewModelTests` 覆盖 save entry 后 index、index failure 保留 entry、import batch save/index、新建 worldBook import 后复用已保存 id。
+- `DatabaseManagerWorldBookTests` 覆盖 delete entry、delete worldBook、eraseAllData 不留下 vector/meta 残留。
+- `SettingsViewModelWorldBookIndexTests` 覆盖手动 rebuild 可 backfill existing entries。
+- `CriticalSaveFlowTests` 继续覆盖 editor save 不允许 `try?` 静默 dismiss。
+
+### src-test
+
+- Baseline focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'`，结果 69 tests / 4 suites passed。
+- Phase D focused command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/DatabaseManagerWorldBookTests' '-only-testing:OpenChatTests/CriticalSaveFlowTests' '-only-testing:OpenChatTests/SettingsViewModelWorldBookIndexTests'`，结果 9 tests / 4 suites passed，`** TEST SUCCEEDED **`。
+- Final A/B/C/D focused acceptance command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/WorldBookVectorStoreTests' '-only-testing:OpenChatTests/WorldBookEmbeddingTextBuilderTests' '-only-testing:OpenChatTests/WorldBookEntryHasherTests' '-only-testing:OpenChatTests/WorldBookEmbeddingIndexerTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/WorldBookEditorViewModelTests' '-only-testing:OpenChatTests/DatabaseManagerWorldBookTests' '-only-testing:OpenChatTests/CriticalSaveFlowTests' '-only-testing:OpenChatTests/SettingsViewModelWorldBookIndexTests'`，结果 94 tests / 12 suites passed，`** TEST SUCCEEDED **`。
+- Full suite command：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`，实际设备 iOS 26.5 `iPhone 17 Pro`，结果 289 tests / 54 suites passed，`** TEST SUCCEEDED **`。
+
+### 未完成边界
+
+- BackgroundWorker / BackgroundPacket / WorldBookBackgroundSource 统一调度仍未实现。
+- Prompt 输出仍是兼容 `[World Book Entries]` block；当前 Phase D 只关闭 lifecycle maintenance，不改变 prompt packet contract。

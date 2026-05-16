@@ -7,7 +7,7 @@
 
 - 将角色卡、世界书、会话历史、用户输入按规定顺序拼装为完整的 `[ChatMessage]` 数组
 - Token 计数与预算分配
-- 世界书条目的关键词匹配与动态注入
+- 世界书条目的动态注入；Chat 主链路消费 `WorldBookSource` 预选结果，旧调用方保留关键词 fallback
 - 以端点最大上下文 token 数的 40% 作为 prompt 预算目标，并与 ContextManager 协作控制历史窗口
 
 ## 2. 文件清单与职责
@@ -34,11 +34,13 @@
 |   4 | Stable Conversation State | system           | compressed context                | `ContextManager` compression checkpoint summary                                | 动态段 | 无 checkpoint summary 时跳过                                       |
 |   5 | Stable Conversation State | user / assistant | checkpoint 后会话历史                  | `ContextManager` 返回的 checkpoint 后 `processedHistory`                           | 动态段 | 不包含本轮当前输入                                                      |
 |   6 | Current-Turn Context      | system           | example dialogs block             | `characterCard.exampleDialogs`                                                 | 可选段 | 以带标签的 system block 注入，不再作为原始 user/assistant 示例消息注入             |
-|   7 | Current-Turn Context      | system           | world book entries block          | 当前输入 + 最近历史触发的世界书条目                                                            | 动态段 | 按 `priority` 降序；目标顺序不再暴露 `after_system` / `before_history` 注入点 |
+|   7 | Current-Turn Context      | system           | world book entries block          | `WorldBookSource` 根据当前输入 + 最近历史输出的 keyword/semantic 预选条目；旧调用方可走 keyword fallback | 动态段 | Phase C 已允许 semantic-only 条目进入同一 `[World Book Entries]` block；PromptAssembler 不访问 DB/embedding/KNN |
 |   8 | Current-Turn Context      | system           | memories block                    | `MemoryManager.retrieveMemories(...)` 按当前输入检索返回的记忆                             | 动态段 | 按检索结果顺序和 token 预算裁剪；不按 `importance` 重排                       |
 |   9 | Current Turn              | user             | current user input + time context | `currentInput` + `PromptAssembler.makeTimeContext()`                           | 固定段 | 同一条 user message 内先放用户输入，再放 `[Time] <ISO8601> [/Time]`         |
 
 旧的 `WorldBookEntryPosition.after_system` / `.before_history` 字段保留为既有数据兼容字段，不再决定最终 prompt 位置。所有当前轮命中的世界书内容最终统一落入 Current-Turn Context 的 world book block。
+
+2026-05-16 世界书向量化 Phase A/B 已新增 `world_book_entry_embedding`、`world_book_entry_embedding_meta`、`WorldBookVectorStore`、embedding text/hash 和 `WorldBookEmbeddingIndexer` backfill 能力；Phase C 已新增 `WorldBookSource` 并接入 Chat 主链路。Prompt 输出形态没有改变：keyword-only、semantic-only、keyword+semantic 条目仍统一进入 `[World Book Entries]` block。
 
 ### 默认 system prompt 模板
 
@@ -166,6 +168,14 @@ struct PromptAssembler {
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> AssemblyResult
+
+    /// Chat 主链路在 WorldBookSource 已完成 keyword/semantic 融合后使用。
+    /// 此路径不会再次执行 KeywordMatcher，避免 semantic-only entries 被二次过滤。
+    static func previewWithPreselectedWorldBookEntries(...)
+        -> PromptAssemblyPreview
+
+    static func assembleWithPreselectedWorldBookEntries(...)
+        -> AssemblyResult
 }
 
 struct PromptAssemblyPreview: Sendable {
@@ -297,14 +307,12 @@ function preview(conversation, characterCard, worldBook, entries, memories, hist
         + optional(slowPlotMessage)
 
     // 2. Current-Turn Context 候选
-    contextText = concatText(history.suffix(5), input)
-    triggeredWorldBookEntries = entries
-        .filter { $0.isEnabled }
-        .filter { KeywordMatcher.isTriggered($0, contextText) }
-        .sorted { $0.priority > $1.priority }
+    // Chat 主链路传入 WorldBookSource 已预选和排序的 entries。
+    // 旧 preview/assemble 调用方仍通过 KeywordMatcher fallback。
+    selectedWorldBookEntries = preselectedEntries ?? keywordTriggeredEntries(history, input, entries)
 
     exampleDialogBlock = makeExampleDialogsBlock(characterCard.exampleDialogMessages())
-    worldBookBlock = makeWorldBookBlock(triggeredWorldBookEntries)
+    worldBookBlock = makeWorldBookBlock(selectedWorldBookEntries)
     memoryBlock = makeMemoryBlock(memories) // preserve retrieval order
 
     // 3. Current Turn
@@ -354,10 +362,12 @@ function assemble(..., processedHistory, input):
 
 1. 若 `sendMessage()` 本轮会持久化用户消息，先保存 user record，再读取 DB 中当前会话消息。
 2. `makePromptHistoryMessages(...)` 从历史候选中移除本轮 user record；重新生成/编辑等不持久化入口会按最后一条同内容 user 消息做兜底过滤。
-3. `MemoryManager.retrieveMemories(for:query:limit:)` 按当前输入检索角色相关记忆；若语义检索失败，`MemoryManager` 内部会 fallback 到角色近期记忆，外层失败则记录 warning 并继续空 memory。
-4. `PromptAssembler.preview(...)` 使用过滤后的 `promptHistoryMessages` 与 `currentInput` 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
-5. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 只处理过滤后的历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
-6. `PromptAssembler.assemble(... processedHistory: ...)` 再次调用 `preview(...)` 得到同一类上下文，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
+3. `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 对当前 world book 做 bounded lazy rebuild；失败记录 warning，不阻断当前回复。
+4. `WorldBookSource.recallEntries(...)` 基于 `promptHistoryMessages + currentInput` 输出 keyword + semantic 融合后的 world book entries；semantic unavailable 时 fallback 到 keyword-only。
+5. `MemoryManager.retrieveMemories(for:query:limit:)` 按当前输入检索角色相关记忆；若语义检索失败，`MemoryManager` 内部会 fallback 到角色近期记忆，外层失败则记录 warning 并继续空 memory。
+6. `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` 使用同一批 recalled world book entries 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
+7. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 只处理过滤后的历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
+8. `PromptAssembler.assembleWithPreselectedWorldBookEntries(... processedHistory: ...)` 再次使用同一批 recalled world book entries，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
 
 ## 7. 与其他模块的交互
 
@@ -366,27 +376,30 @@ function assemble(..., processedHistory, input):
 | `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、MemoryEntryRecord、ConversationRecord |
 | `Core/ContextManager` | PromptAssembler.preview 先计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens；ContextManager 据此处理历史消息（剔除/压缩）；PromptAssembler.assemble 接收 processedHistory |
 | `Core/Memory` | MemoryManager 检索记忆后传入 PromptAssembler |
-| `Features/Chat` | ChatViewModel 在发送消息时调用 `PromptAssembler.preview(...)` 和 `PromptAssembler.assemble(...)` |
+| `Core/WorldBook` | WorldBookSource 在进入 PromptAssembler 前完成 keyword + semantic 召回融合 |
+| `Features/Chat` | ChatViewModel 在发送消息时调用 `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` 和 `PromptAssembler.assembleWithPreselectedWorldBookEntries(...)`；无 WorldBookSource 的旧构造回退到 keyword path |
 | `Shared/Extensions` | `String.approximatedTokenCount` 委托 `TokenCounter.count(_:)`，供其他层复用同一估算 |
 
 ## 8. 设计决策
 
 1. **40% 上下文预算**：参考用户需求，控制在 40% 以内以保持小模型对当前对话的专注度
 2. **四层顺序稳定**：先放 Stable Identity，再放 Stable Conversation State，再放 Current-Turn Context，最后放 Current Turn，避免当前轮检索信息打断角色身份或历史连续性
-3. **动态世界书注入**：不全量注入世界书，仅注入当前输入 + 最近历史关键词命中的条目，节省 token
+3. **动态世界书注入**：不全量注入世界书；Chat 主链路注入 `WorldBookSource` 输出的 keyword/semantic 相关条目，旧调用方保留 keyword fallback，节省 token
 4. **示例对话降级为 labeled system block**：示例对话只表达风格参考，不再伪装成真实 user/assistant 历史，避免污染会话状态
 5. **近似 token 计数**：避免引入重型依赖（tiktoken），用近似算法覆盖 90%+ 场景。CJK 文本的误差通过预留余量吸收
 6. **预算分配弹性**：历史消息获得最大弹性空间，因为对话质量主要取决于近期上下文
 7. **可选段可裁剪**：当 token 紧张时，示例对话优先被裁剪，因为其作用是引导风格而非提供关键信息
 8. **慢速剧情推进模式（beta）**：作为条件固定段注入，默认开启，会话级可关闭。提示词内容固定存储于 AppConstants，不可用户编辑。isRequired=false 但 priority=.max（开启时不被裁剪）
 
-## 当前实现证据（更新于 2026-04-30）
+## 当前实现证据（更新于 2026-05-16）
 
 - 代码位置：
   - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — `PromptAssemblyPreview` 输出 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`。
-  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(...)` 计算四层结构、`fixedTokens` / `historyBudget`；`assemble(...)` 输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(...)` / `assemble(...)` 保留 keyword fallback；`previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 消费 `WorldBookSource` 已预选条目；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+  - `OpenChat/Core/WorldBook/WorldBookSource.swift` — keyword candidates + semantic KNN 融合，semantic unavailable fallback 到 keyword-only。
+  - `OpenChat/Core/WorldBook/WorldBookRecallModels.swift` — recall trace / reason / omission DTO。
   - `OpenChat/Core/PromptEngine/PromptSegment.swift` — 使用 `.exampleDialogsBlock(String)` 与 `.currentTurn(String)` 表达目标语义；time context 不再是独立 segment。
-  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `preview -> prepareHistory -> assemble`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `WorldBookSource.recallEntries -> previewWithPreselectedWorldBookEntries -> prepareHistory -> assembleWithPreselectedWorldBookEntries`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
@@ -395,20 +408,21 @@ function assemble(..., processedHistory, input):
   - `OpenChat/Core/Database/Migrations.swift` — v7_add_slow_plot_mode 迁移
   - `OpenChat/Core/ContextManager/PreparedHistory.swift` — compression checkpoint 通过 `[Previously]` system message 进入 Stable Conversation State。
 - 已验证测试：
-  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、preview 四层输出、labeled example/world book/memory blocks、世界书 position 兼容、current turn 内时间上下文）
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、preview 四层输出、labeled example/world book/memory blocks、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
+  - `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`（覆盖 keyword-only、semantic-only、keyword+semantic duplicate merge、disabled world/entry、semantic failure fallback）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
-  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
+  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、semantic world book entry 进入 `[World Book Entries]` block、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
   - `OpenChatTests/Core/ContextManagerTests/CompressionCheckpointReuseTests.swift`
 - 当前实现描述：
-  - 世界书触发上下文使用 `recentMessages.suffix(5) + currentInput`，其中 `recentMessages` 应排除本轮当前输入。
+  - Chat 主链路的世界书候选由 `WorldBookSource` 使用 `recentMessages.suffix(5) + currentInput` 生成 keyword context 和 semantic query，其中 `recentMessages` 应排除本轮当前输入。
+  - `PromptAssembler` 不访问数据库、不调用 embedding/KNN；它只消费调用方传入的世界书条目，生成 block 并按预算裁剪。
   - 示例对话以 `[Example Dialogs]` labeled system block 注入，位于 Stable Conversation State 之后。
   - 世界书条目统一进入 `[World Book Entries]` block，不再按 `after_system` / `before_history` 拆分最终位置。
   - 记忆条目统一进入 `[Memories]` block，位于 world book block 之后。
   - 时间上下文位于最后一条 current turn user message 内，用户输入在前，`[Time] <ISO8601> [/Time]` 在后。
-  - `assemble(...)` 只接收 ContextManager 已处理的 `processedHistory`，不会自行截断或压缩历史。
+  - `assemble(...)` / `assembleWithPreselectedWorldBookEntries(...)` 只接收 ContextManager 已处理的 `processedHistory`，不会自行截断或压缩历史。
 - 验证记录：
   - `harness/2026.04.30/checkpoint-compression/evidence.txt`
   - `arch/AntiEntropy/triangle-consistency.md#checkpoint-compression-三边一致性写回2026-04-30`
-  - 2026-04-30 focused prompt suite：`PromptAssemblerTests` 13 tests passed。
-  - 2026-04-30 focused chat prompt suite：`ChatViewModelPromptAssemblyTests` 9 tests passed。
+  - 2026-05-16 Phase C focused suite：`WorldBookSourceTests` + `PromptAssemblerTests` + `ChatViewModelPromptAssemblyTests`，34 tests / 3 suites passed，`** TEST SUCCEEDED **`。

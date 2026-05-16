@@ -98,23 +98,33 @@ OpenChat/
 │   │   ├── TruncationStrategy.swift        # 对话剔除：FIFO 删除最早消息
 │   │   └── CompressionStrategy.swift       # 对话压缩：调用外部 API 压缩
 │   │
-│   ├── Memory/
-│   │   ├── EmbeddingService.swift          # CoreML MultilingualE5Small 嵌入模型推理
-│   │   ├── VectorStore.swift               # sqlite-vec 向量存储封装（插入/KNN检索/删除）
-│   │   ├── MemoryManager.swift             # 记忆提取与检索编排
-│   │   └── MemoryError.swift               # 记忆模块统一错误类型
-│   │
-│   └── Database/
-│       ├── DatabaseManager.swift           # GRDB DatabaseQueue 初始化与迁移
-│       ├── Migrations.swift                # 数据库版本迁移定义
-│       └── Records/
+	│   ├── Memory/
+	│   │   ├── EmbeddingService.swift          # CoreML MultilingualE5Small 嵌入模型推理
+	│   │   ├── VectorStore.swift               # sqlite-vec 向量存储封装（插入/KNN检索/删除）
+	│   │   ├── MemoryManager.swift             # 记忆提取与检索编排
+	│   │   └── MemoryError.swift               # 记忆模块统一错误类型
+	│   │
+	│   ├── WorldBook/
+	│   │   ├── WorldBookEmbeddingIndexer.swift # 世界书条目 embedding index / rebuild / failed meta
+	│   │   ├── WorldBookEmbeddingTextBuilder.swift # title/keywords/content 稳定拼接
+	│   │   ├── WorldBookError.swift            # 世界书 Core 层 typed error
+	│   │   ├── WorldBookEntryHasher.swift      # embedding text + model + dimension hash
+	│   │   ├── WorldBookRecallModels.swift     # 世界书 embedding 状态、recall result/trace DTO
+	│   │   ├── WorldBookSource.swift           # keyword + semantic 世界书候选融合召回
+	│   │   └── WorldBookVectorStore.swift      # world_book_entry_embedding 写入/KNN/删除
+	│   │
+	│   └── Database/
+	│       ├── DatabaseManager.swift           # GRDB DatabaseQueue 初始化与迁移
+	│       ├── Migrations.swift                # 数据库版本迁移定义
+	│       └── Records/
 │           ├── CharacterCardRecord.swift   # GRDB Record：角色卡
 │           ├── WorldBookRecord.swift       # GRDB Record：世界书
 │           ├── WorldBookEntryRecord.swift  # GRDB Record：世界书条目
-│           ├── ConversationRecord.swift    # GRDB Record：会话
-│           ├── MessageRecord.swift         # GRDB Record：消息
-│           ├── MemoryEntryRecord.swift     # GRDB Record：记忆条目
-│           ├── APIEndpointRecord.swift     # GRDB Record：API 端点配置
+	│           ├── ConversationRecord.swift    # GRDB Record：会话
+	│           ├── MessageRecord.swift         # GRDB Record：消息
+	│           ├── MemoryEntryRecord.swift     # GRDB Record：记忆条目
+	│           ├── WorldBookEntryEmbeddingMetaRecord.swift # GRDB Record：世界书向量元数据
+	│           ├── APIEndpointRecord.swift     # GRDB Record：API 端点配置
 │           ├── EndpointModelRecord.swift   # GRDB Record：端点模型配置（apiMode / providerDialect）
 │           └── RecordCoders.swift          # Record JSON 编解码辅助
 │
@@ -157,7 +167,7 @@ OpenChat/
 | 库 | 用途 | 引入层 |
 |---|---|---|
 | **GRDB.swift** | SQLite ORM + 迁移 | Core/Database |
-| **sqlite-vec** | 向量相似度搜索 | Core/Memory |
+| **sqlite-vec** | 向量相似度搜索 | Core/Memory, Core/WorldBook |
 | *(可选) swift-markdown-ui* | Markdown 渲染 | Shared/Components |
 
 > 项目倾向于最小化第三方依赖，网络层和 SSE 解析均使用系统原生 API。

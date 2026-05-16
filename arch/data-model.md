@@ -192,6 +192,68 @@ struct WorldBookEntryRecord: Codable, FetchableRecord, PersistableRecord {
 }
 ```
 
+**向量嵌入（Phase A-D 已实现）**：世界书条目的向量存储在 sqlite-vec 虚拟表 `world_book_entry_embedding` 中（见迁移 v15），索引审计状态存储在 `world_book_entry_embedding_meta` 中（见迁移 v16）。Phase B 提供 stable embedding text、content hash、existing-entry rebuild/backfill indexer 和 `WorldBookVectorStore` KNN 能力；Phase C 通过 `WorldBookSource` 把 keyword + semantic 融合结果接入 Chat prompt，仍输出兼容的 `[World Book Entries]` block；Phase D 已把 save/import/delete/eraseAllData 与 Data Management 手动 rebuild 接入 indexer / cleanup 链路。
+
+---
+
+### 4b. world_book_entry_embedding — 世界书条目向量
+
+sqlite-vec virtual table，存储世界书条目的 384 维 embedding。
+
+```sql
+CREATE VIRTUAL TABLE world_book_entry_embedding USING vec0(
+    entry_id TEXT PRIMARY KEY,
+    embedding float[384]
+);
+```
+
+说明：
+
+- `entry_id` 对应 `world_book_entry.id`，但 sqlite-vec virtual table 不依赖 FK cascade。
+- `WorldBookVectorStore.search(query:worldBookId:limit:)` 必须先把候选限定到当前 `worldBookId` 且 `isEnabled = 1` 的条目，再执行 KNN。
+- 删除 entry/worldBook 时必须显式清理 virtual table；Phase D 已将 `DatabaseManager.deleteWorldBookEntry(...)`、`deleteWorldBook(...)` 和 `eraseAllData(...)` 接入 `world_book_entry_embedding` / meta cleanup，不能只依赖 FK cascade。
+- Phase B `WorldBookEmbeddingIndexer` 成功 index 时会在同一 `DatabaseManager.write` 内写入 vector row 和 `indexed` meta；失败时写 `failed` meta，不删除用户的 `world_book_entry`。
+
+---
+
+### 4c. world_book_entry_embedding_meta — 世界书条目向量元数据
+
+普通表，用于可审计增量重建和已导入世界书 backfill。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| entryId | TEXT | PK, FK → world_book_entry.id, ON DELETE CASCADE | 对应世界书条目 |
+| contentHash | TEXT | NOT NULL | title / keywords / content 规范化后的内容 hash |
+| embeddingModel | TEXT | NOT NULL | 生成 embedding 的模型标识 |
+| embeddingDimension | INTEGER | NOT NULL | 当前为 384 |
+| status | TEXT | NOT NULL | `indexed` / `needs_rebuild` / `failed` |
+| embeddedAt | TEXT | | 成功索引时间 |
+| lastAttemptAt | TEXT | | 最近一次索引尝试时间 |
+| lastError | TEXT | | 最近失败原因 |
+| updatedAt | TEXT | NOT NULL | 元数据更新时间 |
+
+**索引**：
+
+- `idx_world_book_entry_embedding_meta_status`
+- `idx_world_book_entry_embedding_meta_model`
+
+**Swift Record**：
+
+```swift
+struct WorldBookEntryEmbeddingMetaRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "world_book_entry_embedding_meta"
+    var entryId: String
+    var contentHash: String
+    var embeddingModel: String
+    var embeddingDimension: Int
+    var status: String
+    var embeddedAt: Date?
+    var lastAttemptAt: Date?
+    var lastError: String?
+    var updatedAt: Date
+}
+```
+
 ---
 
 ### 5. conversation — 会话
@@ -736,6 +798,58 @@ migrator.registerMigration("v12_add_compression_mode_to_conversation") { db in
     }
 }
 ```
+
+### v13_add_last_extracted_sort_order
+
+为 `conversation` 添加 `lastExtractedSortOrder`，记录记忆提取已处理到的 message sortOrder。历史会话默认 `NULL`，首次提取按全量候选处理。
+
+### v14_create_memory_entry_provenance
+
+新增 `memory_entry_provenance` companion table，记录记忆提取 source range、source message ids、dedupe key、confidence、tags 和 prompt version。该表通过 `memoryEntryId` 级联到 `memory_entry`。
+
+### v15_create_world_book_entry_embedding
+
+新增世界书条目 sqlite-vec virtual table。该 migration 只建 schema，不执行 CoreML embedding 或 backfill。
+
+```swift
+migrator.registerMigration("v15_create_world_book_entry_embedding") { db in
+    try db.execute(sql: """
+        CREATE VIRTUAL TABLE \(Historical.worldBookEntryEmbeddingTable) USING vec0(
+            entry_id TEXT PRIMARY KEY,
+            embedding float[\(Historical.embeddingDimension)]
+        )
+    """)
+}
+```
+
+### v16_create_world_book_entry_embedding_meta
+
+新增世界书 embedding meta 表，用于 `indexed` / `needs_rebuild` / `failed` 状态审计和增量重建依据。Phase B indexer 以该表判断 fresh/missing/stale，并在成功或失败后更新对应状态。
+
+```swift
+migrator.registerMigration("v16_create_world_book_entry_embedding_meta") { db in
+    try db.create(table: Historical.worldBookEntryEmbeddingMetaTable) { t in
+        t.column("entryId", .text).notNull().primaryKey()
+            .references(Historical.worldBookEntryTable, onDelete: .cascade)
+        t.column("contentHash", .text).notNull()
+        t.column("embeddingModel", .text).notNull()
+        t.column("embeddingDimension", .integer).notNull()
+        t.column("status", .text).notNull()
+        t.column("embeddedAt", .datetime)
+        t.column("lastAttemptAt", .datetime)
+        t.column("lastError", .text)
+        t.column("updatedAt", .datetime).notNull()
+    }
+}
+```
+
+实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` 使用 `Historical.worldBookEntryEmbeddingTable`、`Historical.worldBookEntryEmbeddingMetaTable` 和 migration-local `Historical.embeddingDimension`。
+- `OpenChat/Core/Database/Records/WorldBookEntryEmbeddingMetaRecord.swift` 定义 meta Record。
+- `OpenChat/Core/WorldBook/WorldBookVectorStore.swift` 提供 upsert/search/delete/deleteAll，search 限定 `worldBookId` 和 enabled entries。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 v15/v16 schema、索引、cascade 和 migration forbidden references。
+- `OpenChatTests/Core/WorldBookTests/WorldBookVectorStoreTests.swift` 覆盖 upsert、worldBook 范围限定、disabled entry 过滤、delete 和维度错误无部分写入。
 
 ---
 

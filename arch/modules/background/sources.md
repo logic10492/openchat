@@ -1,6 +1,6 @@
 # BackgroundSource 统一候选来源
 
-> 状态：目标架构规划，尚未实现。
+> 状态：BackgroundWorker 目标架构规划尚未实现；`WorldBookSource` keyword + semantic 最小闭环已在 2026-05-16 Phase C 落地。
 
 ## 1. Source 类型
 
@@ -28,7 +28,9 @@ enum BackgroundSourceType: String, Codable, Sendable {
 
 ## 3. WorldBookBackgroundSource
 
-来源：`world_book_entry` + 目标 `world_book_entry_embedding`。
+来源：`world_book_entry` + 当前已存在的 `world_book_entry_embedding`。
+
+当前状态：2026-05-16 Phase A/B 已实现 schema、meta record、`WorldBookVectorStore`、embedding text/hash 和 `WorldBookEmbeddingIndexer` rebuild/backfill；Phase C 已实现 `WorldBookSource`，Chat prompt 主链路会先执行 bounded rebuild，再召回 keyword + semantic 融合候选，并继续输出 `[World Book Entries]`；Phase D 已实现 save/import/delete/eraseAllData 维护和 Data Management 手动 rebuild。`WorldBookBackgroundSource` / `BackgroundWorker` 统一调度仍未实现。
 
 职责：
 
@@ -38,6 +40,33 @@ enum BackgroundSourceType: String, Codable, Sendable {
 - 返回 `BackgroundCandidate(sourceType: .worldBook)`。
 
 WorldBook 的 `position` 字段继续作为旧数据兼容字段，不参与最终 prompt 位置决策。
+
+Phase A 实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` v15/v16 创建 `world_book_entry_embedding` 与 `world_book_entry_embedding_meta`。
+- `OpenChat/Core/WorldBook/WorldBookVectorStore.swift` 的 KNN 查询限定当前 `worldBookId` 且过滤 disabled entries。
+- `OpenChatTests/Core/WorldBookTests/WorldBookVectorStoreTests.swift` 覆盖 worldBook 范围限定与 disabled entry 过滤。
+
+Phase B 实现证据：
+
+- `OpenChat/Core/WorldBook/WorldBookEmbeddingTextBuilder.swift` / `WorldBookEntryHasher.swift` / `WorldBookEmbeddingIndexer.swift`。
+- `OpenChat/App/DependencyContainer.swift`：Memory 与 WorldBook 共享 `EmbeddingService`。
+- `OpenChatTests/Core/WorldBookTests/WorldBookEmbeddingTextBuilderTests.swift`、`WorldBookEntryHasherTests.swift`、`WorldBookEmbeddingIndexerTests.swift`。
+
+Phase D 实现证据：
+
+- `OpenChat/Features/WorldBook/ViewModels/WorldBookEditorViewModel.swift`：entry save/import 后调用 `WorldBookEmbeddingIndexer`。
+- `OpenChat/Core/Database/DatabaseManager+Content.swift` / `DatabaseManager.swift`：delete 和 eraseAllData 显式清理 vector/meta。
+- `OpenChat/Features/Settings/ViewModels/SettingsViewModel.swift` / `DataManagementView.swift`：手动 rebuild 世界书语义索引。
+- `OpenChatTests/Features/WorldBookTests/WorldBookEditorViewModelTests.swift`、`OpenChatTests/Core/DatabaseTests/DatabaseManagerWorldBookTests.swift`、`OpenChatTests/Features/SettingsTests/SettingsViewModelWorldBookIndexTests.swift`。
+
+Phase C 实现证据：
+
+- `OpenChat/Core/WorldBook/WorldBookRecallModels.swift`：recall result、entry、trace、reason、omission DTO。
+- `OpenChat/Core/WorldBook/WorldBookSource.swift`：keyword candidates、semantic KNN、duplicate merge、disabled filter、semantic unavailable fallback。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：Chat 主链路先调用 bounded `rebuildMissingOrStale(worldBookId:limit:)`，再把 recalled entries 传入 preselected prompt path。
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`：保留 keyword fallback，同时新增 preselected world book entry path，避免 semantic-only entries 被二次 keyword 过滤。
+- `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`、`OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`。
 
 ## 4. CharacterBackgroundSource
 
