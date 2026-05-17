@@ -1,0 +1,169 @@
+Background Source Tools Phase 4 Evidence
+Date: 2026-05-17
+Scope: docs/superpowers/plans/2026-05-17-background-source-tools/
+
+Workspace status observed:
+git status --short
+
+Initial result before source landing:
+?? comp_swap/
+?? docs/superpowers/plans/2026-05-17-background-source-tools/
+
+Relevant final status:
+M OpenChat.xcodeproj/project.pbxproj
+M OpenChat.xcodeproj/xcshareddata/xcschemes/OpenChat.xcscheme
+M arch/AntiEntropy/propagation-audit.md
+M arch/modules/background/architecture.md
+M arch/modules/background/migration-plan.md
+M arch/modules/background/sources.md
+M arch/modules/memory/index.md
+M arch/modules/memory/retrieval-prompt.md
+M arch/modules/world-book.md
+?? OpenChat/Core/Background/
+?? OpenChat/Core/Memory/MemoryRecallTool.swift
+?? OpenChat/Core/WorldBook/WorldBookRecallTool.swift
+?? OpenChatTests/Core/BackgroundTests/
+?? OpenChatTests/Core/MemoryTests/MemoryRecallToolTests.swift
+?? OpenChatTests/Core/WorldBookTests/WorldBookRecallToolTests.swift
+?? comp_swap/
+?? docs/superpowers/plans/2026-05-17-background-source-tools/
+?? harness/2026.05.17/background-source-tools/
+
+Current Phase 4 source files on disk:
+OpenChat/Core/Background/BackgroundSourceTool.swift
+OpenChat/Core/Background/MemoryBackgroundSource.swift
+OpenChat/Core/Background/WorldBookBackgroundSource.swift
+OpenChat/Core/Memory/MemoryRecallTool.swift
+OpenChat/Core/WorldBook/WorldBookRecallTool.swift
+OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift
+OpenChatTests/Core/MemoryTests/MemoryRecallToolTests.swift
+OpenChatTests/Core/WorldBookTests/WorldBookRecallToolTests.swift
+
+Project membership evidence:
+- OpenChat.xcodeproj/project.pbxproj references BackgroundSourceTool.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references MemoryBackgroundSource.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references WorldBookBackgroundSource.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references MemoryRecallTool.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references WorldBookRecallTool.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references BackgroundSourceTests.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references MemoryRecallToolTests.swift in Sources.
+- OpenChat.xcodeproj/project.pbxproj references WorldBookRecallToolTests.swift in Sources.
+
+Live source anchors checked:
+- OpenChat/Core/Background/BackgroundSourceTool.swift:
+  - Defines BackgroundSourceType, BackgroundSourceTool, BackgroundToolDiagnostics, BackgroundRequest, BackgroundSource and BackgroundCandidate.
+  - BackgroundRequest carries worldBookEntries because WorldBookSource is read-only and receives entries from its caller.
+  - No BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler is defined here.
+- OpenChat/Core/Memory/MemoryRecallTool.swift:
+  - Defines MemoryRecallToolInput, MemoryRecallProviding and MemoryRecallTool.
+  - MemoryRecallTool conforms to BackgroundSourceTool and only calls provider.recallMemories(for:query:limit:).
+- OpenChat/Core/WorldBook/WorldBookRecallTool.swift:
+  - Defines WorldBookRecallSource, WorldBookRecallToolInput and WorldBookRecallTool.
+  - WorldBookRecallTool conforms to BackgroundSourceTool and only calls source.recallEntries(...).
+  - It does not call WorldBookEmbeddingIndexer or trigger rebuild.
+- OpenChat/Core/Background/MemoryBackgroundSource.swift:
+  - Maps MemoryRecallResult.entries to BackgroundCandidate in result order.
+  - Records trace metadata including fallback, selected ids, omitted ids and rank fields.
+  - Provides init(tool:) for MemoryRecallTool.
+- OpenChat/Core/Background/WorldBookBackgroundSource.swift:
+  - Maps WorldBookRecallResult.entries to BackgroundCandidate in result order.
+  - Records trace metadata including selected ids, omissions, keyword/semantic ranks and fallback when semanticUnavailable appears.
+  - Provides init(tool:) for WorldBookRecallTool.
+- OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift:
+  - Chat still calls memoryManager.retrieveMemories(...).
+  - Chat still calls worldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:) before WorldBookSource recall.
+  - Chat still passes recalled entries and memories to PromptAssembler compatibility APIs.
+- OpenChat/Core/PromptEngine/PromptAssembler.swift:
+  - PromptAssembler still owns compatible [Memories] and [World Book Entries] block generation.
+
+Baseline focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+
+Result:
+Swift Testing: 58 tests in 6 suites passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_03-23-27-+0800.xcresult
+
+Intermediate Phase 4A-4C plus regression focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+
+Result:
+Swift Testing: 68 tests in 8 suites passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_03-27-54-+0800.xcresult
+
+Adapter focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/BackgroundSourceTests'
+
+Initial attempt using destination name iPhone 17 Pro failed before executing test bodies:
+Simulator preflight Busy ("Application failed preflight checks").
+
+Retry result:
+Swift Testing: 6 tests in 1 suite passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_03-33-58-+0800.xcresult
+
+Phase 4 closeout focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+
+Result:
+Swift Testing: 74 tests in 9 suites passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_03-34-38-+0800.xcresult
+
+Full suite command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result:
+Swift Testing: 319 tests in 61 suites passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_03-38-59-+0800.xcresult
+
+Verified behavior:
+- MemoryRecallTool forwards input to recallMemories and preserves result order, finalRank, semantic/keyword/recency ranks, reasons, selected ids, omitted ids and fallback.
+- MemoryRecallTool limit 0 passes through the provider's empty recall result.
+- WorldBookRecallTool forwards input to recallEntries and preserves keyword-only, semantic-only, hybrid, disabled, semanticUnavailable, staleEmbedding and limit/duplicate omission traces.
+- WorldBookRecallTool exposes sourceType .worldBook through BackgroundSourceTool.
+- WorldBookRecallTool test verifies there is no indexer/rebuild dependency in the tool wrapper.
+- MemoryBackgroundSource preserves MemoryRecallResult order, maps source-prefixed ids, basePriority, relevance, recency and trace metadata, and returns empty without calling recall when no character boundary exists.
+- WorldBookBackgroundSource preserves WorldBookRecallResult order, maps source-prefixed ids, basePriority, relevance, recency and trace/omission metadata, passes nil worldBook through, and does not trim by token budget.
+- Regression tests kept existing MemoryManager, WorldBookSource, PromptAssembler, ChatViewModel prompt assembly and AgentPolicy / DeterministicAgentExecutor behavior green.
+
+Non-goals confirmed:
+- BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler are not implemented.
+- PromptAssembler has not switched to BackgroundPacket.
+- ChatViewModel has not switched to BackgroundManager.prepare(...).
+- Compatible [Memories] and [World Book Entries] output remains the current runtime behavior.
+- No database migration was added.
+- No signing settings were manually changed.
+
+Signing/project config:
+- PRODUCT_BUNDLE_IDENTIFIER remains fukujusou.openchat.com for app and com.openchat.app.tests for tests.
+- DEVELOPMENT_TEAM remains GZAC7644XS.
+- CODE_SIGN_STYLE remains Automatic.
+- scripts/generate_xcodeproj.rb was not modified.
+
+Drift audit rerun:
+- No forbidden source surface diff was observed for ChatViewModel+Support.swift, PromptAssembler.swift, WorldBookEmbeddingIndexer.swift, Migrations.swift, Core/Networking, Features/Settings or Features/WorldBook.
+- No BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler Swift runtime definitions were found under OpenChat or OpenChatTests.
+- Documentation drift was repaired in the plan README, Background/Mem/AntiEntropy status docs and current full-suite baseline docs.
+
+Rerun Phase 4 closeout focused command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+
+Rerun result:
+Swift Testing: 74 tests in 9 suites passed.
+xcodebuild: ** TEST SUCCEEDED **
+
+xcresult:
+/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_04-22-06-+0800.xcresult

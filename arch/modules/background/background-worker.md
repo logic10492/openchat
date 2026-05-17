@@ -1,6 +1,6 @@
 # BackgroundWorker / 后台员工
 
-> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在，可作为后续 consumer contract；BackgroundWorker runtime / `Core/Background` DTO / `BackgroundPacket` 尚未实现。
+> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在，可作为后续 consumer contract；Phase 4A-4D source tools / adapters 已落地；BackgroundWorker runtime / `BackgroundPacket` 尚未实现。
 
 ## 1. 定义
 
@@ -8,9 +8,9 @@
 
 实现上，BackgroundWorker 应是 `AgentCore` 的受限 consumer：复用 `AgentPolicy`、capability 和 diagnostics contract，但第一阶段只启用 deterministic capability，不调用 LLM、不联网、不写数据库。
 
-2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.backgroundWorkerDefault()`，`OpenChat/Core/AgentCore/DeterministicAgentExecutor.swift` 已提供 deterministic executor 的 capability / network / database write denial。AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。后续 BackgroundWorker 只能复用这些 contract，不能临时扩大权限。
+2026-05-17 AgentCore closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.backgroundWorkerDefault()`，`OpenChat/Core/AgentCore/DeterministicAgentExecutor.swift` 已提供 deterministic executor 的 capability / network / database write denial。AgentCore focused tests 12 tests / 4 suites passed，当时 full suite 303 tests / 58 suites passed；Background Source Tools Phase 4A-4D 后当前全局 full-suite 基线为 319 tests / 61 suites passed。后续 BackgroundWorker 只能复用这些 contract，不能临时扩大权限。
 
-接入顺序：BackgroundWorker 不直接接 raw Memory / WorldBook 内部实现。下一步应先暴露 `MemoryRecallTool` / `WorldBookRecallTool` 或等价内部 read-only source tool，再由 `MemoryBackgroundSource` / `WorldBookBackgroundSource` 把 tool result 转成 `BackgroundCandidate`。BackgroundWorker 只处理候选和预算，不复制 Memory / WorldBook 的召回排序。
+接入顺序：BackgroundWorker 不直接接 raw Memory / WorldBook 内部实现。2026-05-17 Phase 4A-4D 已暴露 `MemoryRecallTool` / `WorldBookRecallTool` 内部 read-only source tool，并由 `MemoryBackgroundSource` / `WorldBookBackgroundSource` 把 tool result 转成 `BackgroundCandidate`。BackgroundWorker 后续只处理候选和预算，不复制 Memory / WorldBook 的召回排序。
 
 中文命名建议：
 

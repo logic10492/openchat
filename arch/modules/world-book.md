@@ -396,7 +396,12 @@ Phase D 行为：
 
 当前没有实现：
 
-- `WorldBookRecallTool` / `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
+- `BackgroundWorker` / `BackgroundPacket` / 统一调度尚未实现；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
+
+2026-05-17 Phase 4C/4D 已实现：
+
+- `WorldBookRecallTool` 作为 read-only `BackgroundSourceTool` wrapper 落地并通过 focused pass-through tests。
+- `WorldBookBackgroundSource` 已进入 Xcode target；`BackgroundSourceTests` 覆盖 recall result 到 `BackgroundCandidate(sourceType: .worldBook)` 的顺序、metadata、nil worldBook 透传和不按 token budget 裁剪。
 
 实现证据：
 
@@ -423,7 +428,7 @@ Phase D 行为：
 
 ## 9. Background 目标架构
 
-当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。目标 Background 架构中，世界书会先暴露内部 read-only `WorldBookRecallTool`，再变成 `WorldBookBackgroundSource`：
+当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。2026-05-17 Phase 4C/4D 已暴露内部 read-only `WorldBookRecallTool`，并由 `WorldBookBackgroundSource` 映射为 `BackgroundCandidate`；下一步仍是 `BackgroundWorker` / `BackgroundPacket` 统一调度：
 
 ```text
 WorldBookEntryRecord

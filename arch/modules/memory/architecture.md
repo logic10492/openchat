@@ -16,6 +16,8 @@ Memory 模块负责跨对话长期记忆，不负责同一会话的窗口压缩�
 |---|---|
 | `Core/Memory/MemoryManager.swift` | 提取与检索编排层；解析 LLM 返回的 `ExtractedMemory`；生成 `MemoryRecallResult` 并处理 fallback tiers |
 | `Core/Memory/MemoryRecallModels.swift` | recall result / entry / trace / fallback / omission DTO |
+| `Core/Memory/MemoryRecallTool.swift` | Background Phase 4B read-only source tool，只包装 `MemoryManager.recallMemories(...)` 并透传 `MemoryRecallResult` |
+| `Core/Background/MemoryBackgroundSource.swift` | Background Phase 4D adapter，把 `MemoryRecallResult.entries` / trace metadata 映射为 `BackgroundCandidate(sourceType: .memory)` |
 | `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 加载、tokenizer 调用、384 维向量生成 |
 | `Core/Memory/XLMRobertaTokenizer.swift` | 读取 `tokenizer.json`，生成固定长度 input IDs / attention mask |
 | `Core/Memory/VectorStore.swift` | sqlite-vec 插入、批量原子写入、KNN 检索、删除 |
@@ -73,7 +75,7 @@ Core/PromptEngine
 
 ## 6. Background 目标边界
 
-Background 目标架构中，Memory 不再直接进入 prompt，而是作为 `MemoryBackgroundSource` 产出候选条目：
+Background 目标架构中，Memory 不再直接进入 prompt，而是先作为 `MemoryBackgroundSource` 产出候选条目：
 
 ```text
 MemoryManager.recallMemories(...)
@@ -85,6 +87,6 @@ MemoryManager.recallMemories(...)
   -> BackgroundAssembler / PromptAssembler
 ```
 
-这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。改变的是 recall 结果的消费方：从 `PromptAssembler.trim(memories:)` 迁移到 Background 统一调度。
+这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。2026-05-17 Phase 4B/4D 已完成 `MemoryRecallTool` 与 `MemoryBackgroundSource` 的 source tool / adapter 层；Chat / Prompt 主链路尚未切换，当前产品运行时仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)`，再交给 `PromptAssembler` 注入 `[Memories]`。
 
-已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：先让 Memory 自己产出可解释的排序、fallback 和 omission 信息；下一步用 read-only `MemoryRecallTool` 暴露该 result；再把这些信息包装进 `BackgroundCandidate` metadata。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。
+已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：Memory 自己产出可解释的排序、fallback 和 omission 信息；read-only `MemoryRecallTool` 暴露该 result；`MemoryBackgroundSource` 再把这些信息包装进 `BackgroundCandidate` metadata。后续迁移点是 `BackgroundWorker` / `BackgroundPacket` / Chat-Prompt switch，而不是继续改 Memory 排序逻辑。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。

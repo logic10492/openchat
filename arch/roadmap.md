@@ -10,7 +10,7 @@
 - 自动化验证已通过：
   - `xcodebuild -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
   - `xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
-- 当前通过的 Swift Testing 测试（303 个 / 58 suites）覆盖：
+- 当前通过的 Swift Testing 测试（319 个 / 61 suites）覆盖：
   - `MigrationTests`
   - `SSEStreamParserTests` + `SSEParserTypedEventsTests`
   - `APIClientTests` + `APIClientResponsesModeTests`
@@ -54,6 +54,9 @@
   - `AgentPolicyTests`
   - `DeterministicAgentExecutorTests`
   - `AgentDiagnosticsTests`
+  - `MemoryRecallToolTests`
+  - `WorldBookRecallToolTests`
+  - `BackgroundSourceTests`
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
   - App 装配：`OpenChat/OpenChatApp.swift`、`OpenChat/App/DependencyContainer.swift`

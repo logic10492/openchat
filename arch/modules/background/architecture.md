@@ -1,6 +1,6 @@
 # Background 架构
 
-> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在；Memory / WorldBook source tool、Background runtime / DTO / worker 尚未实现。
+> 状态：部分实现。AgentCore foundation 已存在；Phase 4A-4D source tool contract、MemoryRecallTool、WorldBookRecallTool、MemoryBackgroundSource、WorldBookBackgroundSource 已落地并通过 focused tests。Background runtime / worker / packet / prompt switch 尚未实现。
 
 ## 1. 模块定位
 
@@ -63,6 +63,15 @@ AgentCore foundation
 
 `MemoryRecallTool` / `WorldBookRecallTool` 是内部 read-only source tool：它们包装当前已经存在的 recall result，不向普通角色开放 tool call，不触发用户可见输出，不写数据库。
 
+2026-05-17 Phase 4A-4D 当前实现证据：
+
+- `OpenChat/Core/Background/BackgroundSourceTool.swift`：`BackgroundSourceType`、`BackgroundSourceTool`、`BackgroundRequest`、`BackgroundSource`、`BackgroundCandidate` 已进入 Xcode target。
+- `OpenChat/Core/Memory/MemoryRecallTool.swift`：`MemoryRecallTool` 符合 `BackgroundSourceTool`，只转发到 `MemoryManager.recallMemories(...)`。
+- `OpenChat/Core/WorldBook/WorldBookRecallTool.swift`：`WorldBookRecallTool` 符合 `BackgroundSourceTool`，只转发到 `WorldBookSource.recallEntries(...)`。
+- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift`：只把 recall result 映射为 `BackgroundCandidate`，不复制 source 内部排序，不裁剪 token budget。
+- `OpenChatTests/Core/MemoryTests/MemoryRecallToolTests.swift`、`OpenChatTests/Core/WorldBookTests/WorldBookRecallToolTests.swift`：focused pass-through tests 覆盖顺序、rank/reason/trace/omission 透传。
+- `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift`：focused adapter tests 覆盖 candidate id prefix、顺序、metadata、request 边界和不按 token budget 裁剪。
+
 ## 2. 当前实现与目标差异
 
 | 领域 | 当前源码 | Background 目标 |
@@ -96,7 +105,7 @@ Core/PromptEngine
 - `BackgroundWorker` 不调用 UI，也不产生 `ChatMessage(role: "assistant")`。
 - `BackgroundWorker` 第一阶段只启用 deterministic capability，不调用 LLM、不联网、不写数据库。
 - `BackgroundWorker` 不直接调用 raw DB 写入或索引 rebuild；WorldBook bounded rebuild 仍属于既有 Chat / lifecycle 兼容链路，后续如迁移必须单独设计 side-effect boundary。
-- 2026-05-17 closeout 已验证 `AgentPolicy.backgroundWorkerDefault()`、`AgentDiagnostics` 和 `DeterministicAgentExecutor`；AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。这些可作为后续 `Core/Background` 的前置 contract。
+- 2026-05-17 AgentCore closeout 已验证 `AgentPolicy.backgroundWorkerDefault()`、`AgentDiagnostics` 和 `DeterministicAgentExecutor`；AgentCore focused tests 12 tests / 4 suites passed，当时 full suite 303 tests / 58 suites passed。Background Source Tools Phase 4A-4D 之后，当前全局 full-suite 基线已更新为 319 tests / 61 suites passed。这些可作为后续 `Core/Background` 的前置 contract。
 - `PromptAssembler` 可以消费 `BackgroundPacket` 或 `BackgroundPromptBlock`，但不负责召回和排序。
 - `WorldBook` 与 `Memory` 不再分别拥有最终 prompt 注入权。
 
@@ -107,9 +116,12 @@ struct BackgroundRequest: Sendable {
     let conversation: ConversationRecord
     let characterCard: CharacterCardRecord?
     let worldBook: WorldBookRecord?
+    let worldBookEntries: [WorldBookEntryRecord]
     let recentMessages: [MessageRecord]
     let currentInput: String
     let tokenBudget: Int
+    let memoryLimit: Int
+    let worldBookLimit: Int
 }
 
 protocol BackgroundSource: Sendable {
@@ -118,8 +130,11 @@ protocol BackgroundSource: Sendable {
 }
 
 protocol BackgroundSourceTool: Sendable {
-    associatedtype ToolOutput: Sendable
-    func call(for request: BackgroundRequest) async throws -> ToolOutput
+    associatedtype Input: Sendable
+    associatedtype Output: Sendable
+
+    var sourceType: BackgroundSourceType { get }
+    func call(_ input: Input) async throws -> Output
 }
 
 struct BackgroundCandidate: Identifiable, Sendable {

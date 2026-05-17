@@ -7,7 +7,7 @@ LibMan 是素材构建 agent，不是聊天 agent。它帮助用户查资料、�
 
 实现上，LibMan 应复用 `AgentCore`：显式启用 `llm`、`webSearch`、`userVisibleDraft` capability；数据库写入仍必须由用户确认流程触发，不由 LibMan 静默执行。
 
-2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.librarianDraftDefault()`，允许 `llm` / `webSearch` / `userVisibleDraft`，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。该实现只证明 AgentCore policy profile 已可用，不代表 LibMan、Exa broker 或写入流程已实现。
+2026-05-17 AgentCore closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.librarianDraftDefault()`，允许 `llm` / `webSearch` / `userVisibleDraft`，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。AgentCore focused tests 12 tests / 4 suites passed，当时 full suite 303 tests / 58 suites passed；Background Source Tools Phase 4A-4D 后当前全局 full-suite 基线为 319 tests / 61 suites passed。该实现只证明 AgentCore policy profile 已可用，不代表 LibMan、Exa broker 或写入流程已实现。
 
 ## 1. 职责
 

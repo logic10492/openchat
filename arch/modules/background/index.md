@@ -1,13 +1,13 @@
 # Background 系统
 
-> 状态：目标架构规划，尚未实现。
+> 状态：部分实现。Phase 4A-4D 已落地 Memory / WorldBook read-only source tools 与 BackgroundSource adapters；BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler / Chat-Prompt switch 尚未实现。
 > 目标：把 WorldBook、Memory、角色卡派生状态和会话状态统一整理为主聊天模型可消费的 background prompt。
 
 Background 系统不是新的对话角色，也不是让多个 agent 轮流发言。它把后台劳动拆给无发言权的 worker：它们只能选择、整理、排序和返回条目，最终回复仍由主聊天模型根据角色卡和当前输入生成。
 
 BackgroundWorker 后续应复用 `AgentCore` 的 identity、policy、diagnostics 和 execution result contract，但只启用 deterministic capability；这不会把对话角色 agent 化。
 
-顺序约束：BackgroundWorker 不应直接成为下一步实现入口。AgentCore foundation 之后，应先把 Memory 与 WorldBook 的现有召回能力暴露为内部 read-only source tool / adapter，再由 `BackgroundSource` 产出候选，最后实现 BackgroundWorker。这里的 tool 是后台源码边界，不是普通角色 tool call，也不是用户可见工具。
+顺序约束：BackgroundWorker 不应直接接 raw Memory / WorldBook 内部实现。2026-05-17 Phase 4A-4D 已先把 Memory 与 WorldBook 的现有召回能力暴露为内部 read-only source tool / adapter，再由 `BackgroundSource` 产出候选；下一步才是 deterministic BackgroundWorker。这里的 tool 是后台源码边界，不是普通角色 tool call，也不是用户可见工具。
 
 ## 1. 核心原则
 
@@ -16,7 +16,7 @@ BackgroundWorker 后续应复用 `AgentCore` 的 identity、policy、diagnostics
 3. **图书管理员不参与 RP 输出**：`LibMan` 可用 Exa 搜索帮助用户创建角色卡/世界书素材，但输出是可审阅草稿，不进入主聊天实时链路。
 4. **Prompt 文本确定性生成**：worker 返回 `BackgroundPacket`，最终 `[Background]` 文本由 deterministic assembler 生成。
 5. **AgentCore 不等于角色 agent 化**：`AgentCore` 是后台能力共享运行时基座；角色回复第一阶段保持自然流式文本，不给普通角色回复开放 tool call。
-6. **事实与计划分离**：当前源码仍是 WorldBook keyword + semantic selected entries block + Memory block 直接进入 `PromptAssembler`；本目录描述的是下一阶段改造方向。
+6. **事实与计划分离**：当前源码已具备 `MemoryRecallTool` / `WorldBookRecallTool` 与 source adapters，但运行时仍是 WorldBook keyword + semantic selected entries block + Memory block 直接进入 `PromptAssembler`；本目录的 worker / packet / prompt switch 仍描述下一阶段改造方向。
 
 ## 2. 目标数据流
 

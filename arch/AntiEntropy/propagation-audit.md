@@ -766,7 +766,7 @@ Prompt 兼容结论：
 ### 未完成边界
 
 - 当时边界：D 阶段 lifecycle maintenance 不在 Phase C 范围；当前已由后续 Phase D 写回关闭，见下方 `WorldBook Vectorization Phase D Incremental Audit`。
-- BackgroundWorker：`WorldBookBackgroundSource`、统一 BackgroundCandidate/BackgroundPacket 调度未实现。
+- BackgroundWorker：`WorldBookBackgroundSource` 后续已在 2026-05-17 Phase 4D 落地；统一 BackgroundCandidate 到 BackgroundPacket 的 worker 调度仍未实现。
 - 当前 `AssemblyResult.triggeredEntries` 名称仍保持兼容，实际可表示 selected world book entry ids；后续可独立重命名但本阶段未扩大 API churn。
 
 ## 2026-05-16 WorldBook Vectorization Phase D Incremental Audit
@@ -857,7 +857,7 @@ DataManagementView
 
 ### 未完成边界
 
-- `BackgroundWorker` / `BackgroundPacket` / `WorldBookBackgroundSource` 统一调度仍未实现。
+- `WorldBookBackgroundSource` 后续已在 2026-05-17 Phase 4D 落地；`BackgroundWorker` / `BackgroundPacket` 统一调度仍未实现。
 - Prompt 输出仍保持 `[World Book Entries]` 兼容 block；本阶段不切换 Background packet。
 
 ## AgentCore Foundation 增量传播审计（2026-05-17）
@@ -931,8 +931,8 @@ ChatViewModel.generateResponse
 
 ### 未完成边界
 
-- `Core/Background`、`BackgroundWorker`、`BackgroundPacket` 未实现。
-- `MemoryBackgroundSource` / `WorldBookBackgroundSource` 未实现。
+- 2026-05-17 Phase 4A-4D 已完成 `Core/Background` 的 source tool contract、`MemoryRecallTool`、`WorldBookRecallTool`、`MemoryBackgroundSource` 和 `WorldBookBackgroundSource`。
+- `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 未实现。
 - Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
 - `PromptAssembler` 未消费 `BackgroundPacket`。
 - Director runtime / LibMan runtime / Exa broker 未实现。
@@ -942,13 +942,13 @@ ChatViewModel.generateResponse
 
 范围：`PLANING.md`、`arch/modules/agent-core.md`、`arch/modules/background/*`、`arch/modules/memory/*`、`arch/modules/world-book.md`、`docs/superpowers/plans/2026-05-17-agent-core-foundation/*`。
 
-审计模式：docs-only 窄范围传播审计。触发原因是计划顺序修正：AgentCore foundation 已完成后，不应直接进入 `Core/Background` DTO / BackgroundWorker；应先暴露 Memory / WorldBook 的内部 read-only source tool。
+审计模式：docs-only 窄范围传播审计。触发原因是计划顺序修正：AgentCore foundation 已完成后，不应直接进入 `Core/Background` DTO / BackgroundWorker；应先暴露 Memory / WorldBook 的内部 read-only source tool。该段是 Phase 4A-4D 落地前的历史记录；当前 source tool / adapter 状态以后续 `Background Source Tools Phase 4 docs/harness baseline` 段为准。
 
 ### 静态传播面
 
 - 本次不修改 Swift 源码、Xcode project、数据库 migration、测试文件或资源。
 - 文档传播面限定在 Background / AgentCore / Memory / WorldBook 架构说明、AgentCore 计划包 closeout 文档和本 AntiEntropy 写回。
-- 现有源码事实保持不变：`MemoryManager.recallMemories(...)` 与 `WorldBookSource.recallEntries(...)` 是下一步 source tool 应包装的对象。
+- 当时源码事实保持不变：`MemoryManager.recallMemories(...)` 与 `WorldBookSource.recallEntries(...)` 是下一步 source tool 应包装的对象。后续 Phase 4A-4D 已完成对应 wrappers 和 adapters。
 
 ### 行为传播结论
 
@@ -983,14 +983,96 @@ AgentCore foundation
 
 ### 三边一致性
 
-- `arch-src`：文档已把“下一步直接 BackgroundWorker”修正为“先 source tool 暴露，再 Background DTO / worker”；未把 source tool 或 BackgroundWorker 写成当前已实现。
-- `arch-test`：本次无源码变更，不新增测试；仍沿用 AgentCore closeout 的 303 tests / 58 suites 基线作为上一轮实现证据。
-- `src-test`：未运行。docs-only 改动不改变 runtime；后续 source tool 计划包需要新增 focused tests。
+- `arch-src`：当时文档已把“下一步直接 BackgroundWorker”修正为“先 source tool 暴露，再 Background DTO / worker”；未提前把 source tool 或 BackgroundWorker 写成已实现。后续 Phase 4A-4D 段已把 source tool / adapter 更新为当前已实现。
+- `arch-test`：本次无源码变更，不新增测试；仍沿用 AgentCore closeout 的 303 tests / 58 suites 基线作为上一轮实现证据。后续 Phase 4A-4D 已补充 focused tests。
+- `src-test`：未运行。docs-only 改动不改变 runtime；后续 source tool 计划包需要新增 focused tests；该要求已在 2026-05-17 Phase 4A-4D closeout 中完成。
 
 ### 未完成边界
 
-- `MemoryRecallTool` / `WorldBookRecallTool` 未实现。
-- `Core/Background`、`BackgroundWorker`、`BackgroundPacket` 未实现。
-- `MemoryBackgroundSource` / `WorldBookBackgroundSource` 未实现。
+> 2026-05-17 后续 Phase 4A-4D 已完成 `MemoryRecallTool`、`WorldBookRecallTool`、`BackgroundSourceTool`、`MemoryBackgroundSource`、`WorldBookBackgroundSource` 和 focused tests。以下仅保留 Phase 5/6 仍未实现边界。
+
+- `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 未实现。
 - Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
 - `PromptAssembler` 未消费 `BackgroundPacket`。
+
+## Background Source Tools Phase 4 docs/harness baseline（2026-05-17）
+
+范围：`docs/superpowers/plans/2026-05-17-background-source-tools/`、`arch/modules/background/*`、`arch/modules/memory/*`、`arch/modules/world-book.md`、live Swift source anchors、`harness/2026.05.17/background-source-tools/`。
+
+审计模式：文档 / harness evidence 同步；docs lane 不主动修改 runtime source。执行中 concurrent source workers 落地了 Phase 4A-4D，本审计记录当前真实状态、target/test 证据和 Phase 5/6 后置边界，避免把 source tool / adapter pass 误读为 worker/prompt switch 已落地。
+
+### 静态传播面
+
+- `OpenChat/Core/Background/BackgroundSourceTool.swift` 已出现并进入 Xcode target。
+- `OpenChat/Core/Memory/MemoryRecallTool.swift` 已出现并进入 Xcode target。
+- `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已出现并进入 Xcode target。
+- `OpenChatTests/Core/MemoryTests/MemoryRecallToolTests.swift` 与 `OpenChatTests/Core/WorldBookTests/WorldBookRecallToolTests.swift` 已出现并进入 Xcode target。
+- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已出现并进入 Xcode target。
+- `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift` 已出现并进入 Xcode target。
+- 本轮实际写回新增 `harness/2026.05.17/background-source-tools/index.md` 与 `evidence.txt`，并更新本传播审计、Background migration plan 和相关 arch status。
+
+### 行为传播结论
+
+当前主聊天链路仍保持：
+
+```text
+ChatViewModel.generateResponse
+  -> MemoryManager.retrieveMemories(...)
+  -> WorldBookSource.recallEntries(...)
+  -> PromptAssembler.preview / assemble
+  -> ContextManager.prepareHistory
+  -> APIClient.streamMessage
+```
+
+已确认的可包装前置 contract：
+
+- `MemoryManager.recallMemories(...)` 返回 `MemoryRecallResult(entries, trace)`；trace 包含 candidate counts、selected ids、omitted 和 fallback。
+- `WorldBookSource.recallEntries(...)` 返回 `WorldBookRecallResult(entries, trace)`；trace 包含 keyword/semantic candidate counts、selected ids 和 omissions。
+- `MemoryRecallTool` 只调用 `MemoryManager.recallMemories(...)`，focused tests 覆盖 result order、rank、reasons、selected ids、omitted 和 fallback 透传。
+- `WorldBookRecallTool` 只调用 `WorldBookSource.recallEntries(...)`，focused tests 覆盖 keyword-only、semantic-only、hybrid、disabled、semanticUnavailable、staleEmbedding、limit/duplicate omission 透传和无 indexer/rebuild dependency。
+- `WorldBookRecallTool` 与 `MemoryRecallTool` 均符合 `BackgroundSourceTool`，source type 分别为 `.worldBook` / `.memory`。
+- `MemoryBackgroundSource` / `WorldBookBackgroundSource` 把 recall result 映射为 `BackgroundCandidate`，focused tests 覆盖 source-prefixed ids、顺序、metadata、request 边界和不按 token budget 裁剪。
+- `ChatViewModel+Support` 当前仍在世界书召回前执行 bounded `rebuildMissingOrStale(worldBookId:limit:)`；后续不能把 rebuild 变成 `BackgroundWorker` side effect。
+- `PromptAssembler` 仍直接生成 `[Memories]` / `[World Book Entries]` 兼容 block；未消费 `BackgroundPacket`。
+
+### 验证
+
+Baseline focused command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+```
+
+结果：58 tests / 6 suites passed，`** TEST SUCCEEDED **`。
+
+Phase 4A-4C + regression focused command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+```
+
+结果：68 tests / 8 suites passed，`** TEST SUCCEEDED **`。
+
+Phase 4A-4D closeout focused command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+```
+
+结果：74 tests / 9 suites passed，`** TEST SUCCEEDED **`。
+
+该结果证明 Phase 4A-4D source contract、recall tool pass-through、BackgroundSource adapter mapping 与现有回归面通过；不能作为 Phase 5/6 worker / packet / prompt switch 完成证据。
+
+Full suite：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+结果：319 tests / 61 suites passed，`** TEST SUCCEEDED **`。
+
+### 未完成边界
+
+- `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 未实现。
+- Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
+- `PromptAssembler` 未消费 `BackgroundPacket`，兼容 `[Memories]` / `[World Book Entries]` 输出仍是当前 runtime 行为。

@@ -1,6 +1,6 @@
 # Background 迁移计划
 
-> 状态：目标架构规划，尚未实现。
+> 状态：部分实现。AgentCore foundation 与 Phase 4A-4D source tool / adapter 层已落地并通过 focused tests；BackgroundWorker、BackgroundPacket 和 Chat / Prompt switch 尚未实现。
 
 ## Phase 0：文档和边界
 
@@ -69,7 +69,7 @@
 
 当前状态：
 
-- 2026-05-17 已完成；full suite 303 tests / 58 suites passed。
+- 2026-05-17 AgentCore foundation 已完成；当时 full suite 303 tests / 58 suites passed。Background Source Tools Phase 4A-4D 后当前全局 full-suite 基线为 319 tests / 61 suites passed。
 
 ## Phase 4：Memory / WorldBook source tool 暴露
 
@@ -86,6 +86,15 @@
 - tool 输出保持 Memory / WorldBook 当前 result 顺序。
 - diagnostics / trace metadata 可被后续 BackgroundSource adapter 消费。
 - tool 为 read-only：不写 DB、不联网、不生成 assistant message、不触发 WorldBook indexing side effect。
+
+当前状态：
+
+- 2026-05-17 Phase 4A-4D 已落地，见 `harness/2026.05.17/background-source-tools/index.md`。
+- `OpenChat/Core/Background/BackgroundSourceTool.swift` 已定义 source tool / request / candidate 基础 contract，并进入 Xcode target。
+- `OpenChat/Core/Memory/MemoryRecallTool.swift` 已实现 read-only wrapper，符合 `BackgroundSourceTool`，只调用 `MemoryManager.recallMemories(...)`。
+- `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已实现 read-only wrapper，符合 `BackgroundSourceTool`，只调用 `WorldBookSource.recallEntries(...)`。
+- `MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已进入 Xcode target；`BackgroundSourceTests` 覆盖 candidate 顺序、source prefix、metadata、character/worldBook request 边界和不按 token budget 裁剪。
+- Baseline + Phase 4 closeout focused tests 验证了现有 Memory / WorldBook / Prompt / Chat / AgentCore 前置 contract、recall tool pass-through 和 adapter mapping；该结果不能解读为 BackgroundWorker 或 prompt switch 已实现。
 
 ## Phase 5：Background DTO + deterministic worker
 
