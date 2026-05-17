@@ -32,7 +32,7 @@ Memory Hindsight-lite repair
 - 当前工作区已落地 Memory / WorldBook read-only source tools、BackgroundSource adapters、`Core/Background` DTO、deterministic `BackgroundWorker`、`BackgroundManager`、`BackgroundPacket` 与 Chat/Prompt 到 packet-aware 路径的兼容切换。
 - 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
 - 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
-- 当前下一步建议先收束并提交 Background worker prompt switch 这批工作区变更，再建立 UI 自动化 baseline，随后进入 LibMan / Stage。
+- 当前下一步建议先建立 UI 自动化 baseline，随后进入 LibMan / Stage。
 - LibMan、Stage、Director、多角色同场仍是后续阶段。
 
 ```text
@@ -378,7 +378,6 @@ xcodebuild test \
 
 ## 10. 当前已知未完成
 
-- 当前 Background worker prompt switch 仍是工作区变更，下一步需要整理 diff、补必要证据并按合理边界提交。
 - `OpenChatUITests` target 尚未实现；UI/E2E 自动化仍只有 build/install/launch smoke。
 - UI testing mode、mock API seam、seed data、稳定 accessibility identifiers 尚未实现。
 - CharacterState / ConversationState source 尚未实现。
