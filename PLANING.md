@@ -20,8 +20,12 @@ Memory Hindsight-lite repair
   -> BackgroundSource adapters / Core Background DTO
   -> deterministic BackgroundWorker
   -> Prompt switches to BackgroundPacket
+  -> LibMan
+  -> low-frequency reflect
+  -> Director
+  -> multi-character scene
+  -> Stage
   -> UI automation baseline
-  -> LibMan / Stage
 ```
 
 2026-05-17 状态：
@@ -32,7 +36,7 @@ Memory Hindsight-lite repair
 - 当前工作区已落地 Memory / WorldBook read-only source tools、BackgroundSource adapters、`Core/Background` DTO、deterministic `BackgroundWorker`、`BackgroundManager`、`BackgroundPacket` 与 Chat/Prompt 到 packet-aware 路径的兼容切换。
 - 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
 - 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
-- 当前下一步建议先建立 UI 自动化 baseline，随后进入 LibMan / Stage。
+- 当前下一步建议先进入 LibMan / reflect / Director / 多角色同场 / Stage，Stage 基线落地后再建立 UI 自动化 baseline。
 - LibMan、Stage、Director、多角色同场仍是后续阶段。
 
 ```text
@@ -311,7 +315,52 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - `[World Book Entries]` + `[Memories]` 兼容 block 的直接来源已切到 `BackgroundPacket` selected entries。
 - 验证：focused Background / Prompt / Chat tests 已覆盖 packet-aware 路径；当前 full suite 330 tests / 65 suites passed。
 
-### Phase 4b：UI 自动化 baseline（下一建议计划）
+### Phase 5：LibMan
+
+- 接入 Exa search。
+- 产出 `LibrarianDraft`。
+- 用户确认后写入 CharacterCard / WorldBook。
+- 写入世界书后触发 embedding rebuild。
+
+### Phase 6：低频 reflect / observation synthesis
+
+- 只在手动整理或后台低频任务中运行。
+- 产物必须带 `basedOn` source ids。
+- 不直接替代原始记忆。
+
+### Phase 7：Director / 导演模式
+
+- 建立 `DirectorPlan` / director policy / stage instruction 的最小 contract。
+- 导演可以调度场景、节奏、发言顺序和冲突提示，但不替角色写最终台词。
+- 支持 `silent`、`agent`、`userControlled` 三种导演模式的 contract 与测试边界。
+- 用户导演输入不应被保存为角色听到的普通台词，除非用户显式要求。
+
+### Phase 8：多角色同场基础
+
+- 定义 Stage participant / speaker / visibility / stage action 等基础 DTO。
+- Stage 可绑定多个角色卡，并保留每个角色的身份、世界书、关系和可见性边界。
+- 第一阶段只选择本轮主 speaker，不做多角色连续输出。
+- 多角色同场必须在 Stage UI/数据结构正式落地前先完成 contract 与测试边界。
+
+### Phase 9：Stage 基础落地
+
+- 新增 Stage / participant / director DTO。
+- 接入 Stage 数据模型和最小 UI 入口。
+- 建立导演模式和用户导演输入的测试边界。
+
+### Phase 10：用户导演输入
+
+- 输入栏支持“作为用户说话 / 作为导演说话”。
+- 导演输入进入 stage instruction。
+- 任意导演模式下用户都能临时接管。
+
+### Phase 11：多角色 Stage 输出
+
+- Stage 绑定多个角色。
+- Director/default policy 选择本轮主 speaker。
+- 第一阶段只输出一个角色回复，后续再扩展多角色连续输出。
+
+### Phase 12：UI 自动化 baseline
 
 目标：
 
@@ -326,6 +375,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - 在 App 启动路径增加 `--ui-testing` / `--mock-api` 等启动参数，UI 测试模式下使用临时数据库、`InMemoryAPIKeyStore` 和可预测 seed data。
 - 增加 mock API seam，让 UI 测试中的发送消息流程返回固定 assistant response，不访问真实 OpenAI-compatible endpoint。
 - 第一批只覆盖最短关键路径：启动 -> 新建会话 -> 发送消息 -> mock assistant response 可见；设置页新增 endpoint；角色卡 / 世界书创建后可在 Chat 设置中选择。
+- Stage 基线落地后，补充 Stage 创建、导演模式切换、多角色 participant 选择等 UI smoke。
 - 第二批再覆盖破坏性操作与错误路径：重命名 / 删除会话、保存失败可见、endpoint 连接失败提示、memory extraction indicator 不阻塞发送。
 
 验收命令：
@@ -344,37 +394,6 @@ xcodebuild test \
 - UI test 不访问真实网络，测试数据可重复。
 - 至少 3 条 smoke 级用户路径稳定通过。
 - full suite 仍通过，且 build/install/launch smoke 不回退。
-
-### Phase 5：LibMan
-
-- 接入 Exa search。
-- 产出 `LibrarianDraft`。
-- 用户确认后写入 CharacterCard / WorldBook。
-- 写入世界书后触发 embedding rebuild。
-
-### Phase 6：低频 reflect / observation synthesis
-
-- 只在手动整理或后台低频任务中运行。
-- 产物必须带 `basedOn` source ids。
-- 不直接替代原始记忆。
-
-### Phase 7：Stage 基础 DTO
-
-- 新增 Stage / participant / director DTO。
-- 不改变现有 Chat UI。
-- 建立导演模式和用户导演输入的测试边界。
-
-### Phase 8：用户导演输入
-
-- 输入栏支持“作为用户说话 / 作为导演说话”。
-- 导演输入进入 stage instruction。
-- 任意导演模式下用户都能临时接管。
-
-### Phase 9：多角色 Stage
-
-- Stage 绑定多个角色。
-- Director/default policy 选择本轮主 speaker。
-- 第一阶段只输出一个角色回复，后续再扩展多角色连续输出。
 
 ## 10. 当前已知未完成
 
