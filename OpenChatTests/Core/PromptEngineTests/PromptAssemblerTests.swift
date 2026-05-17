@@ -303,6 +303,101 @@ struct PromptAssemblerTests {
         #expect(result.triggeredEntries == [semanticEntry.id])
     }
 
+    @Test func test_packet_prompt_uses_compatible_worldbook_and_memory_blocks() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard()
+        let packet = Self.makePacket(entries: [
+            BackgroundEntry(
+                id: "memory:one",
+                sourceType: .memory,
+                sourceId: "one",
+                title: "event",
+                content: "Packet memory content.",
+                rank: 2,
+                score: 0.8,
+                estimatedTokens: 4,
+                reason: "semantic",
+                metadata: ["memoryType": "event"]
+            ),
+            BackgroundEntry(
+                id: "worldBook:moon",
+                sourceType: .worldBook,
+                sourceId: "moon",
+                title: "Moon Archive",
+                content: "Packet world-book content.",
+                rank: 1,
+                score: 0.9,
+                estimatedTokens: 4,
+                reason: "semantic",
+                metadata: [:]
+            ),
+        ])
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: card,
+            backgroundPacket: packet,
+            processedHistory: [],
+            currentInput: "Where are the old maps kept?",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000)
+        )
+
+        let worldBookIndex = try #require(result.messages.firstIndex { $0.content.contains("[World Book Entries]") })
+        let memoryIndex = try #require(result.messages.firstIndex { $0.content.contains("[Memories]") })
+        #expect(worldBookIndex < memoryIndex)
+        #expect(result.messages[worldBookIndex].content.contains("[World Book: Moon Archive]"))
+        #expect(result.messages[worldBookIndex].content.contains("Packet world-book content."))
+        #expect(result.messages[memoryIndex].content.contains("[Memory — event]"))
+        #expect(result.messages[memoryIndex].content.contains("Packet memory content."))
+        #expect(!result.messages.contains { $0.content.contains("semantic") && $0.content.contains("score") })
+        #expect(result.triggeredEntries == ["moon"])
+    }
+
+    @Test func test_packet_prompt_budget_trims_raw_packet_entries() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let filler = String(repeating: "detail ", count: 80)
+        let packet = Self.makePacket(entries: [
+            BackgroundEntry(
+                id: "worldBook:first",
+                sourceType: .worldBook,
+                sourceId: "first",
+                title: "First",
+                content: "first included \(filler)",
+                rank: 1,
+                score: 1,
+                estimatedTokens: 40,
+                reason: nil,
+                metadata: [:]
+            ),
+            BackgroundEntry(
+                id: "worldBook:second",
+                sourceType: .worldBook,
+                sourceId: "second",
+                title: "Second",
+                content: "second trimmed \(filler)",
+                rank: 2,
+                score: 0.9,
+                estimatedTokens: 40,
+                reason: nil,
+                metadata: [:]
+            ),
+        ])
+
+        let preview = PromptAssembler.preview(
+            conversation: conversation,
+            characterCard: nil,
+            backgroundPacket: packet,
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 600)
+        )
+
+        let worldBookBlock = try #require(preview.currentTurnContextMessages.first { $0.content.contains("[World Book Entries]") })
+        #expect(worldBookBlock.content.contains("first included"))
+        #expect(!worldBookBlock.content.contains("second trimmed"))
+        #expect(preview.triggeredEntries == ["first"])
+        #expect(preview.tokenUsage.worldBookEntries == TokenCounter.count(message: worldBookBlock))
+    }
+
     @Test func test_example_dialogs_are_labeled_system_block() throws {
         let conversation = TestHelpers.makeConversation(slowPlotMode: false)
         let card = TestHelpers.makeCharacterCard()
@@ -440,5 +535,26 @@ struct PromptAssemblerTests {
 
         #expect(enabledPreview.fixedTokens > disabledPreview.fixedTokens)
         #expect(enabledPreview.historyBudget < disabledPreview.historyBudget)
+    }
+
+    private static func makePacket(entries: [BackgroundEntry]) -> BackgroundPacket {
+        BackgroundPacket(
+            entries: entries,
+            omitted: [],
+            diagnostics: BackgroundDiagnostics(
+                requestId: "conversation-1",
+                startedAt: Date(timeIntervalSince1970: 1),
+                endedAt: Date(timeIntervalSince1970: 1),
+                elapsedMilliseconds: 0,
+                policyProfile: [:],
+                agentPolicySummary: [:],
+                sourceSummaries: [],
+                inputCandidateCount: entries.count,
+                selectedIds: entries.map(\.id),
+                omitted: [],
+                fallbacks: [],
+                warnings: []
+            )
+        )
     }
 }

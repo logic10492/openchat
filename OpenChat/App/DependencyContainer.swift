@@ -11,6 +11,7 @@ final class DependencyContainer {
     let worldBookVectorStore: WorldBookVectorStore
     let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
     let worldBookSource: WorldBookSource
+    let backgroundManager: BackgroundManager
     let titleGenerator: TitleGenerator
 
     init(
@@ -28,22 +29,30 @@ final class DependencyContainer {
             databaseManager: databaseManager,
             apiClient: resolvedClient
         )
-        self.memoryManager = MemoryManager(
+        let memoryManager = MemoryManager(
             databaseManager: databaseManager,
             embeddingService: embeddingService,
             vectorStore: VectorStore(databaseManager: databaseManager),
             apiClient: resolvedClient,
             apiKeyStore: apiKeyStore
         )
+        self.memoryManager = memoryManager
         self.worldBookVectorStore = worldBookVectorStore
         self.worldBookEmbeddingIndexer = WorldBookEmbeddingIndexer(
             databaseManager: databaseManager,
             embeddingProvider: embeddingService,
             vectorStore: worldBookVectorStore
         )
-        self.worldBookSource = WorldBookSource(
+        let worldBookSource = WorldBookSource(
             embeddingProvider: embeddingService,
             vectorStore: worldBookVectorStore
+        )
+        self.worldBookSource = worldBookSource
+        self.backgroundManager = BackgroundManager(
+            sources: [
+                MemoryBackgroundSource(tool: MemoryRecallTool(memoryManager: memoryManager)),
+                WorldBookBackgroundSource(tool: WorldBookRecallTool(source: worldBookSource)),
+            ]
         )
         self.titleGenerator = TitleGenerator(apiClient: resolvedClient)
     }

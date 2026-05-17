@@ -55,9 +55,11 @@ Phase 6：
 - Manager source ordering and fallback。
 - Manager pre-source worldBook rebuild ordering，如迁移该 side-effect。
 - Packet -> compatible `[Memories]` / `[World Book Entries]` block。
+- Packet item prompt-budget trimming、token usage 和 included ids。
 - Chat request body 使用 packet selected entries。
 - current input 不重复。
 - semantic-only world-book entry 保持可进入 prompt。
+- worldBook source failure 保持 keyword fallback 或明确 blocked，不能静默丢失世界书背景。
 - Worker 不生成 assistant message。
 
 ## 验收红线
@@ -69,6 +71,8 @@ Phase 6：
 - Worker 或 source adapter 触发 WorldBook rebuild。
 - Prompt switch 直接改成统一 `[Background]`，但无 request-shape 测试和用户确认。
 - Chat switch 后 current input 重复。
+- Chat switch 后 worldBook recall failure 不再有兼容 fallback，且未记录 blocked / 用户确认。
+- Phase 6 closeout 声称迁移了 bounded worldBook rebuild，但没有 manager pre-source ordering 测试。
 - 文档把未实现内容写成当前实现。
 - Xcode project 签名配置漂移。
 

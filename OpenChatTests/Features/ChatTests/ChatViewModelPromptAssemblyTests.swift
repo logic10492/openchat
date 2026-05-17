@@ -1031,6 +1031,135 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(request.messages.filter { $0.content.contains("[World Book Entries]") }.count == 1)
     }
 
+    @Test func test_sendMessage_uses_background_packet_for_prompt_blocks() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-background-packet",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-background-packet",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "card-background-packet")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try card.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMemory(
+            TestHelpers.makeMemoryEntry(
+                characterCardId: card.id,
+                content: "Direct memory should not be injected."
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let backgroundManager = BackgroundManager { request, _ in
+            BackgroundPacket(
+                entries: [
+                    BackgroundEntry(
+                        id: "memory:packet",
+                        sourceType: .memory,
+                        sourceId: "packet",
+                        title: "event",
+                        content: "Packet-selected memory.",
+                        rank: 1,
+                        score: 1,
+                        estimatedTokens: 4,
+                        reason: "test",
+                        metadata: ["memoryType": "event", "requestInput": request.currentInput]
+                    ),
+                ],
+                omitted: [],
+                diagnostics: BackgroundDiagnostics(
+                    requestId: request.conversation.id,
+                    startedAt: now,
+                    endedAt: now,
+                    elapsedMilliseconds: 0,
+                    policyProfile: [:],
+                    agentPolicySummary: [:],
+                    sourceSummaries: [],
+                    inputCandidateCount: 1,
+                    selectedIds: ["memory:packet"],
+                    omitted: [],
+                    fallbacks: [],
+                    warnings: []
+                )
+            )
+        }
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            backgroundManager: backgroundManager,
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Use background packet."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        let memoryBlock = try #require(request.messages.first {
+            $0.role == "system" && $0.content.contains("[Memories]")
+        })
+        #expect(memoryBlock.content.contains("Packet-selected memory."))
+        #expect(!memoryBlock.content.contains("Direct memory should not be injected."))
+        #expect(request.messages.filter { $0.role == "user" && $0.content.contains("Use background packet.") }.count == 1)
+    }
+
     @Test func test_sendMessage_responses_mode_folds_memories_into_instructions_without_user_duplication() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()

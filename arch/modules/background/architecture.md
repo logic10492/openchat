@@ -1,6 +1,6 @@
 # Background 架构
 
-> 状态：部分实现。AgentCore foundation 已存在；Phase 4A-4D source tool contract、MemoryRecallTool、WorldBookRecallTool、MemoryBackgroundSource、WorldBookBackgroundSource 已落地并通过 focused tests。Background runtime / worker / packet / prompt switch 尚未实现。
+> 状态：已实现 Phase 4A-4D source tool contract、Memory/WorldBook adapters、Phase 5 deterministic BackgroundWorker / BackgroundPacket / diagnostics、Phase 6 BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch。统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 尚未实现。
 
 ## 1. 模块定位
 
@@ -42,10 +42,10 @@ Core/WorldBook/
   WorldBookEmbeddingIndexer
 
 Core/Character/
-  CharacterBackgroundSource
+  CharacterBackgroundSource        // 目标边界，当前未实现
 
 Core/ConversationState/
-  ConversationStateBackgroundSource
+  ConversationStateBackgroundSource // 目标边界，当前未实现
 ```
 
 `Core/Character` 与 `Core/ConversationState` 是目标边界名，不代表当前已有对应源码目录。
@@ -72,14 +72,27 @@ AgentCore foundation
 - `OpenChatTests/Core/MemoryTests/MemoryRecallToolTests.swift`、`OpenChatTests/Core/WorldBookTests/WorldBookRecallToolTests.swift`：focused pass-through tests 覆盖顺序、rank/reason/trace/omission 透传。
 - `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift`：focused adapter tests 覆盖 candidate id prefix、顺序、metadata、request 边界和不按 token budget 裁剪。
 
+2026-05-17 Phase 5/6 当前实现证据：
+
+- `OpenChat/Core/Background/BackgroundPolicy.swift`：定义 worker candidate selection ceiling、per-source limits、source weights 和兼容默认策略。
+- `OpenChat/Core/Background/BackgroundPacket.swift`：定义 `BackgroundWorkerInput`、`BackgroundPacket`、`BackgroundEntry`、`BackgroundOmission` 与 omission reason。
+- `OpenChat/Core/Background/BackgroundDiagnostics.swift`：记录 selected ids、omitted、source summaries、fallbacks、warnings、policy profile 和 agent policy summary。
+- `OpenChat/Core/Background/BackgroundWorker.swift`：只消费 `[BackgroundCandidate]`，做 deterministic score/sort/dedupe/budget/per-source limit selection；policy gate 拒绝非 deterministic、network、DB write 等能力。
+- `OpenChat/Core/Background/BackgroundManager.swift`：组合 `BackgroundSource` 与 worker；单 source 失败时记录 warning，worldBook source failure 使用旧 keyword fallback 生成 `.worldBook` candidates。
+- `OpenChat/Core/Background/BackgroundAssembler.swift`：把 packet entries 转成兼容 `[World Book Entries]` / `[Memories]` prompt items，diagnostics 不进入 prompt。
+- `OpenChat/App/DependencyContainer.swift`：装配 `MemoryRecallTool`、`WorldBookRecallTool`、`MemoryBackgroundSource`、`WorldBookBackgroundSource`、`BackgroundWorker` 和 `BackgroundManager`。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：主链路调用 `BackgroundManager.prepare(...)` 后交给 packet-aware `PromptAssembler`；bounded worldBook rebuild 仍保留在 Chat 侧、执行于 manager prepare 前。
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`：新增 packet-aware preview/assemble overload，保留旧 direct overload 作为兼容 / rollback；输出格式仍为 `[World Book Entries]` 在前、`[Memories]` 在后。
+- Tests：`BackgroundPacketTests`、`BackgroundWorkerTests`、`BackgroundDiagnosticsTests`、`BackgroundManagerTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests` 覆盖 DTO、worker selection/denial/diagnostics、manager fallback、packet compatible prompt blocks、budget trim、current input dedupe 和 request-shape switch。
+
 ## 2. 当前实现与目标差异
 
 | 领域 | 当前源码 | Background 目标 |
 |---|---|---|
-| WorldBook | `WorldBookSource.recallEntries(...)` 预选 keyword + semantic 条目，`PromptAssembler` 注入 `[World Book Entries]` | `WorldBookRecallTool` 包装 recall result，`WorldBookBackgroundSource` 产出 candidates，BackgroundWorker 统一选择 |
-| Memory | `ChatViewModel` 调 `MemoryManager.retrieveMemories`，`PromptAssembler` 注入 `[Memories]` | `MemoryRecallTool` 包装 `MemoryManager.recallMemories(...)` result，`MemoryBackgroundSource` 产出 candidates，BackgroundWorker 与世界书统一排序 |
+| WorldBook | `WorldBookRecallTool` / `WorldBookBackgroundSource` 包装 `WorldBookSource.recallEntries(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[World Book Entries]` | 后续可迁移为统一 `[Background]` block 或新增 Character/ConversationState source |
+| Memory | `MemoryRecallTool` / `MemoryBackgroundSource` 包装 `MemoryManager.recallMemories(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[Memories]` | 后续可迁移为统一 `[Background]` block 或新增 Character/ConversationState source |
 | 角色卡 | Stable Identity 直接进入 prompt | 稳定身份仍保持独立；可额外产生 character-state candidates |
-| Prompt | 多个 labeled blocks 直接组装 | BackgroundAssembler 生成统一 `[Background]` 或一组 background blocks |
+| Prompt | BackgroundAssembler 生成兼容 `[World Book Entries]` / `[Memories]` blocks | 后续可迁移为统一 `[Background]` block |
 | 检索排序 | WorldBook priority / Memory semantic order 分离 | 统一 fusion：relevance、priority、recency、source policy |
 
 ## 3. 依赖方向
@@ -176,7 +189,19 @@ WorldBookRecallTool
 
 ## 5. Prompt 输出形态
 
-默认目标是统一 block：
+当前实现先保持兼容 block，来源已切到 `BackgroundPacket`：
+
+```text
+[World Book Entries]
+...
+[/World Book Entries]
+
+[Memories]
+...
+[/Memories]
+```
+
+后续可选目标是统一 block：
 
 ```text
 [Background]
@@ -203,7 +228,7 @@ WorldBookRecallTool
 [/Background: Memory]
 ```
 
-决策原则：先统一调度，后决定文本格式。不要让文本格式反过来决定调度策略。
+决策原则：先统一调度，后决定文本格式。2026-05-17 Phase 6 已完成统一调度和兼容 block switch；统一 `[Background]` 需要单独 request-shape 测试和用户确认。
 
 ## 6. 与 ContextManager 的关系
 

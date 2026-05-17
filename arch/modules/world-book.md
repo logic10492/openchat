@@ -64,7 +64,7 @@ WorldBook (世界书)
 
 ## 4. 世界书召回机制
 
-> 当前 Chat prompt 主链路已在 2026-05-16 Phase C 接入 `WorldBookSource`。Phase A/B 已落地世界书向量表、meta 表、`WorldBookVectorStore`、embedding text/hash 与 existing world-book rebuild/backfill indexer；Phase C 已落地 semantic + keyword 融合、Chat prompt 兼容接入；Phase D 已落地 CRUD/import/delete/eraseAllData 维护和 Data Management 手动 rebuild。
+> 当前 Chat prompt 主链路已在 2026-05-17 Phase 6 切到 `BackgroundManager -> BackgroundPacket -> PromptAssembler(... backgroundPacket:)`。Phase A/B 已落地世界书向量表、meta 表、`WorldBookVectorStore`、embedding text/hash 与 existing world-book rebuild/backfill indexer；Phase C 已落地 semantic + keyword 融合；Phase D 已落地 CRUD/import/delete/eraseAllData 维护和 Data Management 手动 rebuild；Phase 4C/4D 已落地 `WorldBookRecallTool` / `WorldBookBackgroundSource`；Phase 5/6 已落地 deterministic worker、packet 和 compatible prompt switch。
 
 ### 4.1 触发时机
 
@@ -72,13 +72,16 @@ WorldBook (世界书)
 
 1. `ChatViewModel` 根据角色卡 `worldBookId` 读取当前世界书和条目。
 2. 对当前 world book 执行 bounded `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)`；失败只记录 warning。
-3. `WorldBookSource` 收集当前上下文中的文本（最近 5 条消息 + 当前用户输入）
-4. keyword 路径检查条目的 keywords 是否出现在上下文文本中。
-5. semantic 路径用 `EmbeddingProvider.embed(..., isQuery: true)` 生成 query embedding，并通过 `WorldBookVectorStore.search(query:worldBookId:limit:)` 检索当前 worldBook 内 enabled 条目。
-6. 同一条目同时被 keyword 和 semantic 命中时去重并合并 reasons。
-7. 输出预选条目给 `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)`，避免 semantic-only entry 被二次 keyword 过滤。
+3. `BackgroundManager.prepare(...)` 调用 `WorldBookBackgroundSource`，其内部通过 `WorldBookRecallTool` 包装 `WorldBookSource.recallEntries(...)`。
+4. `WorldBookSource` 收集当前上下文中的文本（最近 5 条消息 + 当前用户输入）。
+5. keyword 路径检查条目的 keywords 是否出现在上下文文本中。
+6. semantic 路径用 `EmbeddingProvider.embed(..., isQuery: true)` 生成 query embedding，并通过 `WorldBookVectorStore.search(query:worldBookId:limit:)` 检索当前 worldBook 内 enabled 条目。
+7. 同一条目同时被 keyword 和 semantic 命中时去重并合并 reasons。
+8. `WorldBookBackgroundSource` 把 recall entries 映射为 `BackgroundCandidate(sourceType: .worldBook)`。
+9. `BackgroundWorker` 做跨 source selection 后输出 `BackgroundPacket`。
+10. `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 从 packet selected `.worldBook` entries 生成兼容 `[World Book Entries]` block，避免 semantic-only entry 被二次 keyword 过滤。
 
-旧 keyword fallback path 仍保留给直接调用 `PromptAssembler.preview(...)` / `assemble(...)` 的旧调用方：
+旧 keyword fallback path 仍保留给直接调用 `PromptAssembler.preview(...)` / `assemble(...)` 的旧调用方；`BackgroundManager` 在 worldBook source 失败时也会用 request 内的 worldBook entries + recent context + current input 生成 `.worldBook` fallback candidates：
 
 1. 收集当前上下文中的文本（最近 N 条消息 + 当前用户输入）
 2. 遍历当前会话绑定的世界书中所有已启用条目
@@ -365,7 +368,7 @@ Phase D 行为：
 |---|---|
 | `CharacterCard` | 角色卡通过 `worldBookId` 归属于世界书，世界书详情页展示归属角色列表，支持跨世界导入角色 |
 | `Conversation` | 对话不再直接关联世界书，世界书通过角色卡间接关联到对话 |
-| `PromptEngine` | Chat 主链路传入 `WorldBookSource` 已预选条目；PromptAssembler 只负责 `[World Book Entries]` block 生成与预算裁剪，旧调用方仍有 keyword fallback |
+| `PromptEngine` | Chat 主链路传入 `BackgroundPacket` selected worldBook entries；PromptAssembler 只负责 `[World Book Entries]` block 生成与预算裁剪，旧调用方仍有 keyword fallback |
 | `Chat` | ChatView 中可查看当前绑定的世界书和触发的条目（调试用） |
 
 ## 8.1 世界书向量化 Phase A/B/C/D 当前实现
@@ -387,21 +390,24 @@ Phase D 行为：
 - `DependencyContainer` 共享同一个 `EmbeddingService` 给 `MemoryManager` 与 `WorldBookEmbeddingIndexer`，避免生产路径重复 lazy-load CoreML model/tokenizer。
 - `WorldBookRecallModels.swift`：定义 `WorldBookRecallResult`、`WorldBookRecallEntry`、`WorldBookRecallTrace`、reason 和 omission DTO。
 - `WorldBookSource.recallEntries(...)`：融合 keyword candidates 与 semantic candidates，处理 duplicate、disabled、limitExceeded、semanticUnavailable、staleEmbedding trace。
-- `ChatViewModel.generateResponse(...)`：在 prompt preview 前执行 bounded lazy rebuild + `WorldBookSource.recallEntries(...)`，并让 preview/assemble 使用同一批 recalled entries。
-- `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)`：消费已经预选的世界书条目，只做 block 生成和 token 预算裁剪。
+- `ChatViewModel.generateResponse(...)`：在 prompt preview 前执行 bounded lazy rebuild，再通过 `BackgroundManager.prepare(...)` 使用同一轮 worldBook request context。
+- `BackgroundManager.prepare(...)`：调用 `WorldBookBackgroundSource`，在 source failure 时保留 keyword fallback candidates 和 diagnostics warning。
+- `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`：消费 packet-selected 世界书条目，只做 block 生成和 token 预算裁剪；旧 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 保留为兼容 / rollback。
 - `WorldBookEditorViewModel.saveEntry(_:)` / `importEntries(_:)`：保存世界书内容后维护或标记 world book semantic index；index 失败不回滚用户内容。
 - `DatabaseManager.deleteWorldBookEntry(id:)` / `deleteWorldBook(id:)`：删除业务 record 前显式清理 sqlite-vec virtual table 和 meta。
 - `DatabaseManager.eraseAllData(...)`：清理 Memory vector 后同步清理 world book vector/meta。
 - `SettingsViewModel.rebuildWorldBookSemanticIndex()` + `DataManagementView`：Data Management 手动 rebuild existing world book semantic index。
 
-当前没有实现：
-
-- `BackgroundWorker` / `BackgroundPacket` / 统一调度尚未实现；当前仍由 Chat path 直接消费 `WorldBookSource`，Prompt 输出仍是 `[World Book Entries]`。
-
 2026-05-17 Phase 4C/4D 已实现：
 
 - `WorldBookRecallTool` 作为 read-only `BackgroundSourceTool` wrapper 落地并通过 focused pass-through tests。
 - `WorldBookBackgroundSource` 已进入 Xcode target；`BackgroundSourceTests` 覆盖 recall result 到 `BackgroundCandidate(sourceType: .worldBook)` 的顺序、metadata、nil worldBook 透传和不按 token budget 裁剪。
+
+2026-05-17 Phase 5/6 已实现：
+
+- `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 已进入 target。
+- Chat 主链路已调用 `BackgroundManager.prepare(...)` 并把 packet 传给 `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`。
+- Prompt 输出仍是兼容 `[World Book Entries]` block；统一 `[Background]` block 尚未启用。
 
 实现证据：
 
@@ -415,6 +421,11 @@ Phase D 行为：
 - `OpenChat/Core/WorldBook/WorldBookRecallModels.swift`
 - `OpenChat/Core/WorldBook/WorldBookSource.swift`
 - `OpenChat/Core/WorldBook/WorldBookVectorStore.swift`
+- `OpenChat/Core/Background/WorldBookBackgroundSource.swift`
+- `OpenChat/Core/Background/BackgroundManager.swift`
+- `OpenChat/Core/Background/BackgroundWorker.swift`
+- `OpenChat/Core/Background/BackgroundPacket.swift`
+- `OpenChat/Core/Background/BackgroundAssembler.swift`
 - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`
 - `OpenChat/Core/PromptEngine/PromptAssembler.swift`
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
@@ -428,7 +439,7 @@ Phase D 行为：
 
 ## 9. Background 目标架构
 
-当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `PromptAssembler` 注入 `[World Book Entries]`。2026-05-17 Phase 4C/4D 已暴露内部 read-only `WorldBookRecallTool`，并由 `WorldBookBackgroundSource` 映射为 `BackgroundCandidate`；下一步仍是 `BackgroundWorker` / `BackgroundPacket` 统一调度：
+当前世界书由 `WorldBookSource` 预选 keyword + semantic 候选，再由 `WorldBookRecallTool` / `WorldBookBackgroundSource` 映射为 `BackgroundCandidate`，由 `BackgroundWorker` 统一选择进入 `BackgroundPacket`，最后由 packet-aware `PromptAssembler` 注入兼容 `[World Book Entries]`：
 
 ```text
 WorldBookEntryRecord
@@ -439,6 +450,8 @@ WorldBookEntryRecord
   -> BackgroundCandidate(sourceType: .worldBook)
   -> BackgroundWorker
   -> BackgroundPacket
+  -> PromptAssembler(... backgroundPacket:)
+  -> [World Book Entries]
 ```
 
 目标变化：
@@ -446,7 +459,8 @@ WorldBookEntryRecord
 - 世界书不再单独拥有 prompt 注入权。
 - `priority` 继续作为排序信号，但不再单独决定注入。
 - `position` 保留为旧数据兼容字段，不参与最终 background 位置。
-- 世界书条目已完成向量化；下一步的 tool/adapter 只能包装 `WorldBookSource` result，不复制 keyword + semantic fusion，不通过 BackgroundWorker 触发索引 rebuild。
+- 世界书条目已完成向量化；tool/adapter 只包装 `WorldBookSource` result，不复制 keyword + semantic fusion，不通过 BackgroundWorker 触发索引 rebuild。
+- bounded `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 仍在 Chat pre-source stage，不属于 worker side effect。
 
 详见：
 

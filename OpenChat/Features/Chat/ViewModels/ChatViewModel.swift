@@ -11,6 +11,7 @@ final class ChatViewModel {
     let memoryManager: MemoryManager
     let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer?
     let worldBookSource: WorldBookSource?
+    let backgroundManager: BackgroundManager?
     let titleGenerator: TitleGenerator
     let apiKeyStore: any APIKeyStore
     let appState: AppState
@@ -66,6 +67,7 @@ final class ChatViewModel {
         memoryManager: MemoryManager,
         worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer? = nil,
         worldBookSource: WorldBookSource? = nil,
+        backgroundManager: BackgroundManager? = nil,
         titleGenerator: TitleGenerator,
         apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
         appState: AppState
@@ -77,6 +79,7 @@ final class ChatViewModel {
         self.memoryManager = memoryManager
         self.worldBookEmbeddingIndexer = worldBookEmbeddingIndexer
         self.worldBookSource = worldBookSource
+        self.backgroundManager = backgroundManager
         self.titleGenerator = titleGenerator
         self.apiKeyStore = apiKeyStore
         self.appState = appState

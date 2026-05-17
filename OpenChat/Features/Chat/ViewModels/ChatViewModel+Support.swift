@@ -99,82 +99,120 @@ extension ChatViewModel {
             persistedUserMessage: userMessageRecord
         )
 
-        let recalledWorldBookEntries = await recallWorldBookEntries(
-            worldBook: worldBook,
-            entries: worldBookEntries,
-            recentMessages: promptHistoryMessages,
-            currentInput: prompt
-        )
-        let usesPreselectedWorldBookEntries = worldBookSource != nil
-
-        var memories: [MemoryEntryRecord] = []
-        if let characterCardId = characterCard?.id {
-            do {
-                memories = try await memoryManager.retrieveMemories(
-                    for: characterCardId,
-                    query: prompt,
-                    limit: 10
-                )
-            } catch {
-                logger.warning("Memory retrieval failed after fallback for character \(characterCardId): \(error.localizedDescription)")
-            }
-        }
-
         let preview: PromptAssemblyPreview
-        if usesPreselectedWorldBookEntries {
-            preview = PromptAssembler.previewWithPreselectedWorldBookEntries(
+        let assembly: AssemblyResult
+        if let backgroundManager {
+            await rebuildWorldBookEmbeddingsIfNeeded(worldBook: worldBook)
+            let backgroundRequest = BackgroundRequest(
                 conversation: conversation,
                 characterCard: characterCard,
                 worldBook: worldBook,
-                worldBookEntries: recalledWorldBookEntries,
-                memories: memories,
+                worldBookEntries: worldBookEntries,
+                recentMessages: promptHistoryMessages,
                 currentInput: prompt,
-                endpoint: endpoint
+                tokenBudget: max(Int((Double(endpoint.maxContextTokens) * 0.15).rounded(.down)), 1),
+                memoryLimit: 10,
+                worldBookLimit: 10
             )
-        } else {
+            let backgroundPacket = try await backgroundManager.prepare(
+                request: backgroundRequest,
+                policy: BackgroundPolicy.compatibilityDefault(tokenBudget: backgroundRequest.tokenBudget)
+            )
             preview = PromptAssembler.preview(
                 conversation: conversation,
                 characterCard: characterCard,
-                worldBook: worldBook,
-                worldBookEntries: recalledWorldBookEntries,
-                memories: memories,
-                recentMessages: promptHistoryMessages,
+                backgroundPacket: backgroundPacket,
                 currentInput: prompt,
                 endpoint: endpoint
             )
-        }
-
-        let history = try await contextManager.prepareHistory(
-            messages: promptHistoryMessages,
-            conversation: conversation,
-            endpoint: endpoint,
-            fixedTokens: preview.fixedTokens
-        )
-
-        let assembly: AssemblyResult
-        if usesPreselectedWorldBookEntries {
-            assembly = PromptAssembler.assembleWithPreselectedWorldBookEntries(
+            let history = try await contextManager.prepareHistory(
+                messages: promptHistoryMessages,
+                conversation: conversation,
+                endpoint: endpoint,
+                fixedTokens: preview.fixedTokens
+            )
+            assembly = PromptAssembler.assemble(
                 conversation: conversation,
                 characterCard: characterCard,
-                worldBook: worldBook,
-                worldBookEntries: recalledWorldBookEntries,
-                memories: memories,
+                backgroundPacket: backgroundPacket,
                 processedHistory: history,
                 currentInput: prompt,
                 endpoint: endpoint
             )
         } else {
-            assembly = PromptAssembler.assemble(
-                conversation: conversation,
-                characterCard: characterCard,
+            var memories: [MemoryEntryRecord] = []
+            if let characterCardId = characterCard?.id {
+                do {
+                    memories = try await memoryManager.retrieveMemories(
+                        for: characterCardId,
+                        query: prompt,
+                        limit: 10
+                    )
+                } catch {
+                    logger.warning("Memory retrieval failed after fallback for character \(characterCardId): \(error.localizedDescription)")
+                }
+            }
+
+            let usesPreselectedWorldBookEntries = worldBookSource != nil
+            let recalledWorldBookEntries = await recallWorldBookEntries(
                 worldBook: worldBook,
-                worldBookEntries: recalledWorldBookEntries,
-                memories: memories,
+                entries: worldBookEntries,
                 recentMessages: promptHistoryMessages,
-                processedHistory: history,
-                currentInput: prompt,
-                endpoint: endpoint
+                currentInput: prompt
             )
+            if usesPreselectedWorldBookEntries {
+                preview = PromptAssembler.previewWithPreselectedWorldBookEntries(
+                    conversation: conversation,
+                    characterCard: characterCard,
+                    worldBook: worldBook,
+                    worldBookEntries: recalledWorldBookEntries,
+                    memories: memories,
+                    currentInput: prompt,
+                    endpoint: endpoint
+                )
+            } else {
+                preview = PromptAssembler.preview(
+                    conversation: conversation,
+                    characterCard: characterCard,
+                    worldBook: worldBook,
+                    worldBookEntries: recalledWorldBookEntries,
+                    memories: memories,
+                    recentMessages: promptHistoryMessages,
+                    currentInput: prompt,
+                    endpoint: endpoint
+                )
+            }
+
+            let history = try await contextManager.prepareHistory(
+                messages: promptHistoryMessages,
+                conversation: conversation,
+                endpoint: endpoint,
+                fixedTokens: preview.fixedTokens
+            )
+            if usesPreselectedWorldBookEntries {
+                assembly = PromptAssembler.assembleWithPreselectedWorldBookEntries(
+                    conversation: conversation,
+                    characterCard: characterCard,
+                    worldBook: worldBook,
+                    worldBookEntries: recalledWorldBookEntries,
+                    memories: memories,
+                    processedHistory: history,
+                    currentInput: prompt,
+                    endpoint: endpoint
+                )
+            } else {
+                assembly = PromptAssembler.assemble(
+                    conversation: conversation,
+                    characterCard: characterCard,
+                    worldBook: worldBook,
+                    worldBookEntries: recalledWorldBookEntries,
+                    memories: memories,
+                    recentMessages: promptHistoryMessages,
+                    processedHistory: history,
+                    currentInput: prompt,
+                    endpoint: endpoint
+                )
+            }
         }
         tokenUsage = assembly.tokenUsage
 
@@ -328,19 +366,7 @@ extension ChatViewModel {
             return entries
         }
 
-        if let worldBookId = worldBook?.id, let worldBookEmbeddingIndexer {
-            do {
-                let result = try await worldBookEmbeddingIndexer.rebuildMissingOrStale(
-                    worldBookId: worldBookId,
-                    limit: 8
-                )
-                if !result.failed.isEmpty {
-                    logger.warning("World book bounded rebuild had \(result.failed.count) failed entries for world book \(worldBookId)")
-                }
-            } catch {
-                logger.warning("World book bounded rebuild failed for world book \(worldBookId): \(error.localizedDescription)")
-            }
-        }
+        await rebuildWorldBookEmbeddingsIfNeeded(worldBook: worldBook)
 
         do {
             let result = try await worldBookSource.recallEntries(
@@ -362,6 +388,24 @@ extension ChatViewModel {
                 currentInput,
             ].filter { !$0.isEmpty }.joined(separator: "\n")
             return KeywordMatcher.triggeredEntries(entries, contextText: contextText)
+        }
+    }
+
+    private func rebuildWorldBookEmbeddingsIfNeeded(worldBook: WorldBookRecord?) async {
+        guard let worldBookId = worldBook?.id, let worldBookEmbeddingIndexer else {
+            return
+        }
+
+        do {
+            let result = try await worldBookEmbeddingIndexer.rebuildMissingOrStale(
+                worldBookId: worldBookId,
+                limit: 8
+            )
+            if !result.failed.isEmpty {
+                logger.warning("World book bounded rebuild had \(result.failed.count) failed entries for world book \(worldBookId)")
+            }
+        } catch {
+            logger.warning("World book bounded rebuild failed for world book \(worldBookId): \(error.localizedDescription)")
         }
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-enum BackgroundSourceType: String, Codable, Sendable {
+enum BackgroundSourceType: String, Codable, Sendable, CaseIterable, Hashable {
     case memory
     case worldBook
 }

@@ -1,0 +1,86 @@
+Background Worker / Prompt Switch Evidence
+Date: 2026-05-17
+Scope: docs/superpowers/plans/2026-05-17-background-worker-prompt-switch
+
+Pre-edit workspace baseline:
+- Existing user changes were present in docs/superpowers/plans/2026-05-17-background-worker-prompt-switch/{02,06,07,08,09,10}_*.md.
+- Existing untracked comp_swap/ was present.
+- These pre-existing plan / handoff changes were not reverted or overwritten.
+
+New runtime files:
+- OpenChat/Core/Background/BackgroundPolicy.swift
+- OpenChat/Core/Background/BackgroundPacket.swift
+- OpenChat/Core/Background/BackgroundDiagnostics.swift
+- OpenChat/Core/Background/BackgroundWorker.swift
+- OpenChat/Core/Background/BackgroundManager.swift
+- OpenChat/Core/Background/BackgroundAssembler.swift
+
+Modified runtime files:
+- OpenChat/Core/Background/BackgroundSourceTool.swift
+- OpenChat/Core/PromptEngine/PromptAssembler.swift
+- OpenChat/App/DependencyContainer.swift
+- OpenChat/ContentView.swift
+- OpenChat/Features/Chat/ViewModels/ChatViewModel.swift
+- OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift
+- OpenChat/Features/Chat/Views/ChatView.swift
+
+New test files:
+- OpenChatTests/Core/BackgroundTests/BackgroundPacketTests.swift
+- OpenChatTests/Core/BackgroundTests/BackgroundWorkerTests.swift
+- OpenChatTests/Core/BackgroundTests/BackgroundDiagnosticsTests.swift
+- OpenChatTests/Core/BackgroundTests/BackgroundManagerTests.swift
+
+Modified test files:
+- OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift
+- OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift
+
+Xcode project:
+- ruby scripts/generate_xcodeproj.rb was run to add new Swift files to the target.
+- scripts/generate_xcodeproj.rb was not modified.
+- Signing values remain script-owned; this task did not intentionally modify PRODUCT_BUNDLE_IDENTIFIER, DEVELOPMENT_TEAM, or CODE_SIGN_STYLE.
+
+Focused Phase 5/6 verification:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/BackgroundPacketTests' '-only-testing:OpenChatTests/BackgroundWorkerTests' '-only-testing:OpenChatTests/BackgroundDiagnosticsTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+
+Result:
+- 40 tests / 6 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_16-03-54-+0800.xcresult
+
+Broader source / AgentCore regression:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+
+Result:
+- 45 tests / 7 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.17_16-04-31-+0800.xcresult
+
+Whitespace verification:
+Command:
+git diff --check
+
+Result:
+- Passed; no whitespace errors.
+
+Post-switch behavior chain:
+ChatViewModel.generateResponse
+  -> pre-response Memory extraction remains Chat-owned
+  -> bounded WorldBookEmbeddingIndexer.rebuildMissingOrStale(...) remains Chat-owned
+  -> BackgroundManager.prepare(...)
+       -> MemoryBackgroundSource / WorldBookBackgroundSource
+       -> BackgroundWorker.run(...)
+       -> BackgroundPacket
+  -> PromptAssembler.preview(... backgroundPacket:)
+  -> ContextManager.prepareHistory(...)
+  -> PromptAssembler.assemble(... backgroundPacket:)
+  -> APIClient.streamMessage(...)
+
+Remaining boundaries:
+- Unified [Background] block is not enabled.
+- BackgroundSourceType live cases remain .memory and .worldBook.
+- CharacterBackgroundSource and ConversationStateBackgroundSource are not implemented.
+- LibMan / Exa / LLM-assisted selector / synthesis worker are not implemented.
+- bounded worldBook rebuild remains Chat-owned.
+- No database migration was added.

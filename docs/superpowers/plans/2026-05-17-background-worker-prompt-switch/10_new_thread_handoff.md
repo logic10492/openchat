@@ -50,6 +50,9 @@ git status --short
 - 先做 `BackgroundManager`。
 - 再做 Prompt packet compatible switch。
 - 最后做 Chat switch。
+- 默认不要迁移 bounded worldBook rebuild；先保留在 `ChatViewModel`。
+- `BackgroundPolicy.tokenBudget` 只作为 worker candidate selection ceiling；PromptAssembler 仍做最终 prompt budget trim。
+- Chat switch 前必须补齐 worldBook source failure 的兼容 fallback，或把 Phase 6C 标为 blocked。
 
 ## 当前重要事实
 
@@ -57,6 +60,7 @@ git status --short
 - `BackgroundWorker`、`BackgroundPacket`、`BackgroundManager`、`BackgroundAssembler` 尚未实现。
 - 当前 Chat 主链路仍直接 recall memory / worldBook，并由 PromptAssembler 输出 `[Memories]` / `[World Book Entries]`。
 - 当前 Chat bounded worldBook rebuild side-effect 不是 worker 行为。
+- Phase 6 修订后的兼容 prompt 输出仍是 `[World Book Entries]` 在前、`[Memories]` 在后；统一 `[Background]` 不是默认完成条件。
 
 ## 失败时怎么处理
 

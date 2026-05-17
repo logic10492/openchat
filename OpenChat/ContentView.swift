@@ -85,6 +85,7 @@ private struct ChatDetailContainer: View {
                         memoryManager: container.memoryManager,
                         worldBookEmbeddingIndexer: container.worldBookEmbeddingIndexer,
                         worldBookSource: container.worldBookSource,
+                        backgroundManager: container.backgroundManager,
                         titleGenerator: container.titleGenerator,
                         appState: appState
                     )

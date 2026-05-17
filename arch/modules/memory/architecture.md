@@ -6,8 +6,9 @@ Memory 模块负责跨对话长期记忆，不负责同一会话的窗口压缩�
 
 - `Core/Memory`：记忆提取、语义检索、embedding、sqlite-vec 向量存储、错误类型。
 - `Core/Database`：`memory_entry`、`memory_embedding`、`conversation.lastExtractedSortOrder` 的持久化结构和 CRUD。
-- `Core/PromptEngine`：将检索结果注入 `[Memories]` system block，并按 token 预算裁剪。
-- `Features/Chat`：决定发送链路中的提取/检索时机，显示提取状态。
+- `Core/Background`：把 Memory recall result 映射为 `BackgroundCandidate`，再由 `BackgroundWorker` 选择进入 `BackgroundPacket`。
+- `Core/PromptEngine`：从 `BackgroundPacket` 读取 selected memory entries，注入兼容 `[Memories]` system block，并按 token 预算裁剪。
+- `Features/Chat`：决定发送链路中的提取时机，调用 `BackgroundManager.prepare(...)`，显示提取状态。
 - `Features/CharacterCard`：提供角色维度的记忆查看、搜索和删除管理。
 
 ## 2. 文件职责
@@ -18,6 +19,10 @@ Memory 模块负责跨对话长期记忆，不负责同一会话的窗口压缩�
 | `Core/Memory/MemoryRecallModels.swift` | recall result / entry / trace / fallback / omission DTO |
 | `Core/Memory/MemoryRecallTool.swift` | Background Phase 4B read-only source tool，只包装 `MemoryManager.recallMemories(...)` 并透传 `MemoryRecallResult` |
 | `Core/Background/MemoryBackgroundSource.swift` | Background Phase 4D adapter，把 `MemoryRecallResult.entries` / trace metadata 映射为 `BackgroundCandidate(sourceType: .memory)` |
+| `Core/Background/BackgroundManager.swift` | Chat 主链路的 background source 编排入口，调用 Memory / WorldBook sources 后交给 worker |
+| `Core/Background/BackgroundWorker.swift` | deterministic candidate selector，不读写 DB、不联网、不拼 prompt |
+| `Core/Background/BackgroundPacket.swift` | 当前轮被选中的 background entries 与 diagnostics DTO |
+| `Core/Background/BackgroundAssembler.swift` | 把 packet-selected memory / worldBook entries 转成 PromptAssembler 兼容 prompt items |
 | `Core/Memory/EmbeddingService.swift` | CoreML MultilingualE5Small 加载、tokenizer 调用、384 维向量生成 |
 | `Core/Memory/XLMRobertaTokenizer.swift` | 读取 `tokenizer.json`，生成固定长度 input IDs / attention mask |
 | `Core/Memory/VectorStore.swift` | sqlite-vec 插入、批量原子写入、KNN 检索、删除 |
@@ -44,7 +49,13 @@ Features/CharacterCard
   -> Core/Database
   -> Shared
 
+Core/Background
+  -> Core/Memory
+  -> Core/WorldBook
+  -> Core/Database
+
 Core/PromptEngine
+  -> Core/Background
   -> Core/Database Records
 ```
 
@@ -52,6 +63,7 @@ Core/PromptEngine
 
 - `Core/Memory` 不依赖 `Features`。
 - `PromptAssembler` 只消费 `MemoryEntryRecord`，不调用 `MemoryManager`。
+- 当前 Chat 主链路通过 `BackgroundPacket` 间接消费 memory entries；旧 `PromptAssembler` direct overload 保留为兼容 / rollback path。
 - `ChatViewModel` 通过 init 接收 `MemoryManager`，不自行创建 embedding 或 vector store。
 - 记忆 UI 通过 `MemoryListViewModel` 访问 `DatabaseManager` / `MemoryManager`，View 不直接做数据库操作。
 
@@ -87,6 +99,6 @@ MemoryManager.recallMemories(...)
   -> BackgroundAssembler / PromptAssembler
 ```
 
-这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。2026-05-17 Phase 4B/4D 已完成 `MemoryRecallTool` 与 `MemoryBackgroundSource` 的 source tool / adapter 层；Chat / Prompt 主链路尚未切换，当前产品运行时仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)`，再交给 `PromptAssembler` 注入 `[Memories]`。
+这不改变 Memory 的 retain 职责：自动提取、embedding 和持久化仍属于 `Core/Memory`。2026-05-17 Phase 4B/4D 已完成 `MemoryRecallTool` 与 `MemoryBackgroundSource` 的 source tool / adapter 层；2026-05-17 Phase 5/6 已完成 `BackgroundWorker` / `BackgroundPacket` / Chat-Prompt compatible switch。当前产品运行时由 `ChatViewModel` 调用 `BackgroundManager.prepare(...)`，再把 packet 交给 `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 输出 `[Memories]`。
 
-已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是这次迁移的中间层：Memory 自己产出可解释的排序、fallback 和 omission 信息；read-only `MemoryRecallTool` 暴露该 result；`MemoryBackgroundSource` 再把这些信息包装进 `BackgroundCandidate` metadata。后续迁移点是 `BackgroundWorker` / `BackgroundPacket` / Chat-Prompt switch，而不是继续改 Memory 排序逻辑。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。
+已实现的 `MemoryRecallResult` / `MemoryRecallTrace` 是 Background 的输入边界：Memory 自己产出可解释的排序、fallback 和 omission 信息；read-only `MemoryRecallTool` 暴露该 result；`MemoryBackgroundSource` 再把这些信息包装进 `BackgroundCandidate` metadata。`BackgroundWorker` 负责跨 source selection，`PromptAssembler` 只按 packet order 和 token budget 做兼容 block 裁剪，不重新实现 Memory 排序逻辑。详见 `arch/modules/background/index.md` 与 `arch/modules/memory/hindsight-lite.md`。

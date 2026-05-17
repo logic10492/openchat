@@ -197,30 +197,39 @@ sendMessage():
        worldBookEntries = 从 DB 加载世界书的已启用条目
        endpoint = 从 DB 加载 conversation.apiEndpointId
 
-    6.5 // 检索记忆
-       memories = try await memoryManager.retrieveMemories(
-           for: characterCard.id, query: prompt)
-       // MemoryManager 内部处理 embedding/model/vector 检索异常，并 fallback 到角色近期记忆。
-       // ChatViewModel+Support 只在 fallback 也失败时记录 warning 并继续生成。
+    6.5 // 前置记忆提取
+       若达到 pending message 阈值，ChatViewModel 在本轮生成前同步等待
+       memoryManager.extractMemories(from: conversation)，让新记忆可被 Background source 召回。
 
     7. 从 DB 读取当前会话消息后，构造 promptHistoryMessages：
        - 乐观保存的当前 user message 保留在 DB/UI 中；
        - prompt history 中排除本轮 current input record；
        - 重新生成/编辑时排除与 currentInput 对应的最后一条 user record。
 
-    8. PromptAssembler.preview(...) 使用 promptHistoryMessages 计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens。
+    8. 对当前 worldBook 做 bounded rebuild：
+       WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit: 8)
+       失败只记录 warning，不阻断生成；该 side effect 仍归 ChatViewModel。
 
-    9. ContextManager.prepareHistory(messages:promptHistoryMessages, ...)
-       只处理过滤后的历史，再由 PromptAssembler.assemble(...)
+    9. BackgroundManager.prepare(request, policy):
+       - MemoryBackgroundSource 包装 MemoryRecallTool / MemoryManager.recallMemories(...)
+       - WorldBookBackgroundSource 包装 WorldBookRecallTool / WorldBookSource.recallEntries(...)
+       - BackgroundWorker deterministic selection 输出 BackgroundPacket
+       - worldBook source failure 时保留 keyword fallback candidates
+
+    10. PromptAssembler.preview(... backgroundPacket:) 使用 packet selected entries
+        计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens。
+
+    11. ContextManager.prepareHistory(messages:promptHistoryMessages, ...)
+       只处理过滤后的历史，再由 PromptAssembler.assemble(... backgroundPacket:)
        输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
        tokenUsage = result.tokenUsage
 
-    10. // 创建空的 assistantMessage 占位
+    12. // 创建空的 assistantMessage 占位
         assistantMessage = MessageRecord(role: "assistant", content: "")
         保存到 DB
         追加到 messages 列表
 
-    11. // 流式请求
+    13. // 流式请求
         streamTask = Task {
             do {
                 let stream = apiClient.streamMessage(
@@ -289,14 +298,23 @@ if try await shouldExtractMemories(for: conversation),
     let result = try await memoryManager.extractMemories(from: conversation)
     extractionPhase = result.isEmpty ? .skipped : .completed(...)
 }
-// Then retrieve memories (new extractions immediately available)
-memories = try await memoryManager.retrieveMemories(...)
+// Then BackgroundManager.prepare(...) can recall newly extracted memories.
 ```
 
 - **触发时机**：发送链路内的前置同步提取（位于用户消息持久化之后、记忆检索之前）；`ChatView.onDisappear` 保留 fire-and-forget 调用
 - **UI 反馈**：通过 `extractionPhase` 状态驱动 `MemoryExtractionIndicator` 内联指示器，显示"正在提取 / 已提取 N 条 / 提取失败"
 - **cutoff 边界**：使用 `conversation.lastExtractedSortOrder`（基于 message sortOrder）替代旧的 `latestMemoryDate`（基于 memory_entry.createdAt），避免并发写入导致消息被跳过
 - **错误反馈**：提取失败记录日志并在 UI 显示错误指示器，不阻塞后续生成
+
+## 4.7 Background 主链路切换
+
+2026-05-17 Phase 6 后，Chat 主链路不再直接把 `MemoryManager.retrieveMemories(...)` 和 `WorldBookSource.recallEntries(...)` 的数组交给 PromptAssembler。当前源码事实：
+
+- `OpenChat/App/DependencyContainer.swift` 装配 `BackgroundManager`，其 sources 为 `MemoryBackgroundSource(tool: MemoryRecallTool(memoryManager: ...))` 与 `WorldBookBackgroundSource(tool: WorldBookRecallTool(source: ...))`。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` 在 `generateResponse(...)` 中构造 `BackgroundRequest`，调用 `backgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`。
+- bounded `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 仍由 ChatViewModel 在 manager prepare 前执行；`BackgroundWorker` 与 source adapter 不触发 rebuild。
+- `BackgroundManager` 对单 source failure 做降级；worldBook source failure 使用旧 keyword fallback 生成 `.worldBook` candidates。
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 覆盖 request body 使用 packet selected entries、current input 不重复、semantic-only world book entry 进入 `[World Book Entries]`、semantic failure keyword fallback 保持可用。
 
 ## 5. MessageDisplayItem
 
@@ -378,17 +396,19 @@ struct MessageDisplayItem: Identifiable {
 4. **编辑即重新生成**：编辑消息后删除后续消息并重新生成，保持对话逻辑一致性
 5. **Token 透明**：显示详细的 token 使用报告，帮助用户理解上下文分配情况
 
-## 实现证据（2026-04-16）
+## 实现证据（更新至 2026-05-17）
 
 - 代码位置：
   - `OpenChat/Features/Chat/Views/ChatView.swift` — 主界面 + 记忆更新 banner
   - `OpenChat/Features/Chat/Views/MessageBubbleView.swift` — 气泡 + StatsBarView 集成
   - `OpenChat/Features/Chat/Views/StatsBarView.swift` — 详细/精简统计展示
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
-  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集 + 记忆提取
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
   - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats）
   - `OpenChat/ContentView.swift`
+  - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
 - 已完成功能：
   - 聊天主路径：会话读取、消息发送、流式增量展示、数据库持久化
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
@@ -396,12 +416,15 @@ struct MessageDisplayItem: Identifiable {
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
   - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
   - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
-  - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到近期记忆
-- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证语义检索失败时 fallback 记忆仍进入 API request：
+  - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
+  - Background Phase 6：Chat 主链路调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`
+  - 世界书 bounded rebuild 仍保留在 Chat pre-source stage；`BackgroundWorker` 不触发 rebuild、不写 DB、不联网、不生成 assistant message
+- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证 packet selected memory/worldBook entries、semantic-only worldBook entry 和 worldBook source failure keyword fallback：
   - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
   - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
   - `MemoryExtractionPhaseTests`（提取状态模型）
   - `MemoryManagerRetrievalTests`
+  - `BackgroundManagerTests` / `BackgroundWorkerTests` / `BackgroundPacketTests` / `BackgroundDiagnosticsTests`
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`

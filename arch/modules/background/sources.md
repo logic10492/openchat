@@ -1,6 +1,6 @@
 # BackgroundSource 统一候选来源
 
-> 状态：BackgroundWorker 目标架构规划尚未实现；Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地并通过 focused tests；`WorldBookSource` keyword + semantic 最小闭环已在 2026-05-16 Phase C 落地。
+> 状态：Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地；2026-05-17 Phase 5/6 已由 `BackgroundWorker` / `BackgroundManager` 消费这些 candidates 并切入 Chat/Prompt 兼容链路。Character / ConversationState sources 尚未实现。
 
 ## 1. Source 类型
 
@@ -8,10 +8,10 @@
 enum BackgroundSourceType: String, Codable, Sendable {
     case memory
     case worldBook
-    case character
-    case conversationState
 }
 ```
+
+当前源码只包含 `.memory` / `.worldBook`；`character` / `conversationState` 是后续目标 source，不是 live enum case。
 
 ## 1.1 Source tool 前置边界
 
@@ -22,13 +22,14 @@ enum BackgroundSourceType: String, Codable, Sendable {
 | `MemoryRecallTool` | `MemoryManager.recallMemories(...)` | `MemoryRecallResult` / trace | 不复制 rank fusion、不写 DB、不拼 prompt |
 | `WorldBookRecallTool` | `WorldBookSource.recallEntries(...)` | `WorldBookRecallResult` / trace | 不复制 keyword+semantic fusion、不触发索引 rebuild、不拼 prompt |
 
-这些 tool 不是普通角色工具，不进入角色回复的 tool call，也不向用户暴露。它们只作为 BackgroundSource adapter 的输入边界，让后续 `BackgroundWorker` 消费统一候选，而不是直接依赖 Memory / WorldBook 的内部实现。
+这些 tool 不是普通角色工具，不进入角色回复的 tool call，也不向用户暴露。它们只作为 BackgroundSource adapter 的输入边界，让 `BackgroundWorker` 消费统一候选，而不是直接依赖 Memory / WorldBook 的内部实现。
 
 当前实现证据（2026-05-17）：
 
 - `OpenChat/Core/Memory/MemoryRecallTool.swift` 已实现并进入 target；`MemoryRecallToolTests` 覆盖 input forwarding、result order、rank/reason/trace/fallback 透传和 `limit == 0` 透传。
 - `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已实现并进入 target；`WorldBookRecallToolTests` 覆盖 keyword-only、semantic-only、hybrid、disabled、semanticUnavailable、staleEmbedding、limit/duplicate omission 透传和无 indexer/rebuild dependency。
 - `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖 candidate id prefix、顺序、metadata、request 边界和不按 token budget 裁剪。
+- `OpenChat/Core/Background/BackgroundWorker.swift` / `BackgroundManager.swift` 已消费这两个 source adapters；`BackgroundManagerTests` 覆盖 source merge 与 worldBook source failure keyword fallback。
 
 ## 2. MemoryBackgroundSource
 
@@ -55,7 +56,7 @@ enum BackgroundSourceType: String, Codable, Sendable {
 
 来源：`world_book_entry` + 当前已存在的 `world_book_entry_embedding`。
 
-当前状态：2026-05-16 Phase A/B 已实现 schema、meta record、`WorldBookVectorStore`、embedding text/hash 和 `WorldBookEmbeddingIndexer` rebuild/backfill；Phase C 已实现 `WorldBookSource`，Chat prompt 主链路会先执行 bounded rebuild，再召回 keyword + semantic 融合候选，并继续输出 `[World Book Entries]`；Phase D 已实现 save/import/delete/eraseAllData 维护和 Data Management 手动 rebuild。2026-05-17 Phase 4D 已新增 target-backed `WorldBookBackgroundSource` adapter 和 focused tests；`BackgroundWorker` 统一调度仍未实现。
+当前状态：2026-05-16 Phase A/B 已实现 schema、meta record、`WorldBookVectorStore`、embedding text/hash 和 `WorldBookEmbeddingIndexer` rebuild/backfill；Phase C 已实现 `WorldBookSource`；Phase D 已实现 save/import/delete/eraseAllData 维护和 Data Management 手动 rebuild。2026-05-17 Phase 4D 已新增 target-backed `WorldBookBackgroundSource` adapter 和 focused tests；2026-05-17 Phase 5/6 已由 `BackgroundWorker` 统一调度，并继续通过 `BackgroundAssembler` 输出兼容 `[World Book Entries]` block。
 
 职责：
 

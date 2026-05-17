@@ -1,6 +1,6 @@
 # 世界书向量化
 
-> 状态：Phase A schema + vector store 已实现；Phase B embedding text/hash/indexer/backfill 已实现；Phase C `WorldBookSource` keyword + semantic recall 和 Chat prompt 兼容接入已实现；Phase D CRUD/import/delete/eraseAllData 与手动 rebuild 入口已实现。BackgroundWorker / BackgroundPacket 统一调度尚未实现。
+> 状态：Phase A schema + vector store 已实现；Phase B embedding text/hash/indexer/backfill 已实现；Phase C `WorldBookSource` keyword + semantic recall 和 Chat prompt 兼容接入已实现；Phase D CRUD/import/delete/eraseAllData 与手动 rebuild 入口已实现。2026-05-17 Phase 5/6 已实现 BackgroundWorker / BackgroundPacket 统一调度与 Chat/Prompt compatible switch；统一 `[Background]` block 尚未启用。
 
 ## 1. 为什么需要向量化
 
@@ -118,7 +118,7 @@ Phase B 已实现 Core rebuild/backfill indexer；Phase C 在 Chat 召回前做 
 
 ## 5. 召回融合
 
-Phase C 当前已实现 Chat prompt 主链路的最小召回融合；BackgroundWorker 统一调度仍是后续目标。当前输出仍是同一个 `[World Book Entries]` block，semantic-only 世界书条目可以进入 prompt。
+Phase C 已实现 Chat prompt 主链路的最小召回融合；2026-05-17 Phase 5/6 已让 `WorldBookBackgroundSource` candidates 进入 `BackgroundWorker` 统一调度。当前输出仍是同一个 `[World Book Entries]` block，semantic-only 世界书条目可以进入 prompt。
 
 当前 `WorldBookSource` 候选来自两路：
 
@@ -157,4 +157,5 @@ Phase C 当前已实现 Chat prompt 主链路的最小召回融合；BackgroundW
 - 已实现：import 批量保存后批量 index，单条失败不回滚导入。
 - 已实现：delete entry / delete worldBook / eraseAllData 不留下 vector/meta 残留。
 - 已实现：Data Management 手动 rebuild 可 backfill existing entries。
-- 未实现：BackgroundWorker / BackgroundPacket / 统一 BackgroundSource 调度。
+- 已实现：BackgroundWorker / BackgroundPacket / BackgroundManager 统一调度；输出仍保持兼容 `[World Book Entries]` block。
+- 未实现：统一 `[Background]` block、Character/ConversationState sources、LibMan / synthesis。

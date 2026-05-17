@@ -1,6 +1,6 @@
 # Background 迁移计划
 
-> 状态：部分实现。AgentCore foundation 与 Phase 4A-4D source tool / adapter 层已落地并通过 focused tests；BackgroundWorker、BackgroundPacket 和 Chat / Prompt switch 尚未实现。
+> 状态：已实现到 Phase 6 compatible switch。AgentCore foundation、Phase 4A-4D source tools/adapters、Phase 5 DTO/worker/diagnostics、Phase 6 manager/prompt/chat switch 已落地并通过 focused tests；统一 `[Background]` block、LibMan 和 synthesis 尚未实现。
 
 ## Phase 0：文档和边界
 
@@ -9,7 +9,7 @@
 - 明确角色不是 agent。
 - 明确 BackgroundWorker 无发言权。
 - 明确 LibMan 是素材构建 agent，不参与 RP 输出。
-- 明确当前实现仍是 Memory/WorldBook 直接注入。
+- 明确 Phase 0 的历史基线曾是 Memory/WorldBook 直接注入；当前 Phase 6 后已切到 `BackgroundPacket` 兼容注入。
 
 产物：
 
@@ -25,16 +25,16 @@
 - 复用 2026-05-14 已关闭的 `PromptAssembler.trim(memories:)` importance 重排修复。
 - 让 Memory recall order 保持 semantic relevance。
 - importance 只做 tie-breaker。
-- 让 `MemoryRecallResult` / trace 成为后续 source tool 可包装的稳定输出。
+- 让 `MemoryRecallResult` / trace 成为 source tool 可包装的稳定输出。
 
 验证：
 
 - 已有 Phase A 回归测试证明高 importance 低 relevance 不会在 `PromptAssembler` 裁剪阶段挤掉高 relevance 记忆。
-- 后续 Background 接入时继续要求 MemorySource candidate order 保持 semantic relevance。
+- 当前 Background 接入后继续要求 `MemoryBackgroundSource` candidate order 保持 semantic relevance。
 
 当前状态：
 
-- 已完成；当前 Chat 兼容链路仍由 `MemoryManager.retrieveMemories(...)` 返回 entries 并注入 `[Memories]`。
+- 已完成；当前 Chat 主链路通过 `MemoryRecallTool -> MemoryBackgroundSource -> BackgroundWorker -> BackgroundPacket -> PromptAssembler(... backgroundPacket:)` 注入兼容 `[Memories]`。`MemoryManager.retrieveMemories(...)` 仍保留为 direct compatibility path。
 
 ## Phase 2：世界书向量化（已完成）
 
@@ -43,7 +43,7 @@
 - 新增 `world_book_entry_embedding`。
 - WorldBookSource 同时支持 keyword 和 semantic candidates。
 - entry 创建/更新/删除时维护 embedding 或 rebuild 标记。
-- 让 `WorldBookRecallResult` / trace 成为后续 source tool 可包装的稳定输出。
+- 让 `WorldBookRecallResult` / trace 成为 source tool 可包装的稳定输出。
 
 验证：
 
@@ -53,7 +53,7 @@
 
 当前状态：
 
-- 已完成 Phase A/B/C/D；当前 Chat 兼容链路仍由 `WorldBookSource.recallEntries(...)` 预选 entries 并注入 `[World Book Entries]`。
+- 已完成 Phase A/B/C/D；当前 Chat 主链路通过 `WorldBookRecallTool -> WorldBookBackgroundSource -> BackgroundWorker -> BackgroundPacket -> PromptAssembler(... backgroundPacket:)` 注入兼容 `[World Book Entries]`。`WorldBookSource.recallEntries(...)` 仍是 source adapter 输入和旧兼容路径。
 
 ## Phase 3：AgentCore foundation（已完成）
 
@@ -78,13 +78,13 @@
 - 新增内部 read-only source tool contract。
 - `MemoryRecallTool` 只包装 `MemoryManager.recallMemories(...)`，输出 `MemoryRecallResult` / trace。
 - `WorldBookRecallTool` 只包装 `WorldBookSource.recallEntries(...)`，输出 `WorldBookRecallResult` / trace。
-- 不引入 BackgroundWorker，不切 Chat prompt，不改 `[Memories]` / `[World Book Entries]` 兼容输出。
+- Phase 4 当时不引入 BackgroundWorker、不切 Chat prompt、不改 `[Memories]` / `[World Book Entries]` 兼容输出；Phase 5/6 已在后续完成 worker / packet / compatible switch。
 - 不复制 Memory rank fusion 或 WorldBook keyword+semantic fusion。
 
 验证：
 
 - tool 输出保持 Memory / WorldBook 当前 result 顺序。
-- diagnostics / trace metadata 可被后续 BackgroundSource adapter 消费。
+- diagnostics / trace metadata 可被 BackgroundSource adapter 消费。
 - tool 为 read-only：不写 DB、不联网、不生成 assistant message、不触发 WorldBook indexing side effect。
 
 当前状态：
@@ -94,7 +94,7 @@
 - `OpenChat/Core/Memory/MemoryRecallTool.swift` 已实现 read-only wrapper，符合 `BackgroundSourceTool`，只调用 `MemoryManager.recallMemories(...)`。
 - `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已实现 read-only wrapper，符合 `BackgroundSourceTool`，只调用 `WorldBookSource.recallEntries(...)`。
 - `MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已进入 Xcode target；`BackgroundSourceTests` 覆盖 candidate 顺序、source prefix、metadata、character/worldBook request 边界和不按 token budget 裁剪。
-- Baseline + Phase 4 closeout focused tests 验证了现有 Memory / WorldBook / Prompt / Chat / AgentCore 前置 contract、recall tool pass-through 和 adapter mapping；该结果不能解读为 BackgroundWorker 或 prompt switch 已实现。
+- Baseline + Phase 4 closeout focused tests 验证了 Memory / WorldBook / Prompt / Chat / AgentCore 前置 contract、recall tool pass-through 和 adapter mapping；Phase 5/6 的 worker / packet / prompt switch 由后续 focused tests 单独证明。
 
 ## Phase 5：Background DTO + deterministic worker
 
@@ -112,18 +112,33 @@
 - diagnostics 记录 omitted reason。
 - AgentCore policy 明确 BackgroundWorker 不联网、不写 DB、不生成 assistant message。
 
+当前状态：
+
+- 已完成。`BackgroundPolicy.swift`、`BackgroundPacket.swift`、`BackgroundDiagnostics.swift`、`BackgroundWorker.swift` 已进入 target。
+- `BackgroundWorkerTests` / `BackgroundPacketTests` / `BackgroundDiagnosticsTests` 覆盖 default policy、DTO identity、deterministic selection、duplicate/budget/per-source omission、policy denial 和 diagnostics。
+- Phase 5 没有让 worker 读写 DB、联网、调用 LLM、触发 worldBook rebuild 或生成 assistant message。
+
 ## Phase 6：PromptAssembler 切换到 BackgroundPacket
 
 目标：
 
-- PromptAssembler 不再分别接收 worldBookEntries + memories 作为直接注入来源。
+- PromptAssembler 主链路不再分别接收 worldBookEntries + memories 作为直接注入来源。
 - Chat 链路调用 `BackgroundManager.prepare(...)`。
-- `BackgroundAssembler` 生成 `[Background]` block。
+- `BackgroundAssembler` 生成兼容 prompt block。
 
 兼容：
 
 - 可先保持原 `[World Book Entries]` 和 `[Memories]` 文本格式，但来源从 packet 来。
 - 再逐步统一为 `[Background]`。
+
+当前状态：
+
+- 已完成 compatible switch。`BackgroundManager.swift` 组合 source adapters 与 worker，`BackgroundAssembler.swift` 把 packet entries 分组为 worldBook / memory prompt items。
+- `PromptAssembler.swift` 新增 packet-aware preview/assemble overload，仍保留旧 direct overload；当前输出保持 `[World Book Entries]` 在前、`[Memories]` 在后。
+- `ChatViewModel+Support.swift` 主链路调用 `BackgroundManager.prepare(...)`，并由 packet-aware PromptAssembler 生成 request body。
+- bounded worldBook rebuild 仍保留在 ChatViewModel pre-source stage；`BackgroundWorker` 与 `WorldBookBackgroundSource` 不触发 rebuild。
+- worldBook source failure 的兼容 keyword fallback 在 manager 中生成 `.worldBook` fallback candidates，避免切换后静默丢失世界书背景。
+- `ChatViewModelPromptAssemblyTests` 覆盖 request body 使用 packet selected entries、current input 不重复、semantic-only worldBook entry 仍进入兼容 block、semantic failure keyword fallback 仍生效。
 
 ## Phase 7：LibMan
 

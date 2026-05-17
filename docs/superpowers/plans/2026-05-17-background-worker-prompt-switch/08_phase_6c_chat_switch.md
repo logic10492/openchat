@@ -26,6 +26,22 @@ ChatViewModel.generateResponse
   -> APIClient.streamMessage(...)
 ```
 
+## 本修订的默认切换策略
+
+Phase 6C 开始前必须确认：
+
+- Phase 5 closeout focused tests 已通过或有明确 NOT RUN / blocked 记录。
+- 6A `BackgroundManagerTests` 已覆盖 source merge / fallback / diagnostics。
+- 6B `PromptAssemblerTests` 已覆盖 packet-compatible `[Memories]` / `[World Book Entries]` 输出。
+
+第一版 Chat switch 采用 conservative route：
+
+- bounded worldBook rebuild **继续保留在 ChatViewModel**，执行位置仍在 worldBook source recall / manager prepare 前。
+- `BackgroundManager.prepare(...)` 接收 Chat 构造的 `BackgroundRequest` 和 `BackgroundPolicy.compatibilityDefault(...)`。
+- `BackgroundPolicy.tokenBudget` 是 worker candidate selection ceiling；PromptAssembler 仍做最终 prompt budget trim。
+- direct final prompt 注入权从 Memory / WorldBook arrays 转移到 `BackgroundPacket`。
+- 旧 direct PromptAssembler overload 暂时保留，作为 regression / rollback 对照。
+
 ## 依赖注入
 
 `DependencyContainer` 负责装配：
@@ -40,6 +56,12 @@ ChatViewModel.generateResponse
 ViewModel 继续通过 init 接收依赖，不在 View 中创建服务。
 
 如果 `ChatViewModel` initializer 需要新增 `backgroundManager`，必须更新所有 tests / preview factories。
+
+当前已知调用点必须纳入 6C diff review：
+
+- `OpenChat/ContentView.swift` 中的 `ChatDetailContainer`。
+- `OpenChat/Features/Chat/Views/ChatView.swift` preview。
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 内所有 `ChatViewModel(...)` 构造。
 
 ## Memory extraction 边界
 
@@ -58,6 +80,8 @@ ViewModel 继续通过 init 接收依赖，不在 View 中创建服务。
 1. 保留在 ChatViewModel：先执行 bounded rebuild，再调用 manager。
 2. 迁移到 Manager pre-source stage：Chat 不再直接 rebuild，manager tests 证明 ordering。
 
+本修订默认选择路线 1。路线 2 不是 Phase 6C 默认完成条件，除非用户单独确认。
+
 不可接受路线：
 
 - 放进 `BackgroundWorker`。
@@ -74,6 +98,7 @@ ViewModel 继续通过 init 接收依赖，不在 View 中创建服务。
 - current user input 不重复。
 - semantic-only world book entry 可以进入 prompt。
 - memory retrieval failure / worldBook source failure 的 fallback 行为符合 manager policy。
+- worldBook source failure 时不得比现有行为更差：如保留 keyword fallback，则通过 explicit fallback source / closure 产出 `.worldBook` candidates；如暂不支持，Phase 6C 不能 closeout，必须记录 blocked。
 - Assistant message 只由 streaming response 创建/保存，worker 不创建。
 
 ## 完成定义
@@ -82,7 +107,8 @@ ViewModel 继续通过 init 接收依赖，不在 View 中创建服务。
 - Direct final prompt 注入权不再分别属于 Memory / WorldBook。
 - Current input duplicate guard 仍有效。
 - Worker 不生成 assistant message 的边界有 tests 或 clear code evidence。
-- Phase 6 closeout 记录 bounded rebuild 的最终归属。
+- Phase 6 closeout 记录 bounded rebuild 的最终归属；本修订默认仍归属 ChatViewModel。
+- 所有 `ChatViewModel(...)` 构造点已更新或明确不需要更新。
 
 ## 测试命令
 

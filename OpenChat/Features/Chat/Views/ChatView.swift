@@ -185,6 +185,7 @@ struct ChatView: View {
                 memoryManager: DependencyContainer.preview().memoryManager,
                 worldBookEmbeddingIndexer: DependencyContainer.preview().worldBookEmbeddingIndexer,
                 worldBookSource: DependencyContainer.preview().worldBookSource,
+                backgroundManager: DependencyContainer.preview().backgroundManager,
                 titleGenerator: DependencyContainer.preview().titleGenerator,
                 appState: AppState()
             )

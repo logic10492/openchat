@@ -1,11 +1,11 @@
 # Hindsight-lite 完善设计
 
-> 状态：Phase A recall ordering、Phase B recall trace / fallback tiers、Phase C retain provenance / dedupe、Phase D reflect contract / Responses request-shape 已实现；reflect executor、`memory_entry_link` migration 和 Background 接入仍为后续规划。
+> 状态：Phase A recall ordering、Phase B recall trace / fallback tiers、Phase C retain provenance / dedupe、Phase D reflect contract / Responses request-shape 已实现；2026-05-17 Phase 4-6 已完成 `MemoryRecallTool`、`MemoryBackgroundSource`、`BackgroundWorker` / `BackgroundPacket` 和 Chat-Prompt compatible switch。reflect executor、`memory_entry_link` migration、统一 `[Background]` block 和 Background request-shape audit 仍为后续规划。
 > 目标：用轻量 retain / recall / reflect 设计关闭 `arch/AntiEntropy/problem.md` 中剩余的记忆系统问题。
 
 本页参考 Hindsight 论文的三段式操作：retain、recall、reflect。论文把 agent memory 视为可推理的结构化底座，并强调证据、推断和可追踪更新的区别。OpenChat 不需要完整复刻论文中的多网络记忆系统，当前目标是把已有 `memory_entry` / `memory_embedding` 演进成低延迟、可解释、可测试的本地轻量版本。
 
-边界说明：本页只定义 Memory 层完善。世界书向量化与 BackgroundWorker 统一调度是后续独立计划；本页只要求 Memory 输出可被后续 `MemoryBackgroundSource` 包装，不实现 Background 层。
+边界说明：本页只定义 Memory 层完善。世界书向量化与 Background runtime 是独立计划；当前 Memory 输出已可被 `MemoryRecallTool` / `MemoryBackgroundSource` 包装并进入 `BackgroundPacket` 兼容链路，但 reflect executor、`memory_entry_link` 和统一 `[Background]` block 不属于本页已实现范围。
 
 参考：<https://arxiv.org/abs/2512.12818>
 
@@ -26,8 +26,8 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 - 不把同会话 compression checkpoint 替换成长期记忆。
 - 不让 `PromptAssembler` 承担 recall rerank。
 - 不为 provider 没有返回的字段伪造“模型置信分数”。
-- 不把 Background 目标架构写成当前已实现能力。
-- 不实现世界书向量化或 `BackgroundWorker`。
+- 不把统一 `[Background]` block、Character / ConversationState sources 或 synthesis worker 写成当前已实现能力。
+- 不在 Memory 模块内实现世界书向量化、Background source orchestration 或 `BackgroundWorker`。
 
 ## 3. 与当前问题的对应关系
 
@@ -37,7 +37,7 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 | P2：fallback 和阈值缺少校准与可观测性 | Phase B：`MemoryRecallTrace` + fallback tier | 已实现，UI 展示未做 |
 | P2：recent fallback 只按时间取最近 | Phase B：keyword + recent high-value fallback，不盲目注入噪声 | 已实现 |
 | P2：提取 prompt 缺少角色卡、已有记忆、source 边界和去重 | Phase C：retain schema + extraction prompt v2 | 已实现 |
-| P2：Responses API system folding | Phase D：当前 `[Memories]` request shape audit；Background block audit 留给独立 Background 计划 | 已实现当前 request-shape 验收 |
+| P2：Responses API system folding | Phase D：当前 `[Memories]` request shape audit；统一 `[Background]` block audit 留给后续计划 | 已实现当前 request-shape 验收 |
 | P3：检索可观测性不足 | Phase B/D：recall trace 已有内部 contract；debug UI 与 prompt budget omission 后续处理 | 部分实现 |
 
 ## 4. 总体架构
@@ -57,8 +57,9 @@ Recall
   -> recent high-value candidates
   -> rank fusion
   -> ordered MemoryRecallResult
+  -> MemoryBackgroundSource BackgroundCandidate(.memory)
+  -> BackgroundWorker selected BackgroundPacket entry
   -> current [Memories] compatibility output
-  -> future BackgroundCandidate(.memory) adapter boundary
 
 Reflect
   selected memory cluster
@@ -67,24 +68,25 @@ Reflect
   -> user-confirmed or audited write
 ```
 
-当前兼容链路仍是：
+当前 Chat 兼容链路是：
 
 ```text
-MemoryManager.retrieveMemories
-  -> MemoryManager.recallMemories
-  -> [MemoryEntryRecord]
-  -> PromptAssembler.trim(memories:)
+MemoryManager.recallMemories
+  -> MemoryRecallTool
+  -> MemoryBackgroundSource
+  -> BackgroundWorker
+  -> BackgroundPacket
+  -> PromptAssembler(... backgroundPacket:)
   -> [Memories] system block
 ```
 
-后续 Background 独立计划中的目标源码才会收敛为：
+旧 direct / rollback path 仍保留：
 
 ```text
-MemoryBackgroundSource
-  -> [BackgroundCandidate]
-  -> BackgroundWorker
-  -> BackgroundPacket
-  -> BackgroundAssembler / PromptAssembler
+MemoryManager.retrieveMemories
+  -> [MemoryEntryRecord]
+  -> PromptAssembler.trim(memories:)
+  -> [Memories] system block
 ```
 
 ## 5. Phase A：Recall ordering 先行修复
@@ -95,7 +97,7 @@ MemoryBackgroundSource
 
 规则：
 
-- `MemoryManager` 或未来 `MemoryBackgroundSource` 输出的顺序就是最终相关性顺序。
+- `MemoryManager` / `MemoryBackgroundSource` 输出的顺序就是 Memory 内部相关性顺序。
 - `PromptAssembler.trim(memories:within:)` 只能按输入顺序裁剪。
 - `importance` 只用于同等相关性时的 tie-breaker 或 UI 展示。
 - 如果调用方想用不同排序，必须在进入 `PromptAssembler` 前完成。
@@ -168,7 +170,7 @@ memory_entry_link
 
 - `memory_entry` 继续保持当前 prompt 注入路径可用。
 - Hindsight-lite 元数据可以独立迁移、独立测试（v14 migration）。
-- 如果后续 Background 接管 prompt，主表仍能作为稳定内容表。
+- Background 接管 prompt selection 后，主表仍能作为稳定内容表。
 
 实现证据：
 
@@ -280,7 +282,7 @@ struct MemoryRecallTrace: Sendable {
 }
 ```
 
-`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。完整 trace 是 Memory 层能力；等后续独立 Background 计划落地后，再由 `MemoryBackgroundSource` 读取并包装。
+`MemoryManager.retrieveMemories(...) -> [MemoryEntryRecord]` 保持兼容，内部使用 result 后只返回 `entries.map(\.memory)`。完整 trace 是 Memory 层能力；当前 `MemoryBackgroundSource` 已读取并包装为 `BackgroundCandidate` metadata，供 `BackgroundWorker` 生成 packet diagnostics。
 
 ### 7.2 Candidate sources
 
@@ -312,7 +314,7 @@ Phase B 已把旧“语义失败或低相关时取最近 N 条”改成分层：
 | `semanticUnavailable` | embedding/model/sqlite-vec 失败 | keyword + recent high-value |
 | `noSemanticHit` | semantic 全部超过阈值 | keyword candidates；没有 keyword 时只返回 pinned/high-value relationship summary |
 | `emptyIndex` | 角色没有记忆或没有 embedding | 空结果，不伪造 recent |
-| `budgetDropped` | 有候选但 prompt 预算不足 | 留给后续 Background / prompt budget trace |
+| `budgetDropped` | 有候选但 prompt 预算不足 | 留给后续 packet diagnostics / prompt budget trace |
 
 这能解决两个体感问题：
 
@@ -422,21 +424,25 @@ struct MemoryReflectObservation: Sendable {
 
 ### 9.1 Background 适配边界
 
-Hindsight-lite 不直接替代 Background，也不在本计划内实现 Background。它提供更好的 Memory source，供后续独立 Background 计划包装：
+Hindsight-lite 不直接替代 Background，也不在 Memory 模块内实现 Background orchestration。它提供更好的 Memory source；2026-05-17 Phase 4-6 已把该 source 包装进当前 Chat-Prompt 兼容链路：
 
 ```text
 MemoryRecallResult
   -> BackgroundCandidate(sourceType: .memory, metadata: trace fields)
   -> BackgroundWorker
   -> BackgroundPacket
+  -> PromptAssembler(... backgroundPacket:)
+  -> [Memories]
 ```
 
-后续迁移顺序：
+已完成迁移顺序：
 
 1. 先修 `PromptAssembler` order-preserving trim。
 2. 本计划补齐 `MemoryRecallResult` / trace / provenance。
-3. 后续 Background 计划再把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
-4. 最后让 `PromptAssembler` 消费 Background block，而不是分别消费 memories 和 world-book entries。
+3. `MemoryRecallTool` / `MemoryBackgroundSource` 把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
+4. `BackgroundWorker` / `BackgroundPacket` / packet-aware `PromptAssembler` 接入 Chat 主链路，保持 `[Memories]` 兼容 block。
+
+后续迁移只剩统一 `[Background]` block、Character / ConversationState sources、diagnostics UI 和 synthesis/reflect 相关工作。
 
 ### 9.2 Responses API system folding
 
@@ -451,8 +457,9 @@ MemoryRecallResult
 
 仍留给后续：
 
-- Background block 的稳定 label 与 request-shape audit 留给后续 Background 计划包。
-- 在 Background 接入后重新验收 `BackgroundPacket` / Background block 的 provider request shape。
+- 统一 `[Background]` block 的稳定 label 与 request-shape audit。
+- Character / ConversationState sources 与 synthesis worker。
+- packet diagnostics 的 debug UI 展示。
 
 ## 10. 可观测性
 
@@ -485,7 +492,7 @@ MemoryRecallResult
 | provenance migration | companion table 追加，不破坏旧数据 |
 | dedupe behavior | 同批重复不重复写入 |
 | reflect output validation | 已覆盖：observation 必须有 `basedOn`，request 必须有 source ids，relation 集合最小化 |
-| Responses API request shape | 已覆盖：当前 `[Memories]` block 不丢失；Background block 留给后续独立计划 |
+| Responses API request shape | 已覆盖：当前 `[Memories]` block 不丢失；统一 `[Background]` block 留给后续独立计划 |
 
 建议 focused verification：
 
@@ -503,6 +510,6 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | C | provenance companion table + extraction prompt v2 | 是（v14） |
 | D | reflect contract + Responses request-shape | 否 |
 | E | reflect executor / `memory_entry_link` / basedOn 表 | 是 |
-| F | MemoryBackgroundSource 接入 Background | 后续独立计划，不在本页对应计划包内 |
+| F | MemoryBackgroundSource 接入 Background | 已完成 Phase 4-6 compatible switch；统一 `[Background]` block 未启用 |
 
-Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。剩余工作是后续独立计划中的 reflect executor、`memory_entry_link` 持久化和 Background 接入。
+Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。2026-05-17 后续 Phase 4-6 已完成 Memory source tool / adapter、BackgroundWorker / packet 和 Chat-Prompt compatible switch。剩余工作是 reflect executor、`memory_entry_link` 持久化、统一 `[Background]` block、Character / ConversationState sources 和 packet diagnostics UI。

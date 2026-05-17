@@ -20,6 +20,7 @@ Memory Hindsight-lite repair
   -> BackgroundSource adapters / Core Background DTO
   -> deterministic BackgroundWorker
   -> Prompt switches to BackgroundPacket
+  -> UI automation baseline
   -> LibMan / Stage
 ```
 
@@ -28,8 +29,10 @@ Memory Hindsight-lite repair
 - Memory Hindsight-lite A/B/C/D 与 Lead closeout 已完成并通过 full suite。
 - WorldBook vectorization A/B/C/D 与 closeout 已完成并通过 full suite。WorldBook 已具备 embedding、semantic recall、trace、候选管理和 CRUD/import/delete/rebuild 维护能力。
 - AgentCore foundation 已完成：`OpenChat/Core/AgentCore/` 与 `OpenChatTests/Core/AgentCoreTests/` 已进入 Xcode target；AgentCore focused 12 tests / 4 suites、主链路 focused 50 tests / 4 suites、full suite 303 tests / 58 suites 均通过。
-- BackgroundWorker 尚未开始实现；在进入 `Core/Background` DTO / worker 之前，下一项工程入口应先完成 Memory 与 WorldBook 的 read-only source tool 暴露。
-- 当前下一步不是继续做 WorldBook，也不是直接写 BackgroundWorker，而是把现有 `MemoryRecallResult` / `WorldBookRecallResult` 暴露成内部 source tool contract，再由后续 BackgroundSource adapter 消费。
+- 当前工作区已落地 Memory / WorldBook read-only source tools、BackgroundSource adapters、`Core/Background` DTO、deterministic `BackgroundWorker`、`BackgroundManager`、`BackgroundPacket` 与 Chat/Prompt 到 packet-aware 路径的兼容切换。
+- 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
+- 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
+- 当前下一步建议先收束并提交 Background worker prompt switch 这批工作区变更，再建立 UI 自动化 baseline，随后进入 LibMan / Stage。
 - LibMan、Stage、Director、多角色同场仍是后续阶段。
 
 ```text
@@ -105,7 +108,7 @@ WorldBook + Memory + Character State + Conversation State
 - `arch/modules/background/sources.md`
 - `docs/superpowers/plans/2026-05-17-agent-core-foundation/README.md`
 
-## 4. Memory 与 WorldBook 先暴露为 source tool，再统一为 BackgroundSource
+## 4. Memory 与 WorldBook source tool / BackgroundSource
 
 目标：
 
@@ -116,13 +119,15 @@ WorldBook + Memory + Character State + Conversation State
 - BackgroundSource adapter 读取 tool result，输出 `BackgroundCandidate`，再由 BackgroundWorker 统一调度。
 - Memory 和 WorldBook 不再分别拥有最终 prompt 注入权。
 
-当前差异：
+当前状态：
 
 - 当前 Memory 已完成 Hindsight-lite 修复：`MemoryManager` 能输出 `MemoryRecallResult` / `MemoryRecallTrace`，fallback 改为 semantic / keyword / recent high-value 分层，retain v2 已有 provenance / dedupe metadata。
-- 但当前 Memory 仍由 `ChatViewModel` 调 `MemoryManager.retrieveMemories(...)`，再由 `PromptAssembler` 注入 `[Memories]`；尚未暴露为内部 source tool，也尚未包装成 `MemoryBackgroundSource`。
+- `MemoryRecallTool` 与 `MemoryBackgroundSource` 已在当前工作区消费 Memory recall result，并把 selected memory candidates 交给 Background worker / packet 路径。
 - 当前 WorldBook 已完成 keyword + semantic 融合召回：`WorldBookSource` 输出 recall result / trace，Chat 主链路会先执行 bounded rebuild，再把 selected entries 传给 `PromptAssembler`。
-- 但当前 WorldBook 仍通过兼容路径注入 `[World Book Entries]`；尚未暴露为内部 source tool，也尚未包装成 `WorldBookBackgroundSource`，也尚未交给 BackgroundWorker 统一排序和裁剪。
-- 目标架构会先把这两条路径收敛到 read-only source tool / adapter，再进入 Background。
+- `WorldBookRecallTool` 与 `WorldBookBackgroundSource` 已在当前工作区消费 WorldBook recall result，并把 selected world-book candidates 交给 Background worker / packet 路径。
+- `ChatViewModel` 当前主链路为 bounded world-book rebuild -> `BackgroundManager.prepare(...)` -> `PromptAssembler.preview(... backgroundPacket:)` -> `ContextManager.prepareHistory(...)` -> `PromptAssembler.assemble(... backgroundPacket:)`。
+- 旧 direct overload 保留为兼容 / rollback path；最终 prompt 文本仍保持 `[World Book Entries]` 与 `[Memories]` block 名称，来源改为 `BackgroundPacket` selected entries。
+- CharacterState / ConversationState source 尚未实现，仍是后续阶段。
 
 参考文档：
 
@@ -163,7 +168,7 @@ world_book_entry_embedding_meta
 - `docs/superpowers/plans/2026-05-16-world-book-vectorization/README.md`
 - `harness/2026.05.16/world-book-vectorization/index.md`
 
-本阶段没有切换到 BackgroundWorker，也没有取消当前 `[World Book Entries]` block。它只建立 WorldBook 的向量检索能力和可测试管理边界，接下来由 Background 计划包统一消费。
+本阶段先建立 WorldBook 的向量检索能力和可测试管理边界。当前工作区后续 Background 计划包已开始消费这些能力，但仍保留 `[World Book Entries]` 兼容 block 名称。
 
 ## 6. LibMan / 图书管理员
 
@@ -282,28 +287,63 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - Closeout：AgentCore focused 12 tests / 4 suites passed；主链路 regression focused 50 tests / 4 suites passed；full suite 303 tests / 58 suites passed。
 - 不接入 Chat / Prompt / Memory / WorldBook / Database / Networking / UI runtime。
 
-#### Phase 3b：Memory / WorldBook read-only source tool 暴露（下一计划包）
+#### Phase 3b：Memory / WorldBook read-only source tool 暴露（当前工作区已完成）
 
 - 为 Memory 暴露内部 source tool contract，包装 `MemoryManager.recallMemories(...)` 与 `MemoryRecallResult` / trace。
 - 为 WorldBook 暴露内部 source tool contract，包装 `WorldBookSource.recallEntries(...)` 与 `WorldBookRecallResult` / trace。
 - tool 输出必须结构化、read-only、可诊断；不拼 prompt、不写 DB、不调用网络、不生成 assistant message。
 - 该 tool 暴露只服务后续 BackgroundSource / 后台 worker，不给普通角色回复开放 tool call。
-- 保留当前 Chat 兼容路径：`[Memories]` 与 `[World Book Entries]` 仍由现有链路注入。
+- 已补 focused tests 覆盖 source tool / adapter 的候选映射、顺序、metadata 与 read-only 边界。
 
-#### Phase 3c：Background DTO + deterministic worker（后续计划包）
+#### Phase 3c：Background DTO + deterministic worker（当前工作区已完成）
 
 - 新增 `Core/Background` DTO。
 - 用确定性规则实现 BackgroundWorker。
 - 通过 Phase 3b 的 source tool / adapter 包装已完成的 Memory recall result 与完成向量化后的 WorldBook candidates。
 - 不让 BackgroundWorker 直接拼最终 prompt 或调用网络。
-- 先只落 Core 层闭环与 tests，不在同一阶段切 Chat prompt 主链路。
+- 已落 Core 层闭环与 tests；`BackgroundWorker` 输出 `BackgroundPacket`，diagnostics 不进入 prompt 文本。
 - 不处理角色回复动作/台词结构化，也不引入普通角色 tool call；标签化输出相对 JSON 更适合未来流式文本，但需要单独设计 streaming adapter 后再决定。
 
-### Phase 4：Prompt 切换到 BackgroundPacket
+### Phase 4：Prompt 切换到 BackgroundPacket（当前工作区已完成）
 
 - Chat 链路调用 `BackgroundManager.prepare(...)`。
 - `PromptAssembler` 消费 Background packet/block。
-- 逐步替换 `[World Book Entries]` + `[Memories]` 直接注入。
+- `[World Book Entries]` + `[Memories]` 兼容 block 的直接来源已切到 `BackgroundPacket` selected entries。
+- 验证：focused Background / Prompt / Chat tests 已覆盖 packet-aware 路径；当前 full suite 330 tests / 65 suites passed。
+
+### Phase 4b：UI 自动化 baseline（下一建议计划）
+
+目标：
+
+- 增加独立 `OpenChatUITests` target，用 XCUITest 覆盖真实用户路径。
+- 保持 `OpenChatTests` 负责逻辑 / 数据库 / Prompt / 网络解析；`OpenChatUITests` 只验证 UI 接线、导航和关键工作流是否可走通。
+- 所有 UI 测试必须不依赖真实网络、不依赖用户真实数据、不写生产数据库。
+
+实施要点：
+
+- 修改 `scripts/generate_xcodeproj.rb`，由脚本生成 `OpenChatUITests` target，避免手改 Xcode 工程后被重新生成覆盖。
+- 为关键 View 增加稳定 `accessibilityIdentifier`，例如 sidebar 新建会话、chat input、send button、settings/add endpoint、endpoint editor fields、character/world-book 创建入口。
+- 在 App 启动路径增加 `--ui-testing` / `--mock-api` 等启动参数，UI 测试模式下使用临时数据库、`InMemoryAPIKeyStore` 和可预测 seed data。
+- 增加 mock API seam，让 UI 测试中的发送消息流程返回固定 assistant response，不访问真实 OpenAI-compatible endpoint。
+- 第一批只覆盖最短关键路径：启动 -> 新建会话 -> 发送消息 -> mock assistant response 可见；设置页新增 endpoint；角色卡 / 世界书创建后可在 Chat 设置中选择。
+- 第二批再覆盖破坏性操作与错误路径：重命名 / 删除会话、保存失败可见、endpoint 连接失败提示、memory extraction indicator 不阻塞发送。
+
+验收命令：
+
+```bash
+xcodebuild test \
+  -project OpenChat.xcodeproj \
+  -scheme OpenChat \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:OpenChatUITests
+```
+
+完成标准：
+
+- `OpenChatUITests` target 由生成脚本稳定生成。
+- UI test 不访问真实网络，测试数据可重复。
+- 至少 3 条 smoke 级用户路径稳定通过。
+- full suite 仍通过，且 build/install/launch smoke 不回退。
 
 ### Phase 5：LibMan
 
@@ -338,18 +378,16 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 
 ## 10. 当前已知未完成
 
-- Background 系统尚未实现。
-- `Core/Background` DTO / `BackgroundWorker` / `BackgroundPacket` 尚未实现。
-- `Core/AgentCore` foundation 已完成；下一步是 Memory / WorldBook read-only source tool 暴露。
-- Memory / WorldBook source tool contract 尚未实现。
-- Memory 输出尚未包装成 `MemoryBackgroundSource` / `BackgroundCandidate`。
-- WorldBook 输出尚未包装成 `WorldBookBackgroundSource` / `BackgroundCandidate`。
-- Prompt 仍通过 `[Memories]` 与 `[World Book Entries]` 兼容 block 注入，尚未切到 `BackgroundPacket`。
+- 当前 Background worker prompt switch 仍是工作区变更，下一步需要整理 diff、补必要证据并按合理边界提交。
+- `OpenChatUITests` target 尚未实现；UI/E2E 自动化仍只有 build/install/launch smoke。
+- UI testing mode、mock API seam、seed data、稳定 accessibility identifiers 尚未实现。
+- CharacterState / ConversationState source 尚未实现。
 - LibMan 尚未实现。
 - Stage 系统尚未实现。
 - Director agent / 导演模式尚未实现。
 - 多角色同场参与尚未实现。
 - reflect LLM executor / UI 入口 / `memory_entry_link` 持久化尚未实现。
-- Background diagnostics / 检索可观测性尚未实现。
-- Responses API system folding 对 Background block 的实际位置仍需单独审计。
+- Background diagnostics 已有 DTO / tests，尚未进入用户可见调试界面。
+- 本地化资源仍有缺口，需要补齐 `Localizable.xcstrings` 中缺失的 UI 文案 key。
+- 多个 Swift 文件超过 300 行规范，后续可按风险逐步拆分。
 - 角色动作/台词拆分、标签化输出、JSON/schema 输出和 streaming parser 尚未设计；当前只保留自然流式文本 + UI 轻量适配。

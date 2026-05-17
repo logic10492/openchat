@@ -2,7 +2,7 @@
 
 ## 1. 检索入口
 
-Chat 发送链路在自动提取之后调用：
+Chat 发送链路在自动提取之后通过 `BackgroundManager.prepare(...)` 调用 Memory recall source。旧 direct fallback / compatibility path 仍可调用：
 
 ```swift
 memoryManager.retrieveMemories(
@@ -12,7 +12,7 @@ memoryManager.retrieveMemories(
 )
 ```
 
-这里的 `query` 是当前用户输入。检索结果会传入 `PromptAssembler.preview(...)` 和 `PromptAssembler.assemble(...)`。
+这里的 `query` 是当前用户输入。当前生产链路的 Memory recall result 会先经 `MemoryRecallTool -> MemoryBackgroundSource -> BackgroundWorker -> BackgroundPacket`，再传入 packet-aware `PromptAssembler.preview(... backgroundPacket:)` 和 `PromptAssembler.assemble(... backgroundPacket:)`。
 
 ## 2. Recall v2 检索步骤
 
@@ -61,7 +61,7 @@ Phase B 后不再把任意最近 N 条记忆作为默认 fallback。当前分层
 [/Memories]
 ```
 
-该 block 属于 Current-Turn Context，位于 Stable Identity / Stable Conversation State 之后、Current Turn user message 之前。
+该 block 属于 Current-Turn Context，位于 Stable Identity / Stable Conversation State 之后、Current Turn user message 之前。2026-05-17 Phase 6 后，当前生产链路由 `BackgroundPacket` selected `.memory` entries 生成该兼容 block；旧 `memories:` direct overload 保留作兼容 / rollback。
 
 ## 5. Token 预算
 
@@ -83,8 +83,8 @@ historyBudget = remaining - exampleDialogsBudget - worldBookBudget - memoryBudge
 
 排序权属：
 
-- 当前由 `MemoryManager` 输出最终 prompt memory 顺序。
-- `MemoryRecallResult` 负责 rank fusion；2026-05-17 Phase 4B 已由 read-only `MemoryRecallTool` 暴露该结果，2026-05-17 Phase 4D 已由 target-backed `MemoryBackgroundSource` 映射为 `BackgroundCandidate`。BackgroundWorker / BackgroundPacket / Chat-Prompt switch 仍未实现，Background 完整接入前不能把 prompt 调度权写成已迁移。
+- `MemoryRecallResult` 负责 Memory 内部 rank fusion；2026-05-17 Phase 4B 已由 read-only `MemoryRecallTool` 暴露该结果，2026-05-17 Phase 4D 已由 target-backed `MemoryBackgroundSource` 映射为 `BackgroundCandidate`。
+- 2026-05-17 Phase 5/6 后，`BackgroundWorker` 负责 memory / worldBook 的跨 source candidate selection，`PromptAssembler` 保持 packet order 并执行最终 token budget trim。
 - `importance` 只作为同等相关性时的 tie-breaker、fallback 策略输入或 UI 展示元数据，不再由 `PromptAssembler` 用来重排 prompt memory。
 
 实现与测试证据：
@@ -103,15 +103,16 @@ semantic KNN candidates
   + recent high-value candidates
   -> rank fusion
   -> ordered MemoryRecallResult
+  -> MemoryBackgroundSource BackgroundCandidate
+  -> BackgroundWorker selected BackgroundPacket entry
   -> current [Memories] prompt compatibility
-  -> future BackgroundCandidate adapter boundary
 ```
 
 当前 contract：
 
 - `MemoryRecallResult.entries` 是最终有序列表。
 - `MemoryRecallTrace` 记录 semantic/keyword/recent candidate 数量、fallback reason、selected ids 和 omitted ids。
-- 兼容旧链路时，`PromptAssembler` 只按输入顺序裁剪，不再了解 semantic distance、importance rerank 或 fallback 细节。
+- 当前 Chat 链路经 `BackgroundPacket` 进入 `PromptAssembler`；兼容旧链路时，`PromptAssembler` 仍只按输入顺序裁剪，不再了解 semantic distance、importance rerank 或 fallback 细节。
 - `recent` 只作为 high-value 补充或 fallback tier，不再无条件把最近噪声塞入 prompt。
 
 fallback 分层：
@@ -121,7 +122,7 @@ fallback 分层：
 | `semanticUnavailable` | embedding/model/sqlite-vec 失败 | keyword + recent high-value |
 | `noSemanticHit` | KNN 全部超过阈值 | keyword 命中优先；没有 keyword 时只保留少量高价值 relationship/summary |
 | `emptyIndex` | 无 memory 或无 embedding | 返回空，不伪造记忆 |
-| `budgetDropped` | 有候选但 prompt 预算不足 | 尚未由 `PromptAssembler` 回写；后续 Background 统一裁剪时处理 |
+| `budgetDropped` | 有候选但 prompt 预算不足 | 尚未由 `PromptAssembler` 回写；后续 packet diagnostics / prompt budget trace 处理 |
 
 ## 8. 错误处理
 

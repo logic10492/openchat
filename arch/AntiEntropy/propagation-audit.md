@@ -1073,6 +1073,99 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 未完成边界
 
-- `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 未实现。
-- Chat 主链路未切换到 `BackgroundManager.prepare(...)`。
-- `PromptAssembler` 未消费 `BackgroundPacket`，兼容 `[Memories]` / `[World Book Entries]` 输出仍是当前 runtime 行为。
+- 2026-05-17 后续 Phase 5/6 已完成 `BackgroundWorker` / `BackgroundPacket` / `BackgroundManager` / `BackgroundAssembler` 与 Chat/Prompt compatible switch。以下新增段为当前状态。
+
+## Background Worker / Prompt Switch Phase 5/6 增量传播审计（2026-05-17）
+
+范围：`OpenChat/Core/Background/*`、`OpenChat/Core/PromptEngine/PromptAssembler.swift`、`OpenChat/App/DependencyContainer.swift`、`OpenChat/ContentView.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`、`OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`、`OpenChat/Features/Chat/Views/ChatView.swift`、Background / Prompt / Chat focused tests、相关 arch/harness 写回。
+
+审计模式：窄范围增量审计。OpenChat 当前没有 Magnum Agent 的静态 import 图脚本，本轮继续使用 `rg` 引用面 + live Swift 行为链路复核；静态传播面和行为传播结论分开记录。
+
+### 静态传播面
+
+新增 / 修改 runtime surface：
+
+- `OpenChat/Core/Background/BackgroundPolicy.swift`
+- `OpenChat/Core/Background/BackgroundPacket.swift`
+- `OpenChat/Core/Background/BackgroundDiagnostics.swift`
+- `OpenChat/Core/Background/BackgroundWorker.swift`
+- `OpenChat/Core/Background/BackgroundManager.swift`
+- `OpenChat/Core/Background/BackgroundAssembler.swift`
+- `OpenChat/Core/Background/BackgroundSourceTool.swift`：`BackgroundSourceType` 增加 `CaseIterable` / `Hashable` conformance，source cases 仍只有 `.memory` / `.worldBook`。
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift`：新增 packet-aware preview/assemble overload，旧 direct overload 保留。
+- `OpenChat/App/DependencyContainer.swift`：装配 `BackgroundManager`。
+- `OpenChat/ContentView.swift`、`OpenChat/Features/Chat/Views/ChatView.swift`：向 `ChatViewModel` 注入 manager。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`：新增可选 `backgroundManager` 依赖。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：主生成链路调用 `BackgroundManager.prepare(...)`，bounded worldBook rebuild 留在 Chat pre-source stage。
+
+新增 / 修改测试 surface：
+
+- `OpenChatTests/Core/BackgroundTests/BackgroundPacketTests.swift`
+- `OpenChatTests/Core/BackgroundTests/BackgroundWorkerTests.swift`
+- `OpenChatTests/Core/BackgroundTests/BackgroundDiagnosticsTests.swift`
+- `OpenChatTests/Core/BackgroundTests/BackgroundManagerTests.swift`
+- `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`
+
+未修改面：
+
+- 未新增 DB migration。
+- 未修改 `OpenChat/Core/WorldBook/WorldBookEmbeddingIndexer.swift`。
+- 未修改 `OpenChat/Core/Networking/*`。
+- 未修改 `scripts/generate_xcodeproj.rb` 或签名配置；新增 Swift 文件通过 `ruby scripts/generate_xcodeproj.rb` 进入 target。
+
+### 行为传播结论
+
+主聊天链路已从 direct Memory / WorldBook final injection 切换为 packet-compatible path：
+
+```text
+ChatViewModel.generateResponse
+  -> persist / filter current user message
+  -> pre-response Memory extraction remains Chat-owned
+  -> bounded WorldBookEmbeddingIndexer.rebuildMissingOrStale(...) remains Chat-owned
+  -> BackgroundManager.prepare(...)
+       -> MemoryBackgroundSource / WorldBookBackgroundSource
+       -> BackgroundWorker.run(...)
+       -> BackgroundPacket
+  -> PromptAssembler.preview(... backgroundPacket:)
+  -> ContextManager.prepareHistory(...)
+  -> PromptAssembler.assemble(... backgroundPacket:)
+  -> APIClient.streamMessage(...)
+```
+
+Boundary conclusions:
+
+- `BackgroundWorker` only consumes `[BackgroundCandidate]`; it does not call LLM, network, DB write/read APIs, MemoryManager, WorldBookSource, WorldBookEmbeddingIndexer, or create assistant messages.
+- `BackgroundPolicy.tokenBudget` is the worker candidate selection ceiling; final inclusion into request body remains `PromptAssembler` token-budget trimming.
+- `BackgroundManager` handles single-source failure with diagnostics warnings. For worldBook source failure, it preserves the old keyword fallback by creating `.worldBook` candidates from `BackgroundRequest.worldBookEntries` + recent context + current input.
+- `BackgroundAssembler` keeps compatibility output: `[World Book Entries]` before `[Memories]`. `BackgroundPacket.diagnostics`, score, and omission reasons do not enter prompt content.
+- Bounded worldBook rebuild remains in `ChatViewModel+Support.swift` before manager prepare; it is not a worker/source side effect.
+- `makePromptHistoryMessages(...)` remains the guard preventing current input duplication.
+- Unified `[Background]` block remains unimplemented and requires separate request-shape tests / user confirmation.
+
+### 验证
+
+Phase 5/6 focused command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/BackgroundPacketTests' '-only-testing:OpenChatTests/BackgroundWorkerTests' '-only-testing:OpenChatTests/BackgroundDiagnosticsTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests'
+```
+
+结果：40 tests / 6 suites passed，`** TEST SUCCEEDED **`。
+
+Broader source / AgentCore regression command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
+```
+
+结果：45 tests / 7 suites passed，`** TEST SUCCEEDED **`。
+
+`git diff --check`：通过，无 whitespace errors。
+
+### 未完成边界
+
+- 统一 `[Background]` block 未默认启用。
+- CharacterBackgroundSource / ConversationStateBackgroundSource 未实现；当前 `BackgroundSourceType` 只有 `.memory` / `.worldBook`。
+- LibMan / Exa / LLM-assisted selector / synthesis worker 未实现。
+- bounded worldBook rebuild 尚未迁移进 manager pre-source stage；当前仍由 ChatViewModel 负责。

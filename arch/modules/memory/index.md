@@ -28,7 +28,7 @@
 | [ui-management.md](ui-management.md) | Chat 提取指示器与角色记忆管理 UI |
 | [testing.md](testing.md) | 测试覆盖、验证命令和当前已知缺口 |
 | [hindsight-lite.md](hindsight-lite.md) | 轻量 retain / recall / reflect 完善设计，用于关闭剩余 memory problem |
-| [../background/index.md](../background/index.md) | 目标 Background 架构：Memory 未来作为 `MemoryBackgroundSource` 参与统一调度 |
+| [../background/index.md](../background/index.md) | Background 架构：Memory 当前通过 `MemoryBackgroundSource` 参与 `BackgroundPacket` 兼容调度 |
 
 ## 3. 核心数据流
 
@@ -39,10 +39,13 @@ ChatViewModel.generateResponse
   -> save user MessageRecord
   -> shouldExtractMemories(conversation.lastExtractedSortOrder, messages)
   -> MemoryManager.extractMemories       // threshold reached; pre-retrieval
-  -> MemoryManager.retrieveMemories      // recall result + fallback tiers
-  -> PromptAssembler.preview
+  -> BackgroundManager.prepare
+       -> MemoryRecallTool / MemoryBackgroundSource
+       -> BackgroundWorker
+       -> BackgroundPacket
+  -> PromptAssembler.preview(backgroundPacket:)
   -> ContextManager.prepareHistory
-  -> PromptAssembler.assemble            // inject [Memories]
+  -> PromptAssembler.assemble(backgroundPacket:) // inject compatible [Memories]
   -> APIClient.streamMessage
 ```
 
@@ -69,7 +72,20 @@ MemoryManager.retrieveMemories
   -> semantic candidates + keyword candidates + recent high-value candidates
   -> MemoryRecallResult(entries, trace)
   -> entries.map(\.memory)
-  -> PromptAssembler.trim(memories:)     // preserve input order
+  -> PromptAssembler.trim(memories:)     // legacy direct path; preserve input order
+  -> [Memories] system block
+```
+
+Current production Chat path uses:
+
+```
+MemoryManager.recallMemories
+  -> MemoryRecallTool
+  -> MemoryBackgroundSource
+  -> BackgroundCandidate(sourceType: .memory)
+  -> BackgroundWorker
+  -> BackgroundPacket
+  -> PromptAssembler(... backgroundPacket:)
   -> [Memories] system block
 ```
 
@@ -83,20 +99,20 @@ MemoryManager.retrieveMemories
 
 ## 5. Background 目标关系
 
-当前 Memory 仍由 `ChatViewModel` 调用 `MemoryManager.retrieveMemories(...)` 后传给 `PromptAssembler` 注入 `[Memories]`。2026-05-17 Phase 4B 已新增内部 read-only `MemoryRecallTool`，包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`，并通过 focused tests 验证顺序和 trace metadata 透传。2026-05-17 Phase 4D 已新增 target-backed `MemoryBackgroundSource`，把 `MemoryRecallResult.entries` 映射为 `BackgroundCandidate(sourceType: .memory)`，并通过 focused tests 验证顺序、metadata、character boundary 和不按 token budget 裁剪。Chat / Prompt 主链路尚未切换到 `BackgroundPacket`。
+当前生产 Chat 主链路不再直接把 `MemoryManager.retrieveMemories(...)` 的数组交给 `PromptAssembler`。2026-05-17 Phase 4B 已新增内部 read-only `MemoryRecallTool`，包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`，并通过 focused tests 验证顺序和 trace metadata 透传。2026-05-17 Phase 4D 已新增 target-backed `MemoryBackgroundSource`，把 `MemoryRecallResult.entries` 映射为 `BackgroundCandidate(sourceType: .memory)`，并通过 focused tests 验证顺序、metadata、character boundary 和不按 token budget 裁剪。2026-05-17 Phase 5/6 已由 `BackgroundManager.prepare(...) -> BackgroundWorker -> BackgroundPacket -> PromptAssembler(... backgroundPacket:)` 接入 Chat / Prompt 兼容链路，最终仍输出 `[Memories]` block。
 
-边界：当前 Memory 完善计划只补 Memory 层能力。世界书向量化、`Core/Background`、`BackgroundWorker` 和 `PromptAssembler` 切换到 `BackgroundPacket` 属于后续独立计划包。
+边界：Memory retain / recall 仍属于 `Core/Memory`；世界书向量化和 bounded rebuild 不属于 Memory。`BackgroundPolicy.tokenBudget` 只控制跨 source candidate selection，最终 request body 内 `[Memories]` 是否被裁剪仍由 `PromptAssembler` 的 token budget 负责。统一 `[Background]` block、Character / ConversationState sources 和 synthesis worker 仍是后续计划。
 
 迁移要求：
 
 - 已完成 retrieval ordering Phase A：`PromptAssembler` 不再用 `importance` 重排 memory。
-- 已完成 recall trace / fallback Phase B：`MemoryRecallResult` / trace 能向后续 Background 暴露 fallback、distance、selected ids 和 omission diagnostics。
+- 已完成 recall trace / fallback Phase B：`MemoryRecallResult` / trace 能向 Background 暴露 fallback、distance、selected ids 和 omission diagnostics。
 - 已完成 retain v2 provenance / dedupe Phase C：`memory_entry_provenance` 保存来源和提取元数据；结构化输入帮助 LLM 判断重复/强化/跳过；同批 dedupe 和 source validation 减少噪声。
 - 已完成 Phase D 最小 contract / request-shape：`MemoryReflectModels` 锁定 based-on 约束；Responses API folding 已测试当前 `[Memories]` 不丢失且不进入 user message。
 - 已完成：memory recall 输出暴露为 read-only `MemoryRecallTool`；该 tool 不写 DB、不联网、不拼 prompt，也不重新实现 Memory rank fusion。
 - 已完成：`MemoryBackgroundSource` 进入 target，并以 focused tests 验证 tool result 到 `BackgroundCandidate(sourceType: .memory)` 的顺序和 metadata 映射。
-- 后续 Background 计划由 `BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选排序和裁剪。
-- 后续 Background 计划再让 `PromptAssembler` 消费 `BackgroundPacket` 或由 `BackgroundAssembler` 生成的 prompt block。
+- 已完成：`BackgroundWorker` 统一与 WorldBook 候选做 deterministic selection，并生成 `BackgroundPacket` diagnostics；CharacterState / ConversationState 尚未实现。
+- 已完成：`PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 消费 packet-selected memory entries，并通过 `BackgroundAssembler` 保持 `[Memories]` 兼容输出。
 
 ## 6. 实现证据
 

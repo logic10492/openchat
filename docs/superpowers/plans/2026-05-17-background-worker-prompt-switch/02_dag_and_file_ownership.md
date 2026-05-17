@@ -14,6 +14,14 @@ S0 baseline read + drift audit
   -> Phase 6 closeout
 ```
 
+## Phase 6 修订默认决策
+
+- 6A Manager 不计算 endpoint / prompt budget；调用方传入 `BackgroundPolicy`。
+- `BackgroundPolicy.tokenBudget` 是 worker candidate selection ceiling；最终 prompt inclusion 由 6B packet-aware PromptAssembler 预算裁剪。
+- Phase 6 第一版不迁移 bounded worldBook rebuild；6C 先保留在 `ChatViewModel`，后续如迁移另起小阶段。
+- 6C closeout 前必须补齐 worldBook recall failure 的兼容 fallback；否则不能宣称主链路切换完成。
+- 6B 兼容输出固定为 worldBook block 在前、memory block 在后，各 source 内按 packet rank 稳定排序。
+
 ## 并行窗口
 
 可以并行：
@@ -79,6 +87,7 @@ Phase 6 仍禁止：
 - 每个阶段只改自己的文件归属面。
 - Phase 5 closeout 前，`git diff` 中不得出现 Chat / Prompt / DI 改动。
 - Phase 6 closeout 前，所有 Prompt / Chat 行为变化都有 focused tests。
+- Phase 6 closeout 前，`ContentView.swift`、`ChatView.swift` preview、`ChatViewModelPromptAssemblyTests.swift` 中的 `ChatViewModel(...)` 构造点已被检查。
 - Xcode project 变更如出现，必须来自 `ruby scripts/generate_xcodeproj.rb`。
 
 ## 测试命令

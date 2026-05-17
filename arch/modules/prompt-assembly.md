@@ -1,20 +1,21 @@
 # Prompt 拼装引擎设计
 
 > 所属层：`Core/PromptEngine/`
-> 依赖：`Core/Database`（各 Record 类型）、`Core/Networking`（`ChatMessage` / `APIEndpointConfig`）、`Core/ContextManager`（运行时历史处理）
+> 依赖：`Core/Database`（各 Record 类型）、`Core/Networking`（`ChatMessage` / `APIEndpointConfig`）、`Core/ContextManager`（运行时历史处理）、`Core/Background`（packet-compatible prompt items）
 
 ## 1. 功能范围
 
 - 将角色卡、世界书、会话历史、用户输入按规定顺序拼装为完整的 `[ChatMessage]` 数组
 - Token 计数与预算分配
-- 世界书条目的动态注入；Chat 主链路消费 `WorldBookSource` 预选结果，旧调用方保留关键词 fallback
+- 世界书 / 记忆条目的动态注入；Chat 主链路消费 `BackgroundPacket`，旧 direct overload 保留关键词 fallback / rollback
 - 以端点最大上下文 token 数的 40% 作为 prompt 预算目标，并与 ContextManager 协作控制历史窗口
 
 ## 2. 文件清单与职责
 
 | 文件 | 职责 |
 |---|---|
-| `PromptAssembler.swift` | 拼装主逻辑，协调各段内容的组装 |
+| `PromptAssembler.swift` | 拼装主逻辑，协调各段内容的组装；当前主链路使用 packet-aware overload |
+| `../Background/BackgroundAssembler.swift` | 将 `BackgroundPacket` 分组为兼容 `[World Book Entries]` / `[Memories]` prompt items |
 | `PromptAssemblyModels.swift` | 定义 `PromptAssemblyPreview`、`AssemblyResult`、`TokenUsageReport` |
 | `PromptSegment.swift` | 定义各段 prompt 的类型与优先级 |
 | `KeywordMatcher.swift` | 世界书关键词匹配与优先级排序 |
@@ -34,13 +35,13 @@
 |   4 | Stable Conversation State | system           | compressed context                | `ContextManager` compression checkpoint summary                                | 动态段 | 无 checkpoint summary 时跳过                                       |
 |   5 | Stable Conversation State | user / assistant | checkpoint 后会话历史                  | `ContextManager` 返回的 checkpoint 后 `processedHistory`                           | 动态段 | 不包含本轮当前输入                                                      |
 |   6 | Current-Turn Context      | system           | example dialogs block             | `characterCard.exampleDialogs`                                                 | 可选段 | 以带标签的 system block 注入，不再作为原始 user/assistant 示例消息注入             |
-|   7 | Current-Turn Context      | system           | world book entries block          | `WorldBookSource` 根据当前输入 + 最近历史输出的 keyword/semantic 预选条目；旧调用方可走 keyword fallback | 动态段 | Phase C 已允许 semantic-only 条目进入同一 `[World Book Entries]` block；PromptAssembler 不访问 DB/embedding/KNN |
-|   8 | Current-Turn Context      | system           | memories block                    | `MemoryManager.retrieveMemories(...)` 按当前输入检索返回的记忆                             | 动态段 | 按检索结果顺序和 token 预算裁剪；不按 `importance` 重排                       |
+|   7 | Current-Turn Context      | system           | world book entries block          | `BackgroundPacket.entries` 中 `.worldBook` selected entries；旧 overload 可消费 preselected world book entries | 动态段 | Phase 6 保持 `[World Book Entries]` 兼容格式；semantic-only 条目不再二次 keyword 过滤 |
+|   8 | Current-Turn Context      | system           | memories block                    | `BackgroundPacket.entries` 中 `.memory` selected entries；旧 overload 可消费 direct memories | 动态段 | 按 packet rank / 检索结果顺序和 token 预算裁剪；不按 `importance` 重排 |
 |   9 | Current Turn              | user             | current user input + time context | `currentInput` + `PromptAssembler.makeTimeContext()`                           | 固定段 | 同一条 user message 内先放用户输入，再放 `[Time] <ISO8601> [/Time]`         |
 
 旧的 `WorldBookEntryPosition.after_system` / `.before_history` 字段保留为既有数据兼容字段，不再决定最终 prompt 位置。所有当前轮命中的世界书内容最终统一落入 Current-Turn Context 的 world book block。
 
-2026-05-16 世界书向量化 Phase A/B 已新增 `world_book_entry_embedding`、`world_book_entry_embedding_meta`、`WorldBookVectorStore`、embedding text/hash 和 `WorldBookEmbeddingIndexer` backfill 能力；Phase C 已新增 `WorldBookSource` 并接入 Chat 主链路。Prompt 输出形态没有改变：keyword-only、semantic-only、keyword+semantic 条目仍统一进入 `[World Book Entries]` block。
+2026-05-17 Background Phase 6 已把 Chat 主链路的 world book / memory prompt 来源切到 `BackgroundPacket`。Prompt 输出形态没有改变：packet-selected `.worldBook` 条目进入 `[World Book Entries]` block，packet-selected `.memory` 条目进入 `[Memories]` block。统一 `[Background]` block 仍是后续可选迁移。
 
 ### 默认 system prompt 模板
 
@@ -176,6 +177,25 @@ struct PromptAssembler {
 
     static func assembleWithPreselectedWorldBookEntries(...)
         -> AssemblyResult
+
+    /// Chat 主链路当前使用。BackgroundPacket 已由 BackgroundManager / BackgroundWorker 选择，
+    /// PromptAssembler 只做兼容 block 生成与 token budget trim。
+    static func preview(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        backgroundPacket: BackgroundPacket,
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> PromptAssemblyPreview
+
+    static func assemble(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        backgroundPacket: BackgroundPacket,
+        processedHistory: [MessageRecord],
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> AssemblyResult
 }
 
 struct PromptAssemblyPreview: Sendable {
@@ -281,7 +301,7 @@ struct TokenCounter {
 ## 6. 拼装流程伪代码
 
 ```
-function preview(conversation, characterCard, worldBook, entries, memories, history, input, endpoint):
+function preview(conversation, characterCard, backgroundPacket, history, input, endpoint):
     totalBudget = endpoint.maxContextTokens * 0.40
 
     // 1. Stable Identity
@@ -307,13 +327,14 @@ function preview(conversation, characterCard, worldBook, entries, memories, hist
         + optional(slowPlotMessage)
 
     // 2. Current-Turn Context 候选
-    // Chat 主链路传入 WorldBookSource 已预选和排序的 entries。
-    // 旧 preview/assemble 调用方仍通过 KeywordMatcher fallback。
-    selectedWorldBookEntries = preselectedEntries ?? keywordTriggeredEntries(history, input, entries)
+    // Chat 主链路传入 BackgroundPacket；旧 preview/assemble 调用方仍通过
+    // memories / worldBook entries direct overload 和 KeywordMatcher fallback。
+    selectedWorldBookItems = BackgroundAssembler.worldBookItems(from: backgroundPacket)
+    selectedMemoryItems = BackgroundAssembler.memoryItems(from: backgroundPacket)
 
     exampleDialogBlock = makeExampleDialogsBlock(characterCard.exampleDialogMessages())
-    worldBookBlock = makeWorldBookBlock(selectedWorldBookEntries)
-    memoryBlock = makeMemoryBlock(memories) // preserve retrieval order
+    worldBookBlock = makeWorldBookBlock(selectedWorldBookItems)
+    memoryBlock = makeMemoryBlock(selectedMemoryItems) // preserve packet order
 
     // 3. Current Turn
     timeString = ISO8601DateFormatter().string(from: Date())
@@ -362,12 +383,12 @@ function assemble(..., processedHistory, input):
 
 1. 若 `sendMessage()` 本轮会持久化用户消息，先保存 user record，再读取 DB 中当前会话消息。
 2. `makePromptHistoryMessages(...)` 从历史候选中移除本轮 user record；重新生成/编辑等不持久化入口会按最后一条同内容 user 消息做兜底过滤。
-3. `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 对当前 world book 做 bounded lazy rebuild；失败记录 warning，不阻断当前回复。
-4. `WorldBookSource.recallEntries(...)` 基于 `promptHistoryMessages + currentInput` 输出 keyword + semantic 融合后的 world book entries；semantic unavailable 时 fallback 到 keyword-only。
-5. `MemoryManager.retrieveMemories(for:query:limit:)` 按当前输入检索角色相关记忆；若语义检索失败，`MemoryManager` 内部会 fallback 到角色近期记忆，外层失败则记录 warning 并继续空 memory。
-6. `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` 使用同一批 recalled world book entries 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
+3. `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 对当前 world book 做 bounded lazy rebuild；失败记录 warning，不阻断当前回复。该 side effect 仍归 ChatViewModel，不归 BackgroundWorker 或 source adapter。
+4. `BackgroundManager.prepare(...)` 调用 Memory / WorldBook source adapters，失败时记录 diagnostics warning；worldBook source failure 会用旧 keyword fallback 生成 `.worldBook` candidates。
+5. `BackgroundWorker` 对 `BackgroundCandidate` 做 deterministic selection，输出 `BackgroundPacket`；不联网、不写 DB、不调用 LLM、不生成 assistant message。
+6. `PromptAssembler.preview(... backgroundPacket:)` 使用 packet-selected worldBook / memory entries 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
 7. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 只处理过滤后的历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
-8. `PromptAssembler.assembleWithPreselectedWorldBookEntries(... processedHistory: ...)` 再次使用同一批 recalled world book entries，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
+8. `PromptAssembler.assemble(... backgroundPacket: ... processedHistory: ...)` 再次使用同一 `BackgroundPacket`，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
 
 ## 7. 与其他模块的交互
 
@@ -375,31 +396,34 @@ function assemble(..., processedHistory, input):
 |---|---|
 | `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、MemoryEntryRecord、ConversationRecord |
 | `Core/ContextManager` | PromptAssembler.preview 先计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens；ContextManager 据此处理历史消息（剔除/压缩）；PromptAssembler.assemble 接收 processedHistory |
-| `Core/Memory` | MemoryManager 检索记忆后传入 PromptAssembler |
-| `Core/WorldBook` | WorldBookSource 在进入 PromptAssembler 前完成 keyword + semantic 召回融合 |
-| `Features/Chat` | ChatViewModel 在发送消息时调用 `PromptAssembler.previewWithPreselectedWorldBookEntries(...)` 和 `PromptAssembler.assembleWithPreselectedWorldBookEntries(...)`；无 WorldBookSource 的旧构造回退到 keyword path |
+| `Core/Background` | BackgroundManager / BackgroundWorker 输出 `BackgroundPacket`；BackgroundAssembler 生成兼容 worldBook / memory prompt items |
+| `Core/Memory` | MemoryRecallTool / MemoryBackgroundSource 产出 `.memory` candidates；旧 direct overload 仍可消费 direct memories |
+| `Core/WorldBook` | WorldBookRecallTool / WorldBookBackgroundSource 产出 `.worldBook` candidates；worldBook source failure 时 manager 保留 keyword fallback |
+| `Features/Chat` | ChatViewModel 在发送消息时调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(...)` / `assemble(...)` |
 | `Shared/Extensions` | `String.approximatedTokenCount` 委托 `TokenCounter.count(_:)`，供其他层复用同一估算 |
 
 ## 8. 设计决策
 
 1. **40% 上下文预算**：参考用户需求，控制在 40% 以内以保持小模型对当前对话的专注度
 2. **四层顺序稳定**：先放 Stable Identity，再放 Stable Conversation State，再放 Current-Turn Context，最后放 Current Turn，避免当前轮检索信息打断角色身份或历史连续性
-3. **动态世界书注入**：不全量注入世界书；Chat 主链路注入 `WorldBookSource` 输出的 keyword/semantic 相关条目，旧调用方保留 keyword fallback，节省 token
+3. **动态背景注入**：不全量注入世界书或记忆；Chat 主链路注入 `BackgroundPacket` selected entries，manager 保留 worldBook keyword fallback，节省 token
 4. **示例对话降级为 labeled system block**：示例对话只表达风格参考，不再伪装成真实 user/assistant 历史，避免污染会话状态
 5. **近似 token 计数**：避免引入重型依赖（tiktoken），用近似算法覆盖 90%+ 场景。CJK 文本的误差通过预留余量吸收
 6. **预算分配弹性**：历史消息获得最大弹性空间，因为对话质量主要取决于近期上下文
 7. **可选段可裁剪**：当 token 紧张时，示例对话优先被裁剪，因为其作用是引导风格而非提供关键信息
 8. **慢速剧情推进模式（beta）**：作为条件固定段注入，默认开启，会话级可关闭。提示词内容固定存储于 AppConstants，不可用户编辑。isRequired=false 但 priority=.max（开启时不被裁剪）
 
-## 当前实现证据（更新于 2026-05-16）
+## 当前实现证据（更新于 2026-05-17）
 
 - 代码位置：
   - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — `PromptAssemblyPreview` 输出 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`。
-  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(...)` / `assemble(...)` 保留 keyword fallback；`previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 消费 `WorldBookSource` 已预选条目；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 是当前 Chat 主链路入口；旧 `preview(...)` / `assemble(...)` 和 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 保留作兼容 / rollback；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+  - `OpenChat/Core/Background/BackgroundAssembler.swift` — 将 packet entries 转为兼容 worldBook / memory prompt items，diagnostics / score / omission 不进入 prompt content。
+  - `OpenChat/Core/Background/BackgroundManager.swift` — 组合 source adapters 与 worker；worldBook source failure 保留 keyword fallback candidates。
   - `OpenChat/Core/WorldBook/WorldBookSource.swift` — keyword candidates + semantic KNN 融合，semantic unavailable fallback 到 keyword-only。
   - `OpenChat/Core/WorldBook/WorldBookRecallModels.swift` — recall trace / reason / omission DTO。
   - `OpenChat/Core/PromptEngine/PromptSegment.swift` — 使用 `.exampleDialogsBlock(String)` 与 `.currentTurn(String)` 表达目标语义；time context 不再是独立 segment。
-  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `WorldBookSource.recallEntries -> previewWithPreselectedWorldBookEntries -> prepareHistory -> assembleWithPreselectedWorldBookEntries`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `bounded worldBook rebuild -> BackgroundManager.prepare -> PromptAssembler.preview(backgroundPacket:) -> prepareHistory -> PromptAssembler.assemble(backgroundPacket:)`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
@@ -408,15 +432,15 @@ function assemble(..., processedHistory, input):
   - `OpenChat/Core/Database/Migrations.swift` — v7_add_slow_plot_mode 迁移
   - `OpenChat/Core/ContextManager/PreparedHistory.swift` — compression checkpoint 通过 `[Previously]` system message 进入 Stable Conversation State。
 - 已验证测试：
-  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、preview 四层输出、labeled example/world book/memory blocks、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、preview 四层输出、labeled example/world book/memory blocks、packet compatible block、packet budget trim、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
   - `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`（覆盖 keyword-only、semantic-only、keyword+semantic duplicate merge、disabled world/entry、semantic failure fallback）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
-  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、semantic world book entry 进入 `[World Book Entries]` block、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
+  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、request body 使用 `BackgroundPacket` selected entries、semantic world book entry 进入 `[World Book Entries]` block、worldBook semantic failure keyword fallback、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
   - `OpenChatTests/Core/ContextManagerTests/CompressionCheckpointReuseTests.swift`
 - 当前实现描述：
-  - Chat 主链路的世界书候选由 `WorldBookSource` 使用 `recentMessages.suffix(5) + currentInput` 生成 keyword context 和 semantic query，其中 `recentMessages` 应排除本轮当前输入。
-  - `PromptAssembler` 不访问数据库、不调用 embedding/KNN；它只消费调用方传入的世界书条目，生成 block 并按预算裁剪。
+  - Chat 主链路的背景候选由 `BackgroundManager` 协调 Memory / WorldBook source adapters；`recentMessages` 应排除本轮当前输入。
+  - `PromptAssembler` 不访问数据库、不调用 embedding/KNN；它只消费调用方传入的 `BackgroundPacket` 或旧 direct 条目，生成 block 并按预算裁剪。
   - 示例对话以 `[Example Dialogs]` labeled system block 注入，位于 Stable Conversation State 之后。
   - 世界书条目统一进入 `[World Book Entries]` block，不再按 `after_system` / `before_history` 拆分最终位置。
   - 记忆条目统一进入 `[Memories]` block，位于 world book block 之后。

@@ -30,10 +30,38 @@ OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift
 
 - `.worldBook` entries -> `[World Book Entries]`
 - `.memory` entries -> `[Memories]`
-- 保持 packet rank order 或 source-specific order，具体规则写入 tests。
+- 兼容输出默认按 source 分组：worldBook block 先于 memory block；每个 source 内按 `BackgroundEntry.rank`，再按 `id` 稳定排序。
 - 保留现有 `PromptAssembler.makeWorldBookMessageContent(...)` / memory block 语义，避免 prompt shape 大漂移。
 
 建议不要让 `PromptAssembler` 直接遍历 raw candidates。它只应该消费 `BackgroundPacket` 或 already assembled blocks。
+
+## 本修订的兼容格式 contract
+
+Phase 6B 第一版不把 `BackgroundEntry` 伪装成 `WorldBookEntryRecord` / `MemoryEntryRecord`，而是用 entry 字段生成兼容文本：
+
+```text
+worldBook:
+  [World Book: <title-or-sourceId>]
+  <content>
+
+memory:
+  [Memory — <title-or-metadata.memoryType-or-sourceId>]
+  <content>
+```
+
+Block wrapper 保持不变：
+
+```text
+[World Book Entries]
+...
+[/World Book Entries]
+
+[Memories]
+...
+[/Memories]
+```
+
+`BackgroundPacket.diagnostics`、omission reason、score、metadata 不进入 prompt content，除非后续有单独 debug UI 计划。
 
 ## PromptAssembler 改动策略
 
@@ -62,6 +90,15 @@ static func assemble(
 
 旧 direct memories/worldBook entries overload 可暂时保留，用于 regression 对比和回滚。
 
+Packet-aware overload 必须复用当前 preview/assemble 的预算结构：
+
+- stable identity、scenario、slow plot、example dialogs、time context、current turn message 的顺序不变。
+- `BackgroundPacket.entries` 先由 `BackgroundAssembler` 分组为 worldBook / memory prompt items。
+- PromptAssembler 仍按现有 `TokenBudget.calculate(...)` 计算 example / worldBook / memory / history budget。
+- 最终 request body 只包含预算内的 prompt items；如果 packet entry 被 PromptAssembler 因预算裁掉，必须有测试覆盖。
+- `TokenUsageReport.worldBookEntries` / `memories` 统计最终 block tokens，而不是 packet 原始总量。
+- `AssemblyResult.triggeredEntries` 至少继续记录最终进入 prompt 的 worldBook source ids；如需要新增 background included ids，必须不破坏旧字段语义。
+
 ## 必须保持的行为
 
 - Stable identity、scenario、slow plot、example dialogs 顺序不漂移。
@@ -84,6 +121,7 @@ static func assemble(
 
 - Packet-aware PromptAssembler overload 存在并有 tests。
 - 兼容 block 输出文本与旧格式一致或差异有明确测试说明。
+- Packet entry 因 prompt budget 被裁掉时，request body、token usage 和 included ids 有明确断言。
 - 旧 prompt tests 仍通过。
 - Chat 尚未切换或只在 6C 切换。
 
