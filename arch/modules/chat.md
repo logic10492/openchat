@@ -323,6 +323,8 @@ struct MessageDisplayItem: Identifiable {
     let id: String
     let role: String
     var content: String           // 可变：流式输出时逐步更新
+    var contentBlocks: [TextContentBlock] // 渲染分块，降低超长流式输出的单次更新范围
+    var contentRenderRevision: Int        // 流式内容修订号，驱动滚动跟随与 diff
     let isCompressed: Bool
     let originalContent: String?  // 压缩消息的原始内容
     let createdAt: Date
@@ -333,21 +335,33 @@ struct MessageDisplayItem: Identifiable {
 
 ## 6. 流式输出的 UI 更新策略
 
-### 6.1 节流
+### 6.1 分块流式渲染
 
-流式 SSE 事件频率可能很高（每个 token 一个事件）。为避免 UI 过度刷新：
+流式 SSE 事件仍然逐 chunk 进入 UI，保证用户看到实时输出；但 assistant 正文不再作为单个大文本整体重算：
 
-- 使用 `@Observable` 的属性观察（SwiftUI 自动 diff）
-- 累积 delta 到 `content` 字符串，SwiftUI 自动检测变更
-- 若仍有性能问题，可引入节流：每 50ms 批量合并 delta 后更新
+- `MessageDisplayItem.appendContentDelta(...)` 同步维护完整 `content` 与 `contentBlocks`
+- `TextContentBlock` 优先按自然换行切块，超长无换行文本按固定上限兜底切块
+- `MessageBubbleView` 传入 `contentBlocks`，由 `MarkdownTextView` 分块渲染，避免每个 SSE chunk 都让整条长回复重新参与 Markdown / Text 构建
+- `contentRenderRevision` 只表达流式文本修订，不把完整 content 放入 Hashable diff 热路径
 
-### 6.2 自动滚动
+### 6.2 Markdown 延迟刷新与缓存
+
+RP 文本默认以 plain Text 先显示；Markdown 渲染作为延迟增强，不阻塞逐 chunk 输出：
+
+- `MarkdownRenderPolicy.refreshDelay(forCharacterCount:)` 按全文长度返回 30 / 50 / 75 / 100ms 的延迟，文本越长越 lazy
+- 每个 `TextContentBlock` 独立执行 Markdown parse
+- `MarkdownRenderCache` 缓存已解析或失败的 block，避免相同块重复解析
+- 当前实现使用 `.inlineOnlyPreservingWhitespace`，保持原有 inline Markdown 行为
+
+### 6.3 自动滚动
 
 - 消息列表使用 `ScrollViewReader`
-- 新消息到达时 / 流式内容更新时，自动滚动到底部
-- 用户手动上滑时暂停自动滚动，出现 "↓ 新消息" 浮动按钮
+- 新消息到达时滚动到底部
+- 流式内容更新时仅在 `shouldFollowStreaming == true` 时跟随到底部
+- 用户上滑后暂停跟随；拖动/按住期间不恢复
+- 手势结束且 0.5s 内没有新的触摸事件后，恢复跟随并立即滚回底部
 
-### 6.3 流式光标
+### 6.4 流式光标
 
 - 生成中的 AI 消息末尾显示闪烁的 `█` 光标
 - 生成完成后光标消失
@@ -405,7 +419,8 @@ struct MessageDisplayItem: Identifiable {
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
-  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats）
+  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision）
+  - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
   - `OpenChat/ContentView.swift`
   - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
@@ -414,6 +429,7 @@ struct MessageDisplayItem: Identifiable {
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
+  - 超长流式输出 UI：每个 SSE chunk 仍更新 UI，但 assistant 正文按 block 分段渲染；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
   - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
   - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
   - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
@@ -428,5 +444,6 @@ struct MessageDisplayItem: Identifiable {
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
+  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略）
   - `CompressionStrategyTests`
   - `DatabaseManagerMemoryTests`

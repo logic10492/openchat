@@ -108,8 +108,8 @@ struct MessageBubbleView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     reasoningSection
-                    HStack(spacing: 0) {
-                        MarkdownTextView(text: item.content)
+                    HStack(alignment: .bottom, spacing: 0) {
+                        MarkdownTextView(blocks: item.contentBlocks)
                         if isStreaming {
                             streamingCursor
                         }

@@ -5,6 +5,10 @@ struct ChatView: View {
     @State private var isShowingSettings = false
     @State private var isShowingRename = false
     @State private var renameText = ""
+    @State private var shouldFollowStreaming = true
+    @State private var followResumeGeneration = 0
+    @State private var resumeFollowTask: Task<Void, Never>?
+    @GestureState private var isTouchingMessageList = false
 
     init(viewModel: ChatViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -116,12 +120,29 @@ struct ChatView: View {
                     .padding(.bottom, 24)
                 }
             }
-            .onChange(of: viewModel.messages) { _, newMessages in
-                if let last = newMessages.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+            .simultaneousGesture(scrollPauseGesture)
+            .onChange(of: viewModel.messages.map(\.id)) { _, newIDs in
+                guard let lastID = newIDs.last else { return }
+                proxy.scrollTo(lastID, anchor: .bottom)
+            }
+            .onChange(of: latestStreamingRevision) { _, _ in
+                guard shouldFollowStreaming, let last = viewModel.messages.last else { return }
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+            .onChange(of: followResumeGeneration) { _, _ in
+                guard shouldFollowStreaming, let last = viewModel.messages.last else { return }
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+            .onChange(of: isTouchingMessageList) { _, isTouching in
+                if isTouching {
+                    resumeFollowTask?.cancel()
+                } else {
+                    scheduleFollowResume()
                 }
+            }
+            .onDisappear {
+                resumeFollowTask?.cancel()
+                resumeFollowTask = nil
             }
         }
     }
@@ -147,6 +168,40 @@ struct ChatView: View {
 
     private func isStreamingMessage(_ item: MessageDisplayItem) -> Bool {
         viewModel.isGenerating && item.id == viewModel.messages.last?.id && item.role == "assistant"
+    }
+
+    private var latestStreamingRevision: Int {
+        guard viewModel.isGenerating, let last = viewModel.messages.last, last.role == "assistant" else {
+            return -1
+        }
+        return last.contentRenderRevision
+    }
+
+    private var scrollPauseGesture: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .updating($isTouchingMessageList) { _, state, _ in
+                state = true
+            }
+            .onChanged { _ in
+                if viewModel.isGenerating {
+                    shouldFollowStreaming = false
+                }
+            }
+            .onEnded { _ in
+                scheduleFollowResume()
+            }
+    }
+
+    private func scheduleFollowResume() {
+        resumeFollowTask?.cancel()
+        resumeFollowTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                shouldFollowStreaming = true
+                followResumeGeneration &+= 1
+            }
+        }
     }
 
     private func binding<Value>(_ keyPath: ReferenceWritableKeyPath<ChatViewModel, Value>) -> Binding<Value> {

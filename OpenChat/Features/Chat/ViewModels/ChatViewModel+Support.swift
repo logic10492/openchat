@@ -332,7 +332,7 @@ extension ChatViewModel {
 
     private func appendAssistantDelta(_ delta: String, messageID: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-        messages[index].content += delta
+        messages[index].appendContentDelta(delta)
     }
 
     private func appendReasoningDelta(_ delta: String, messageID: String) {

@@ -4,6 +4,8 @@ struct MessageDisplayItem: Identifiable, Hashable {
     let id: String
     var role: String
     var content: String
+    var contentBlocks: [TextContentBlock]
+    var contentRenderRevision: Int
     var reasoningContent: String?
     var tokenCount: Int?
     var isCompressed: Bool
@@ -16,6 +18,8 @@ struct MessageDisplayItem: Identifiable, Hashable {
         id = record.id
         role = record.role
         content = record.content
+        contentBlocks = TextContentBlock.makeBlocks(from: record.content)
+        contentRenderRevision = record.content.hashValue
         reasoningContent = record.reasoningContent
         tokenCount = record.tokenCount
         isCompressed = record.isCompressed
@@ -25,37 +29,23 @@ struct MessageDisplayItem: Identifiable, Hashable {
         streamingStats = nil
     }
 
-    private init(
-        id: String,
-        role: String,
-        content: String,
-        reasoningContent: String?,
-        tokenCount: Int?,
-        isCompressed: Bool,
-        originalContent: String?,
-        createdAt: Date,
-        sortOrder: Int,
-        streamingStats: StreamingStats?
-    ) {
-        self.id = id
-        self.role = role
-        self.content = content
-        self.reasoningContent = reasoningContent
-        self.tokenCount = tokenCount
-        self.isCompressed = isCompressed
-        self.originalContent = originalContent
-        self.createdAt = createdAt
-        self.sortOrder = sortOrder
-        self.streamingStats = streamingStats
+    mutating func appendContentDelta(_ delta: String) {
+        guard !delta.isEmpty else { return }
+        content += delta
+        contentBlocks = TextContentBlock.appending(delta, to: contentBlocks)
+        contentRenderRevision &+= 1
     }
 
     static func == (lhs: MessageDisplayItem, rhs: MessageDisplayItem) -> Bool {
-        lhs.id == rhs.id && lhs.content == rhs.content && lhs.reasoningContent == rhs.reasoningContent && lhs.streamingStats == rhs.streamingStats
+        lhs.id == rhs.id
+            && lhs.contentRenderRevision == rhs.contentRenderRevision
+            && lhs.reasoningContent == rhs.reasoningContent
+            && lhs.streamingStats == rhs.streamingStats
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
-        hasher.combine(content)
+        hasher.combine(contentRenderRevision)
         hasher.combine(reasoningContent)
     }
 }
