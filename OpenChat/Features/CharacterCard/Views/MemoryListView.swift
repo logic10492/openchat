@@ -23,11 +23,18 @@ struct MemoryListView: View {
         .navigationTitle(String(localized: "Memories"))
         .searchable(text: searchBinding)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    Task { await viewModel.runReflect(task: .summarize) }
+                } label: {
+                    Label(String(localized: "Organize Memories"), systemImage: "wand.and.stars")
+                }
+                .disabled(viewModel.isReflectBusy || viewModel.memories.count < 2)
+
                 Button(String(localized: "Clear All"), role: .destructive) {
                     showDeleteAllConfirmation = true
                 }
-                .disabled(viewModel.memories.isEmpty)
+                .disabled(viewModel.isReflectBusy || viewModel.memories.isEmpty)
             }
         }
         .confirmationDialog(
@@ -43,22 +50,63 @@ struct MemoryListView: View {
         }
         .task { await viewModel.loadMemories() }
         .safeAreaInset(edge: .bottom) {
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial)
+            if viewModel.reflectDraft != nil || viewModel.reflectErrorMessage != nil || viewModel.errorMessage != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let draft = viewModel.reflectDraft {
+                        draftPreview(draft)
+                    }
+                    if let errorMessage = viewModel.reflectErrorMessage ?? viewModel.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.regularMaterial)
             }
         }
     }
 
+    private var selectionHeader: some View {
+        HStack {
+            Text(
+                String.localizedStringWithFormat(
+                    String(localized: "%lld selected"),
+                    Int64(viewModel.selectedMemoryIds.count)
+                )
+            )
+            Spacer()
+            if viewModel.reflectState == .running {
+                Label(String(localized: "Generating Draft"), systemImage: "sparkles")
+            } else if viewModel.reflectState == .applying {
+                Label(String(localized: "Applying"), systemImage: "arrow.down.doc")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
     private var listContent: some View {
         List {
+            Section {
+                selectionHeader
+            }
             ForEach(viewModel.filteredMemories) { entry in
-                memoryRow(entry)
+                HStack(spacing: 12) {
+                    Button {
+                        viewModel.toggleMemorySelection(entry.id)
+                    } label: {
+                        Image(systemName: viewModel.isMemorySelected(entry.id) ? "checkmark.circle.fill" : "circle")
+                            .imageScale(.large)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Select Memory"))
+                    .disabled(viewModel.isReflectBusy)
+
+                    memoryRow(entry)
+                }
                     .swipeActions {
                         Button(String(localized: "Delete"), role: .destructive) {
                             Task { await viewModel.deleteMemory(entry.id) }
@@ -67,6 +115,55 @@ struct MemoryListView: View {
             }
         }
         .listStyle(.plain)
+    }
+
+    private func draftPreview(_ draft: MemoryReflectObservation) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(String(localized: "Draft Observation"))
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                memoryTypeBadge(draft.memoryType)
+            }
+
+            Text(draft.content)
+                .font(.subheadline)
+                .lineLimit(4)
+
+            HStack {
+                Text(
+                    String.localizedStringWithFormat(
+                        String(localized: "Based on %lld memories"),
+                        Int64(draft.basedOnMemoryIds.count)
+                    )
+                )
+                if let confidence = draft.confidence {
+                    Text(
+                        String.localizedStringWithFormat(
+                            String(localized: "Confidence %@"),
+                            confidence.formatted(.percent.precision(.fractionLength(0)))
+                        )
+                    )
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            HStack {
+                Button(String(localized: "Apply")) {
+                    Task { await viewModel.applyReflectObservation() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.canApplyReflectDraft)
+
+                Button(String(localized: "Cancel")) {
+                    viewModel.clearReflectDraft()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isReflectBusy)
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func memoryRow(_ entry: MemoryEntryRecord) -> some View {
@@ -81,7 +178,7 @@ struct MemoryListView: View {
             Text(entry.content)
                 .font(.subheadline)
                 .lineLimit(4)
-            ProgressView(value: Double(entry.importance), total: 10)
+            ProgressView(value: Double(entry.importance), total: 100)
                 .tint(importanceColor(entry.importance))
         }
         .padding(.vertical, 4)
@@ -98,8 +195,8 @@ struct MemoryListView: View {
 
     private func importanceColor(_ importance: Int) -> Color {
         switch importance {
-        case 0...3: .green
-        case 4...6: .yellow
+        case 0...30: .green
+        case 31...69: .yellow
         default: .red
         }
     }

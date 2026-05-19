@@ -14,7 +14,7 @@
 - 每次发送消息时，当前输入先生成 query embedding，再通过 sqlite-vec KNN 检索相关记忆；语义检索异常或结果低于阈值时进入 fallback tier：keyword candidate 优先，必要时补少量 relationship / summary / high-importance recent high-value 记忆。
 - 检索结果按 `MemoryManager` 输出顺序作为 `[Memories] ... [/Memories]` labeled system block 注入 Current-Turn Context；`PromptAssembler` 只按输入顺序和 token budget 裁剪，不再按 `importance` 重排。
 - 角色详情页提供记忆列表、搜索、单条删除和清空入口；Chat 内联显示提取中、已提取和失败状态。
-- Phase D 已新增低频 reflect 的 Memory 层 contract（request / observation / relation），但尚未接入 UI、LLM executor 或 `memory_entry_link` 持久化。
+- 低频 reflect 已具备手动整理入口：用户在 Memory 管理页选择 2-5 条来源记忆后调用 LLM 生成 `MemoryReflectObservation` draft，确认后写入新的 `memory_entry`、`memory_embedding` 和 `memory_entry_link(relation = summarizes)`；原始记忆默认保留。
 
 ## 2. 文档结构
 
@@ -94,7 +94,7 @@ MemoryManager.recallMemories
 1. **聊天主流程优先**：检索失败应降级为 keyword / recent high-value 记忆或空记忆，不阻断用户发送；提取失败通过 UI 和日志可观测。
 2. **写入原子性优先**：自动提取生成的 `memory_entry` 必须和 `memory_embedding` 同事务写入，避免半索引记忆。
 3. **角色隔离**：KNN 检索必须限定 `characterCardId`，避免跨角色污染。
-4. **事实与计划分离**：当前实现承诺扁平 `event/fact/relationship/summary` 条目、recall trace、fallback tiers、retain v2 provenance、同批 dedupe 和 reflect DTO contract；reflect executor、`memory_entry_link` 持久化和跨批自动合并仍是规划。
+4. **事实与计划分离**：当前实现承诺扁平 `event/fact/relationship/summary` 条目、recall trace、fallback tiers、retain v2 provenance、同批 dedupe、reflect parser/executor、手动 review/apply 和 `memory_entry_link` 持久化；idle/background 自动整理、duplicate 自动删除、跨批自动合并和冲突自动解决仍是规划。
 5. **文档与源码同步**：涉及触发时机、迁移、prompt 注入顺序、错误处理和测试结论的变更必须同步更新本目录及相关 `arch/AntiEntropy/*` 文档。
 
 ## 5. Background 目标关系
@@ -113,6 +113,7 @@ MemoryManager.recallMemories
 - 已完成：`MemoryBackgroundSource` 进入 target，并以 focused tests 验证 tool result 到 `BackgroundCandidate(sourceType: .memory)` 的顺序和 metadata 映射。
 - 已完成：`BackgroundWorker` 统一与 WorldBook 候选做 deterministic selection，并生成 `BackgroundPacket` diagnostics；CharacterState / ConversationState 尚未实现。
 - 已完成：`PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 消费 packet-selected memory entries，并通过 `BackgroundAssembler` 保持 `[Memories]` 兼容输出。
+- 已完成：Phase 5 手动 reflect 整理入口、LLM executor、structured parser、`v17_create_memory_entry_link`、confirmed observation apply；未启用 idle/background 自动整理。
 
 ## 6. 实现证据
 
@@ -121,7 +122,8 @@ MemoryManager.recallMemories
 | 自动提取触发 | `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` |
 | 提取/检索编排 | `OpenChat/Core/Memory/MemoryManager.swift` |
 | recall DTO / trace | `OpenChat/Core/Memory/MemoryRecallModels.swift` |
-| reflect DTO contract | `OpenChat/Core/Memory/MemoryReflectModels.swift` |
+| reflect DTO / parser / executor | `OpenChat/Core/Memory/MemoryReflectModels.swift` |
+| reflect apply | `OpenChat/Core/Memory/MemoryManager.swift`, `OpenChat/Core/Memory/VectorStore.swift` |
 | embedding 协议边界 | `OpenChat/Core/Memory/MemoryDependencies.swift` |
 | CoreML embedding | `OpenChat/Core/Memory/EmbeddingService.swift` |
 | sqlite-vec 存储 | `OpenChat/Core/Memory/VectorStore.swift` |

@@ -119,4 +119,32 @@ extension AgentPolicy {
             )
         )
     }
+
+    static func reflectDefault() -> AgentPolicy {
+        AgentPolicy(
+            allowedCapabilities: [.llm, .databaseRead, .internalDiagnostics],
+            tokenBudget: AgentTokenBudget(
+                maxInputTokens: 8_000,
+                maxOutputTokens: 700,
+                maxTotalTokens: 8_700
+            ),
+            timeoutSeconds: 30,
+            retryPolicy: AgentRetryPolicy(maxAttempts: 1, retryDelaySeconds: 0),
+            schemaRepairPolicy: SchemaRepairPolicy(allowRepair: false, maxRepairAttempts: 0),
+            visibilityPolicy: AgentVisibilityPolicy(
+                exposeDiagnosticsToUser: false,
+                exposeDraftToUser: false
+            ),
+            toolUsePolicy: .disabled,
+            sideEffectPolicy: SideEffectPolicy(
+                allowDatabaseRead: true,
+                allowDatabaseWrite: false,
+                requiresUserConfirmationForWrite: true
+            ),
+            confirmationPolicy: ConfirmationPolicy(
+                requiredForDraftApply: false,
+                requiredForPersistentWrite: true
+            )
+        )
+    }
 }

@@ -443,6 +443,41 @@ struct MemoryEntryRecord: Codable, FetchableRecord, PersistableRecord {
 
 ---
 
+### 7b. memory_entry_link — 记忆关系
+
+记录 reflect observation 与来源记忆之间的 based-on 关系。当前 Phase 5 只在用户确认手动整理 draft 后写入 `summarizes` links；原始 `memory_entry` 不会被自动删除、覆盖或替代。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| fromMemoryEntryId | TEXT | NOT NULL, FK -> memory_entry.id | 新 observation / 关系来源 |
+| toMemoryEntryId | TEXT | NOT NULL, FK -> memory_entry.id | 被引用的来源记忆 |
+| relation | TEXT | NOT NULL | `summarizes` / `duplicates` / `reinforces` |
+| createdAt | TEXT | NOT NULL | ISO 8601 |
+
+**外键**：
+- `fromMemoryEntryId` -> `memory_entry(id)` ON DELETE CASCADE
+- `toMemoryEntryId` -> `memory_entry(id)` ON DELETE CASCADE
+
+**索引**：
+- `idx_memory_entry_link_fromMemoryEntryId`
+- `idx_memory_entry_link_toMemoryEntryId`
+- `idx_memory_entry_link_relation`
+
+**Swift Record**:
+```swift
+struct MemoryEntryLinkRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "memory_entry_link"
+    var id: String
+    var fromMemoryEntryId: String
+    var toMemoryEntryId: String
+    var relation: MemoryEntryLinkRelation
+    var createdAt: Date
+}
+```
+
+---
+
 ## 实体关系图（文字 ER）
 
 ```
@@ -452,6 +487,7 @@ character_card 1 ──── 0..* conversation
 world_book 1 ──── 0..* character_card
 world_book 1 ──── 0..* world_book_entry
 character_card 1 ──── 0..* memory_entry
+memory_entry 1 ──── 0..* memory_entry_link
 conversation 1 ──── 0..* memory_entry
 conversation 1 ──── 0..* message
 conversation 1 ──── 0..* conversation_compression_checkpoint
@@ -464,6 +500,7 @@ conversation 1 ──── 0..* conversation_compression_checkpoint
 - 一个 `character_card` 可选归属于一个 `world_book`（世界书通过角色卡间接关联到对话）
 - 一个 `world_book` 包含多个 `world_book_entry`
 - 一个 `character_card` 关联多条 `memory_entry`（跨对话记忆）
+- 一条 `memory_entry` 可通过 `memory_entry_link` 指向其他 memory，保留 reflect observation 的 based-on 来源
 - 一个 `conversation` 包含多条 `message`
 - 一个 `conversation` 包含多条 `conversation_compression_checkpoint`，用于复用旧历史压缩摘要
 - 一个 `conversation` 可关联多条 `memory_entry`（记忆来源）
@@ -472,6 +509,7 @@ conversation 1 ──── 0..* conversation_compression_checkpoint
 - 删除 `api_endpoint` 时，关联 `conversation_compression_checkpoint` 的 `endpointId` 置 NULL
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
 - 删除 `character_card` 时级联删除其所有 `memory_entry`
+- 删除 `memory_entry` 时级联删除以它为 from/to endpoint 的 `memory_entry_link`
 - 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
 - 删除 `api_endpoint` 时，级联删除其所有 `endpoint_model`
 - 删除 `world_book` 时，关联 `character_card` 的 `worldBookId` 置 NULL
@@ -850,6 +888,33 @@ migrator.registerMigration("v16_create_world_book_entry_embedding_meta") { db in
 - `OpenChat/Core/WorldBook/WorldBookVectorStore.swift` 提供 upsert/search/delete/deleteAll，search 限定 `worldBookId` 和 enabled entries。
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 v15/v16 schema、索引、cascade 和 migration forbidden references。
 - `OpenChatTests/Core/WorldBookTests/WorldBookVectorStoreTests.swift` 覆盖 upsert、worldBook 范围限定、disabled entry 过滤、delete 和维度错误无部分写入。
+
+### v17_create_memory_entry_link
+
+新增 `memory_entry_link` companion table，用于记录 reflect observation 与来源记忆之间的 based-on 关系。该迁移只追加新表和索引，不修改 v1-v16。
+
+```swift
+migrator.registerMigration("v17_create_memory_entry_link") { db in
+    try db.create(table: Historical.memoryEntryLinkTable) { t in
+        t.column("id", .text).notNull().primaryKey()
+        t.column("fromMemoryEntryId", .text).notNull()
+            .references(Historical.memoryEntryTable, onDelete: .cascade)
+        t.column("toMemoryEntryId", .text).notNull()
+            .references(Historical.memoryEntryTable, onDelete: .cascade)
+        t.column("relation", .text).notNull()
+        t.column("createdAt", .datetime).notNull()
+    }
+}
+```
+
+实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` 追加 `v17_create_memory_entry_link`。
+- `OpenChat/Core/Database/Records/MemoryEntryProvenanceRecord.swift` 定义 target-backed `MemoryEntryLinkRecord`。
+- `OpenChat/Core/Database/DatabaseManager+Memory.swift` 提供 link save/fetch/validation。
+- `OpenChat/Core/Memory/VectorStore.swift` 的 `insert(entry:embedding:links:)` 原子写 entry、embedding 和 links。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 schema、索引和 from/to cascade。
+- `OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift` 覆盖 link fetch/dedupe/invalid relation。
 
 ---
 

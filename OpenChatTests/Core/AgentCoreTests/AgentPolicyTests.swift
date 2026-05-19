@@ -45,4 +45,18 @@ struct AgentPolicyTests {
         #expect(policy.confirmationPolicy.requiredForDraftApply)
         #expect(policy.confirmationPolicy.requiredForPersistentWrite)
     }
+
+    @Test func test_reflectDefault_allowsLLMAndDatabaseRead_butDeniesWebAndDatabaseWrite() {
+        let policy = AgentPolicy.reflectDefault()
+
+        #expect(policy.allowedCapabilities.contains(.llm))
+        #expect(policy.allowedCapabilities.contains(.databaseRead))
+        #expect(policy.allowedCapabilities.contains(.internalDiagnostics))
+        #expect(!policy.allowedCapabilities.contains(.webSearch))
+        #expect(!policy.allowedCapabilities.contains(.databaseWrite))
+        #expect(!policy.toolUsePolicy.allowNetwork)
+        #expect(policy.sideEffectPolicy.allowDatabaseRead)
+        #expect(!policy.sideEffectPolicy.allowDatabaseWrite)
+        #expect(policy.confirmationPolicy.requiredForPersistentWrite)
+    }
 }

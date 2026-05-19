@@ -6,6 +6,7 @@ protocol EmbeddingProvider: Sendable {
 
 protocol MemoryVectorStore: Sendable {
     func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws
+    func insert(entry: MemoryEntryRecord, embedding: [Float], links: [MemoryEntryLinkRecord]) async throws
     func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws
     func insert(
         entries: [(entry: MemoryEntryRecord, embedding: [Float])],
@@ -21,6 +22,15 @@ protocol MemoryVectorStore: Sendable {
 }
 
 extension MemoryVectorStore {
+    func insert(entry: MemoryEntryRecord, embedding: [Float], links: [MemoryEntryLinkRecord]) async throws {
+        guard links.isEmpty else {
+            throw MemoryError.vectorStoreError(
+                underlying: MemoryVectorStoreCapabilityError.linksNotSupported
+            )
+        }
+        try await insert(entry: entry, embedding: embedding)
+    }
+
     func insert(
         entries: [(entry: MemoryEntryRecord, embedding: [Float])],
         provenances: [String: MemoryEntryProvenanceRecord]
@@ -31,3 +41,11 @@ extension MemoryVectorStore {
 
 extension EmbeddingService: EmbeddingProvider {}
 extension VectorStore: MemoryVectorStore {}
+
+private enum MemoryVectorStoreCapabilityError: LocalizedError, Sendable {
+    case linksNotSupported
+
+    var errorDescription: String? {
+        "Memory vector store does not support atomic link writes."
+    }
+}

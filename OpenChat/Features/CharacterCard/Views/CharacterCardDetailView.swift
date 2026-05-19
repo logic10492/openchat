@@ -105,6 +105,8 @@ struct CharacterCardDetailView: View {
                 viewModel: MemoryListViewModel(
                     databaseManager: container.databaseManager,
                     memoryManager: container.memoryManager,
+                    reflectExecutor: container.memoryReflectExecutor,
+                    apiKeyStore: container.apiKeyStore,
                     characterCardId: card.id
                 )
             )

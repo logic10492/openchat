@@ -242,6 +242,67 @@ struct MemoryManager: Sendable {
         )
     }
 
+    // MARK: - Reflect Apply
+
+    @discardableResult
+    func applyReflectObservation(
+        _ observation: MemoryReflectObservation,
+        characterCardId: String
+    ) async throws -> MemoryEntryRecord {
+        guard observation.suggestedAction == .insertObservation else {
+            throw MemoryReflectApplyError.unsupportedAction(observation.suggestedAction)
+        }
+
+        let sourceMemories = try await databaseManager.fetchMemories(ids: observation.basedOnMemoryIds)
+        let sourceMemoriesById = Dictionary(uniqueKeysWithValues: sourceMemories.map { ($0.id, $0) })
+        let missingIds = observation.basedOnMemoryIds.filter { sourceMemoriesById[$0] == nil }
+        guard missingIds.isEmpty else {
+            throw MemoryReflectError.missingSourceMemories(missingIds)
+        }
+
+        for memory in sourceMemories where memory.characterCardId != characterCardId {
+            throw MemoryReflectError.crossCharacterMemory(
+                id: memory.id,
+                expectedCharacterCardId: characterCardId,
+                actualCharacterCardId: memory.characterCardId
+            )
+        }
+
+        let now = Date()
+        let entry = MemoryEntryRecord(
+            id: UUID().uuidString,
+            characterCardId: characterCardId,
+            sourceConversationId: nil,
+            content: observation.content,
+            memoryType: observation.memoryType.rawValue,
+            importance: 60,
+            createdAt: now,
+            updatedAt: now
+        )
+        var seenBasedOnIds = Set<String>()
+        let basedOnIds = observation.basedOnMemoryIds.filter { id in
+            seenBasedOnIds.insert(id).inserted
+        }
+        let links = basedOnIds.map { basedOnId in
+            MemoryEntryLinkRecord(
+                fromMemoryEntryId: entry.id,
+                toMemoryEntryId: basedOnId,
+                relation: .summarizes,
+                createdAt: now
+            )
+        }
+
+        let embedding: [Float]
+        do {
+            embedding = try embeddingService.embed(entry.content, isQuery: false)
+        } catch {
+            throw MemoryError.embeddingFailed(underlying: error)
+        }
+
+        try await vectorStore.insert(entry: entry, embedding: embedding, links: links)
+        return entry
+    }
+
     private func makeSemanticCandidates(
         from results: [(entryId: String, distance: Float)]
     ) async throws -> [SemanticRecallCandidate] {

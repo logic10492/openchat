@@ -1169,3 +1169,82 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - CharacterBackgroundSource / ConversationStateBackgroundSource 未实现；当前 `BackgroundSourceType` 只有 `.memory` / `.worldBook`。
 - LibMan / Exa / LLM-assisted selector / synthesis worker 未实现。
 - bounded worldBook rebuild 尚未迁移进 manager pre-source stage；当前仍由 ChatViewModel 负责。
+
+## Memory Reflect Observation Synthesis Phase 5 增量传播审计（2026-05-18）
+
+范围：`OpenChat/Core/Database/Migrations.swift`、`DatabaseManager+Memory.swift`、`MemoryEntryProvenanceRecord.swift`、`OpenChat/Core/Memory/MemoryReflectModels.swift`、`MemoryManager.swift`、`VectorStore.swift`、`MemoryDependencies.swift`、`MemoryError.swift`、`OpenChat/Core/AgentCore/AgentPolicy.swift`、`OpenChat/App/DependencyContainer.swift`、`OpenChat/Features/CharacterCard/*MemoryList*`、`OpenChat/Resources/Localizable.xcstrings`、Memory / DB / AgentPolicy focused tests、相关 arch/harness 写回。
+
+审计模式：窄范围增量审计。修改前已按计划拆成 DB/VectorStore、parser/executor/API、UI/docs 三条只读 lane，确认 `memory_entry_link` 不存在、最新 migration 为 v16、executor 可复用 `APIClient.sendMessage(...)` 且无需修改 Chat/Prompt/provider request shape，UI 需要新增 selection/draft/apply/error state。
+
+### 静态传播面
+
+新增 / 修改 runtime surface：
+
+- `Migrations.swift`：只追加 `v17_create_memory_entry_link`；v1-v16 未修改。
+- `MemoryEntryProvenanceRecord.swift`：追加 target-backed `MemoryEntryLinkRecord`，避免 Xcode project membership churn。
+- `DatabaseManager+Memory.swift`：新增 link save/fetch/validation，按 `from/to/relation` 去重。
+- `MemoryReflectModels.swift`：新增 prompt builder、single-object JSON parser、executor、result/diagnostics；executor 只产出 draft，不写 DB。
+- `MemoryManager.swift`：新增 `applyReflectObservation(...)`，只支持 `.insertObservation`。
+- `VectorStore.swift` / `MemoryDependencies.swift`：新增 entry + embedding + links 原子写入协议与实现。
+- `AgentPolicy.swift`：新增 `reflectDefault()`，允许 LLM / DB read / diagnostics，禁止 web / DB write。
+- `DependencyContainer.swift`、`CharacterCardDetailView.swift`、`MemoryListViewModel.swift`、`MemoryListView.swift`、`Localizable.xcstrings`：新增手动整理入口、2-5 选择、draft preview、Apply/Cancel 和可见错误。
+
+未修改面：
+
+- 未修改 `ChatViewModel+Support.swift`、`PromptAssembler.swift`、`BackgroundWorker.swift`、`MemoryBackgroundSource.swift`、`WorldBookBackgroundSource.swift`。
+- 未修改 `ResponsesAPIRequest.swift` 或 provider request shape。
+- 未修改 `scripts/generate_xcodeproj.rb`、签名配置或新增 Swift 文件 target membership。
+- 未接 Exa / LibMan / web search；reflect 未进入每轮 Chat send path。
+
+### 行为传播结论
+
+手动 reflect 链路：
+
+```text
+MemoryListView
+  -> MemoryListViewModel selectedMemoryIds (2...5)
+  -> MemoryReflectExecutor.reflect(...)
+       -> fetchMemories(ids:)
+       -> preserve request source order
+       -> reject missing / cross-character sources
+       -> APIClient.sendMessage(...)
+       -> MemoryReflectParser.parse(...)
+  -> reflectDraft visible in MemoryListView
+  -> MemoryManager.applyReflectObservation(...)
+       -> validate basedOn source ids and character boundary
+       -> embed new observation
+       -> VectorStore.insert(entry:embedding:links:)
+       -> memory_entry + memory_embedding + memory_entry_link(relation = summarizes)
+```
+
+Boundary conclusions:
+
+- Reflect executor does not write DB and does not create assistant messages.
+- Confirmed apply writes a new observation memory with `sourceConversationId = nil` and conservative importance 60; original source memories are retained.
+- `.markDuplicate` and `.needsUserReview` are rejected for automatic apply; duplicate deletion / conflict resolution remains a future review flow.
+- `memory_entry_link` from/to FKs cascade on memory deletion, and link/FK/embedding failure rolls back the observation write.
+- Parser requires one JSON object and validates `content` / `type` / `basedOn` / `confidence` / `suggestedAction`; unknown `basedOn` ids are rejected before apply.
+- Current implementation is a manual Memory management entry only; idle/background automatic reflect is not enabled.
+
+### 验证
+
+Lead focused closeout command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：84 tests / 5 suites passed，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-21-54-+0800.xcresult`。
+
+其他检查：
+
+- `git diff --check`：通过。
+- `python3 -m json.tool OpenChat/Resources/Localizable.xcstrings >/dev/null`：通过。
+- 默认 iOS 26.5 `iPhone 17 Pro` destination full suite 在启动测试 runner 前遇到 simulator Busy：`Application failed preflight checks`。改用 alternate simulator `id=F8D0D88B-71FD-471F-855A-B2B5D8267117` 后 full suite 通过 360 tests / 66 suites，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-42-36-+0800.xcresult`。
+
+### 未完成边界
+
+- idle/background 自动 reflect 未实现。
+- duplicate/conflict 用户审阅专页和自动合并策略未实现。
+- 统一 `[Background]` block 与 Background request-shape audit 未实现。
+- Memory reflect UI 尚无 XCUITest 端到端点击覆盖。

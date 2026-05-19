@@ -1,6 +1,6 @@
 # OpenChat Planning
 
-> 更新时间：2026-05-17
+> 更新时间：2026-05-18
 > 状态：规划入口 + 当前执行状态。本文记录目标架构、已完成计划包和下一步落地顺序；未标记完成的阶段不代表当前源码已实现。
 
 ## 1. 当前重点
@@ -28,15 +28,17 @@ Memory Hindsight-lite repair
   -> LibMan
 ```
 
-2026-05-17 状态：
+2026-05-18 状态：
 
 - Memory Hindsight-lite A/B/C/D 与 Lead closeout 已完成并通过 full suite。
 - WorldBook vectorization A/B/C/D 与 closeout 已完成并通过 full suite。WorldBook 已具备 embedding、semantic recall、trace、候选管理和 CRUD/import/delete/rebuild 维护能力。
 - AgentCore foundation 已完成：`OpenChat/Core/AgentCore/` 与 `OpenChatTests/Core/AgentCoreTests/` 已进入 Xcode target；AgentCore focused 12 tests / 4 suites、主链路 focused 50 tests / 4 suites、full suite 303 tests / 58 suites 均通过。
 - 当前工作区已落地 Memory / WorldBook read-only source tools、BackgroundSource adapters、`Core/Background` DTO、deterministic `BackgroundWorker`、`BackgroundManager`、`BackgroundPacket` 与 Chat/Prompt 到 packet-aware 路径的兼容切换。
+- 当前工作区已落地 Phase 5 手动 low-frequency reflect：`MemoryReflectExecutor` / parser 生成 draft，Memory 管理页提供 2-5 条来源记忆选择、draft 预览和确认 apply；confirmed observation 写入 `memory_entry`、`memory_embedding` 和 `memory_entry_link(relation = summarizes)`，原始记忆保留。
+- Phase 5 focused closeout：`MemoryReflectModelsTests`、`VectorStoreTests`、`DatabaseManagerMemoryTests`、`MigrationTests`、`AgentPolicyTests` 共 84 tests / 5 suites passed；`git diff --check` 和 `Localizable.xcstrings` JSON parse 通过。随后在 alternate simulator `id=F8D0D88B-71FD-471F-855A-B2B5D8267117` 跑 full suite，360 tests / 66 suites passed。
 - 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
 - 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
-- 当前下一步建议先进入 reflect / Director / 多角色同场 / Stage，Stage 基线落地后再建立 UI 自动化 baseline。
+- 当前下一步建议进入 Director / 多角色同场 / Stage；idle/background 自动 reflect 与 duplicate/conflict review policy 可作为后续 Memory 增量计划处理。
 - LibMan 不属于主链路 RP 体验，优先级下调到 UI 自动化 baseline 之后。
 - Stage、Director、多角色同场、LibMan 仍是后续阶段。
 
@@ -236,7 +238,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 
 - retain：Memory 继续负责长期记忆抽取与持久化；source range / provenance / dedupe metadata 已在 Hindsight-lite Phase C 落地。
 - recall：Memory 已能输出有序 `MemoryRecallResult` / `MemoryRecallTrace`；进入 Background 前仍保持旧兼容 API 供 Chat 使用。
-- reflect：Phase D 已落地最小 `MemoryReflectRequest` / `MemoryReflectObservation` contract；reflect LLM executor、UI 入口和 `memory_entry_link` 持久化仍是后续独立计划。
+- reflect：Phase D 已落地最小 `MemoryReflectRequest` / `MemoryReflectObservation` contract；Phase 5 已落地手动整理入口、LLM executor、parser、review/apply 和 `memory_entry_link` 持久化。idle/background 自动触发、duplicate 自动删除和冲突自动解决仍未实现。
 
 已完成顺序：
 
@@ -246,11 +248,12 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 4. 增加 source range / provenance / dedupe metadata。
 5. 验收当前 Responses API 下 `[Memories]` folding 后的 request shape。
 6. 建立低频 reflect 的最小 DTO contract。
+7. 实现手动 reflect draft / review / apply 和 `v17_create_memory_entry_link` based-on 持久化。
 
 仍未做：
 
-- 将 Memory 输出包装成 `BackgroundCandidate`。
-- 实现 reflect LLM executor / UI 入口 / `memory_entry_link` migration。
+- idle/background 自动 reflect 触发。
+- duplicate/conflict 的用户审阅专页与自动合并策略。
 
 参考文档：
 
@@ -318,9 +321,12 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 
 ### Phase 5：低频 reflect / observation synthesis
 
-- 只在手动整理或后台低频任务中运行。
-- 产物必须带 `basedOn` source ids。
-- 不直接替代原始记忆。
+- 当前实现只在手动整理入口运行；后台低频任务尚未启用。
+- 产物必须带 `basedOn` source ids；parser / executor 会拒绝 unknown basedOn。
+- confirmed apply 只支持 `.insertObservation`，并写入新 observation、embedding 和 `summarizes` links。
+- 不直接替代原始记忆；`.markDuplicate` / `.needsUserReview` 不会自动删除或覆盖来源记忆。
+- Focused closeout：84 tests / 5 suites passed；alternate simulator full suite 360 tests / 66 suites passed。
+- 计划包：`docs/superpowers/plans/2026-05-17-memory-reflect-observation-synthesis/README.md`。
 
 ### Phase 6：Director / 导演模式
 
@@ -406,7 +412,7 @@ xcodebuild test \
 - Stage 系统尚未实现。
 - Director agent / 导演模式尚未实现。
 - 多角色同场参与尚未实现。
-- reflect LLM executor / UI 入口 / `memory_entry_link` 持久化尚未实现。
+- idle/background 自动 reflect、duplicate 自动删除和冲突自动解决尚未实现。
 - Background diagnostics 已有 DTO / tests，尚未进入用户可见调试界面。
 - 本地化资源仍有缺口，需要补齐 `Localizable.xcstrings` 中缺失的 UI 文案 key。
 - 多个 Swift 文件超过 300 行规范，后续可按风险逐步拆分。

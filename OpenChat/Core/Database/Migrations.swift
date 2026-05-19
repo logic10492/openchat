@@ -11,6 +11,7 @@ enum Migrations {
         static let messageTable = "message"
         static let memoryEntryTable = "memory_entry"
         static let memoryEmbeddingTable = "memory_embedding"
+        static let memoryEntryLinkTable = "memory_entry_link"
         static let worldBookEntryEmbeddingTable = "world_book_entry_embedding"
         static let worldBookEntryEmbeddingMetaTable = "world_book_entry_embedding_meta"
         static let endpointModelTable = "endpoint_model"
@@ -269,6 +270,32 @@ enum Migrations {
                 index: "idx_world_book_entry_embedding_meta_model",
                 on: Historical.worldBookEntryEmbeddingMetaTable,
                 columns: ["embeddingModel"]
+            )
+        }
+        migrator.registerMigration("v17_create_memory_entry_link") { db in
+            try db.create(table: Historical.memoryEntryLinkTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("fromMemoryEntryId", .text).notNull()
+                    .references(Historical.memoryEntryTable, onDelete: .cascade)
+                t.column("toMemoryEntryId", .text).notNull()
+                    .references(Historical.memoryEntryTable, onDelete: .cascade)
+                t.column("relation", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_memory_entry_link_fromMemoryEntryId",
+                on: Historical.memoryEntryLinkTable,
+                columns: ["fromMemoryEntryId"]
+            )
+            try db.create(
+                index: "idx_memory_entry_link_toMemoryEntryId",
+                on: Historical.memoryEntryLinkTable,
+                columns: ["toMemoryEntryId"]
+            )
+            try db.create(
+                index: "idx_memory_entry_link_relation",
+                on: Historical.memoryEntryLinkTable,
+                columns: ["relation"]
             )
         }
         return migrator

@@ -150,6 +150,89 @@ struct VectorStoreTests {
         #expect(vectorCount == 1)
     }
 
+    @Test func test_insert_entry_embedding_and_links_in_single_transaction() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let store = VectorStore(databaseManager: manager)
+        let card = TestHelpers.makeCharacterCard(id: "card-link-atomic")
+        try await insertCards([card], into: manager)
+        let sourceA = TestHelpers.makeMemoryEntry(id: "source-a", characterCardId: card.id)
+        let sourceB = TestHelpers.makeMemoryEntry(id: "source-b", characterCardId: card.id)
+        try await manager.saveMemory(sourceA)
+        try await manager.saveMemory(sourceB)
+
+        let observation = TestHelpers.makeMemoryEntry(
+            id: "observation-a",
+            characterCardId: card.id,
+            content: "Ava connects the two source memories.",
+            memoryType: .summary,
+            importance: 60
+        )
+        let links = [
+            MemoryEntryLinkRecord(
+                id: "link-observation-source-a",
+                fromMemoryEntryId: observation.id,
+                toMemoryEntryId: sourceA.id,
+                relation: .summarizes
+            ),
+            MemoryEntryLinkRecord(
+                id: "link-observation-source-b",
+                fromMemoryEntryId: observation.id,
+                toMemoryEntryId: sourceB.id,
+                relation: .summarizes
+            ),
+        ]
+
+        try await store.insert(entry: observation, embedding: makeEmbedding(firstValue: 0.8), links: links)
+
+        let memories = try await manager.fetchMemories(characterCardId: card.id)
+        let fetchedLinks = try await manager.fetchMemoryEntryLinks(fromMemoryEntryId: observation.id)
+        #expect(memories.map(\.id).contains(observation.id))
+        #expect(try await vectorRowCount(entryId: observation.id, in: manager) == 1)
+        #expect(fetchedLinks.map(\.toMemoryEntryId) == [sourceA.id, sourceB.id])
+        #expect(fetchedLinks.allSatisfy { $0.relationValue == .summarizes })
+    }
+
+    @Test func test_insert_with_link_failure_rolls_back_memory_and_vector() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let store = VectorStore(databaseManager: manager)
+        let card = TestHelpers.makeCharacterCard(id: "card-link-rollback")
+        try await insertCards([card], into: manager)
+
+        let observation = TestHelpers.makeMemoryEntry(
+            id: "observation-rollback",
+            characterCardId: card.id,
+            content: "Ava links to a missing source.",
+            memoryType: .summary,
+            importance: 60
+        )
+        let invalidLink = MemoryEntryLinkRecord(
+            id: "link-missing-source",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: "missing-source",
+            relation: .summarizes
+        )
+
+        do {
+            try await store.insert(
+                entry: observation,
+                embedding: makeEmbedding(firstValue: 0.7),
+                links: [invalidLink]
+            )
+            Issue.record("Expected missing link target to throw")
+        } catch let error as MemoryError {
+            guard case .vectorStoreError = error else {
+                Issue.record("Expected MemoryError.vectorStoreError, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("Expected MemoryError.vectorStoreError, got \(error)")
+        }
+
+        #expect(try await manager.fetchMemoryCount(characterCardId: card.id) == 0)
+        #expect(try await vectorRowCount(entryId: observation.id, in: manager) == 0)
+        #expect(try await manager.fetchMemoryEntryLinks(fromMemoryEntryId: observation.id) == [])
+    }
+
     @Test func test_insert_batch_rolls_back_all_memories_when_later_vector_insert_fails() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let store = VectorStore(databaseManager: manager)

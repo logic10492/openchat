@@ -39,7 +39,7 @@ CREATE VIRTUAL TABLE memory_embedding USING vec0(
 当前约束：
 
 - `entry_id` 与 `memory_entry.id` 逻辑关联。
-- 生产写入由 `VectorStore.insert(entry:embedding:)` 或 `VectorStore.insert(entries:)` 同时写 `memory_entry` 和 `memory_embedding`。
+- 生产写入由 `VectorStore.insert(entry:embedding:)`、`VectorStore.insert(entry:embedding:links:)` 或 `VectorStore.insert(entries:)` 同时写 `memory_entry`、`memory_embedding`，必要时同事务写 `memory_entry_link`。
 - 向量维度必须等于 `EmbeddingService.embeddingDimension == 384`。
 - 删除单条或清空角色记忆时，需要同时删除 embedding 与 entry。
 
@@ -76,6 +76,7 @@ LLM 返回的 `type` 会做小写匹配；无法识别时 fallback 到 `.event`�
 | `v4_create_memory_tables` | 创建 `memory_entry` 与 `memory_embedding`，并添加 `characterCardId` / `sourceConversationId` 索引 |
 | `v13_add_last_extracted_sort_order` | 在 `conversation` 追加 `lastExtractedSortOrder` |
 | `v14_create_memory_entry_provenance` | 创建 `memory_entry_provenance` companion table |
+| `v17_create_memory_entry_link` | 创建 `memory_entry_link`，记录 reflect observation 与来源记忆的 based-on 关系 |
 
 迁移约束：
 
@@ -108,36 +109,51 @@ LLM 返回的 `type` 会做小写匹配；无法识别时 fallback 到 `.event`�
 - `sourceMessageIds`、`tags` 使用 JSON array 字符串，沿用 `RecordCoders` 风格。
 - 旧 `memory_entry` 没有 provenance 时仍能检索、展示和删除。
 
-## 7. 当前缺口
+## 7. `memory_entry_link`
 
-- 没有显式的 `memory_entry_link`（reinforces / duplicates / contradicts / supersedes / summarizes 关系）。
+`memory_entry_link` 是 Hindsight-lite Phase 5 追加的 companion table，记录新 observation 与来源记忆之间的可追踪关系。当前用于手动 reflect apply 的 `summarizes` link；原始 memory 不会因 link 写入被覆盖或删除。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | TEXT | PK, NOT NULL | UUID 字符串 |
+| `fromMemoryEntryId` | TEXT | NOT NULL, FK -> `memory_entry.id` | 新 observation / 关系来源 |
+| `toMemoryEntryId` | TEXT | NOT NULL, FK -> `memory_entry.id` | 被引用的来源记忆 |
+| `relation` | TEXT | NOT NULL | `summarizes` / `duplicates` / `reinforces` |
+| `createdAt` | DATETIME | NOT NULL | 创建时间 |
+
+外键：
+
+- `fromMemoryEntryId -> memory_entry(id) ON DELETE CASCADE`
+- `toMemoryEntryId -> memory_entry(id) ON DELETE CASCADE`
+
+索引：
+
+- `idx_memory_entry_link_fromMemoryEntryId`
+- `idx_memory_entry_link_toMemoryEntryId`
+- `idx_memory_entry_link_relation`
+
+当前 Record：`MemoryEntryLinkRecord`
+
+- `DatabaseManager.saveMemoryEntryLinks(...)` 校验空 id、自链接、非法 relation，并按 `from/to/relation` 去重。
+- `VectorStore.insert(entry:embedding:links:)` 在一个 GRDB write transaction 内写 entry、embedding 和 links；link/FK/embedding 失败会回滚整次 observation apply。
+
+## 8. 当前缺口
+
 - `latestMemoryDate(conversationId:)` 仍保留在 `DatabaseManager+Memory`，但自动提取 cutoff 已改用 `conversation.lastExtractedSortOrder`。
+- `memory_entry_link` 当前最小 relation 集合为 `summarizes` / `duplicates` / `reinforces`；`contradicts`、`supersedes` 和自动 conflict resolution 尚未实现。
+- 当前只实现手动 reflect review/apply；idle/background 自动整理尚未启用。
 
-## 8. Hindsight-lite 目标 schema
+## 9. Hindsight-lite schema 状态
 
 为降低迁移风险，Hindsight-lite 优先使用 companion table，而不是直接把 `memory_entry` 扩成大宽表。
 
-建议后续追加：
+已追加：
 
-```text
-memory_entry_link
-  id TEXT PRIMARY KEY
-  fromMemoryEntryId TEXT
-  toMemoryEntryId TEXT
-  relation TEXT
-  createdAt DATETIME
-```
-
-`relation` 初始枚举：
-
-- `reinforces`
-- `duplicates`
-- `contradicts`
-- `supersedes`
-- `summarizes`
+- `v14_create_memory_entry_provenance`
+- `v17_create_memory_entry_link`
 
 迁移要求：
 
-- 使用 v15+ 追加 migration。
 - 旧 `memory_entry` 记录没有 provenance 时仍可检索和注入。
-- reflect 生成的 observation 必须通过 `memory_entry_link(relation = summarizes)` 或等价 `basedOn` 结构保留来源。
+- reflect 生成并由用户确认的 observation 必须通过 `memory_entry_link(relation = summarizes)` 保留来源。
+- 后续新增 relation 或状态字段仍必须追加新 migration，不得修改 v1-v17。

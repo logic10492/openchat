@@ -42,6 +42,7 @@ protocol EmbeddingProvider: Sendable {
 protocol MemoryVectorStore: Sendable {
     func insert(entryId: String, embedding: [Float]) async throws
     func insert(entry: MemoryEntryRecord, embedding: [Float]) async throws
+    func insert(entry: MemoryEntryRecord, embedding: [Float], links: [MemoryEntryLinkRecord]) async throws
     func insert(entries: [(entry: MemoryEntryRecord, embedding: [Float])]) async throws
     func search(query: [Float], characterCardId: String, limit: Int) async throws -> [(entryId: String, distance: Float)]
     func delete(entryId: String) async throws
@@ -71,6 +72,7 @@ VectorStore.insert(entries:)
 - 任一条 embedding 维度错误，整批不进入事务。
 - 任一条 DB/vector 写入失败，整批回滚。
 - 不允许自动提取留下只有 `memory_entry`、没有 `memory_embedding` 的半索引记忆。
+- 手动 reflect apply 使用 `insert(entry:embedding:links:)`，在同一 GRDB write transaction 内写入 observation entry、embedding 和 `memory_entry_link`；link/FK 失败时也必须回滚 entry 与 embedding。
 
 ## 4. 检索实现
 

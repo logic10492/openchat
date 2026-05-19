@@ -14,13 +14,13 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 | 测试文件 | 覆盖点 |
 |---|---|
-| `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` | `memory_entry` / `memory_embedding` migration，`lastExtractedSortOrder` migration，`memory_entry_provenance` v14 migration |
-| `OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift` | memory CRUD、count、ids、type、recent、recent high-value、conversation 查询 |
+| `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` | `memory_entry` / `memory_embedding` migration，`lastExtractedSortOrder` migration，`memory_entry_provenance` v14 migration，`memory_entry_link` v17 migration / index / cascade |
+| `OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift` | memory CRUD、count、ids、type、recent、recent high-value、conversation 查询、link save/fetch/dedupe/relation validation |
 | `OpenChatTests/Core/MemoryExtractionParsingTests.swift` | `ExtractedMemory` JSON 容错、type/importance fallback、v2 字段解析、provenance CRUD、旧 memory 无 provenance 兼容 |
 | `OpenChatTests/Core/MemoryTests/EmbeddingServiceTests.swift` | bundle 资源、tokenizer 固定长度、384 维向量 |
-| `OpenChatTests/Core/MemoryTests/VectorStoreTests.swift` | memory/vector 原子写入、批量回滚、角色隔离、删除同步、维度校验 |
+| `OpenChatTests/Core/MemoryTests/VectorStoreTests.swift` | memory/vector 原子写入、entry + embedding + links 原子写入、批量回滚、角色隔离、删除同步、维度校验 |
 | `OpenChatTests/Core/MemoryTests/MemoryManagerRetrievalTests.swift` | `MemoryRecallResult` / trace、semantic/keyword/recent high-value fallback、兼容 retrieve API、提取失败不留下半索引记忆、v2 dedupe、越界 source range 丢弃、向量失败不留下 provenance 半成品 |
-| `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift` | reflect request / observation contract、basedOn/source ids 非空、confidence clamp、link relation 集合 |
+| `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift` | reflect request / observation contract、parser、executor、apply、MemoryListViewModel review state、basedOn/source ids 非空、confidence clamp、link relation 集合 |
 | `OpenChatTests/Core/MemoryTests/MemoryExtractionCutoffTests.swift` | sortOrder cutoff、首次提取、消息不足跳过、并发消息不跳过 |
 | `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift` | `[Memories]` 注入、token budget、四层顺序、memory trim 保持 retrieval order |
 | `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` | Chat 发送链路中的提取、检索 fallback、request 顺序和当前输入去重 |
@@ -46,9 +46,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 4. 当前测试缺口
 
-- reflect LLM executor / UI 行为测试尚未实现，因为当前只落地 DTO contract。
 - 检索 trace 目前只在 Memory 层测试覆盖，尚未接入产品 UI。
-- MemoryListView 的 importance progress 尺度风险未被 UI 测试覆盖。
+- reflect 手动入口已有 ViewModel 级测试；尚无 XCUITest 自动点击 MemoryListView 的端到端 UI 流程。
+- idle/background 自动 reflect、duplicate 自动删除和冲突自动解决尚未实现，因此没有对应行为测试。
 
 ## 5. Hindsight-lite 目标测试
 
@@ -58,6 +58,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | Phase B | 已覆盖：`MemoryRecallResult` 能记录 semantic/keyword/recent candidates、selected ids、omitted 和 fallback reason |
 | Phase C | 已覆盖：retain v2 解析 source range / confidence / tags / action / dedupeKey，并兼容 v1 JSON；provenance migration 不破坏旧 `memory_entry`；同批 dedupe；source range validation；atomic entry+embedding+provenance 写入 |
 | Phase D | 已覆盖：reflect observation 必须带 `basedOn`；Responses API system folding 后当前 `[Memories]` block 不丢失、不进入 user message、current input 不重复 |
+| Phase 5 | 已覆盖：`memory_entry_link` v17 schema/index/cascade；parser/executor request shape 和 missing/cross-character source rejection；confirmed apply 原子写 entry + embedding + links 并保留原始记忆；ViewModel run/apply/error state |
 
 ## 6. 最近验证基线
 
@@ -164,3 +165,17 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=4D
 ```
 
 结果：251 tests / 46 suites passed，`** TEST SUCCEEDED **`。
+
+2026-05-18 Phase 5 Memory reflect focused verification：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：84 tests / 5 suites passed，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-21-54-+0800.xcresult`。
+
+同步检查：
+
+- `git diff --check`：PASS。
+- `python3 -m json.tool OpenChat/Resources/Localizable.xcstrings >/dev/null`：PASS。
+- 默认 iOS 26.5 `iPhone 17 Pro` destination full suite 在启动测试 runner 前遇到 simulator Busy：`Application failed preflight checks`。改用 alternate simulator `id=F8D0D88B-71FD-471F-855A-B2B5D8267117` 后 full suite 通过 360 tests / 66 suites，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-42-36-+0800.xcresult`。

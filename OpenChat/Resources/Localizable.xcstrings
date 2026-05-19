@@ -1333,6 +1333,266 @@
         }
       }
     },
+    "%lld selected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%lld selected"
+          }
+        }
+      }
+    },
+    "Apply" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Apply"
+          }
+        }
+      }
+    },
+    "Applying" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Applying"
+          }
+        }
+      }
+    },
+    "Based on %lld memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Based on %lld memories"
+          }
+        }
+      }
+    },
+    "Clear All" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Clear All"
+          }
+        }
+      }
+    },
+    "Confidence %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Confidence %@"
+          }
+        }
+      }
+    },
+    "Default endpoint has no default model." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Default endpoint has no default model."
+          }
+        }
+      }
+    },
+    "Default endpoint is missing an API key." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Default endpoint is missing an API key."
+          }
+        }
+      }
+    },
+    "Delete All" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete All"
+          }
+        }
+      }
+    },
+    "Delete All Memories?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete All Memories?"
+          }
+        }
+      }
+    },
+    "Draft Observation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Draft Observation"
+          }
+        }
+      }
+    },
+    "Event" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Event"
+          }
+        }
+      }
+    },
+    "Fact" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Fact"
+          }
+        }
+      }
+    },
+    "Generating Draft" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Generating Draft"
+          }
+        }
+      }
+    },
+    "Memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Memories"
+          }
+        }
+      }
+    },
+    "Memories are created automatically from conversations." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Memories are created automatically from conversations."
+          }
+        }
+      }
+    },
+    "No Memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No Memories"
+          }
+        }
+      }
+    },
+    "No default API endpoint configured." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No default API endpoint configured."
+          }
+        }
+      }
+    },
+    "No reflect draft is available to apply." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No reflect draft is available to apply."
+          }
+        }
+      }
+    },
+    "Only insert observations can be applied automatically." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Only insert observations can be applied automatically."
+          }
+        }
+      }
+    },
+    "Organize Memories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Organize Memories"
+          }
+        }
+      }
+    },
+    "Relationship" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Relationship"
+          }
+        }
+      }
+    },
+    "Select 2 to 5 memories before organizing." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select 2 to 5 memories before organizing."
+          }
+        }
+      }
+    },
+    "Select Memory" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select Memory"
+          }
+        }
+      }
+    },
+    "Summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Summary"
+          }
+        }
+      }
+    },
+    "This action cannot be undone." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This action cannot be undone."
+          }
+        }
+      }
+    },
     "You" : {
       "extractionState" : "stale",
       "localizations" : {

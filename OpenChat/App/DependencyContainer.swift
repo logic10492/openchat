@@ -8,6 +8,7 @@ final class DependencyContainer {
     let apiKeyStore: any APIKeyStore
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let memoryReflectExecutor: MemoryReflectExecutor
     let worldBookVectorStore: WorldBookVectorStore
     let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
     let worldBookSource: WorldBookSource
@@ -37,6 +38,10 @@ final class DependencyContainer {
             apiKeyStore: apiKeyStore
         )
         self.memoryManager = memoryManager
+        self.memoryReflectExecutor = MemoryReflectExecutor(
+            databaseManager: databaseManager,
+            apiClient: resolvedClient
+        )
         self.worldBookVectorStore = worldBookVectorStore
         self.worldBookEmbeddingIndexer = WorldBookEmbeddingIndexer(
             databaseManager: databaseManager,

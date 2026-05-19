@@ -55,3 +55,54 @@ struct MemoryEntryProvenanceRecord: Codable, FetchableRecord, PersistableRecord,
         self.updatedAt = updatedAt
     }
 }
+
+struct MemoryEntryLinkRecord: Codable, FetchableRecord, PersistableRecord, Sendable, Equatable {
+    static let databaseTableName = "memory_entry_link"
+
+    var id: String
+    var fromMemoryEntryId: String
+    var toMemoryEntryId: String
+    var relation: String
+    var createdAt: Date
+
+    static let fromMemoryEntry = belongsTo(
+        MemoryEntryRecord.self,
+        using: ForeignKey(["fromMemoryEntryId"])
+    )
+    static let toMemoryEntry = belongsTo(
+        MemoryEntryRecord.self,
+        using: ForeignKey(["toMemoryEntryId"])
+    )
+
+    var relationValue: MemoryEntryLinkRelation? {
+        MemoryEntryLinkRelation(rawValue: relation)
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        fromMemoryEntryId: String,
+        toMemoryEntryId: String,
+        relation: MemoryEntryLinkRelation,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.fromMemoryEntryId = fromMemoryEntryId
+        self.toMemoryEntryId = toMemoryEntryId
+        self.relation = relation.rawValue
+        self.createdAt = createdAt
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        fromMemoryEntryId: String,
+        toMemoryEntryId: String,
+        relation: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.fromMemoryEntryId = fromMemoryEntryId
+        self.toMemoryEntryId = toMemoryEntryId
+        self.relation = relation
+        self.createdAt = createdAt
+    }
+}

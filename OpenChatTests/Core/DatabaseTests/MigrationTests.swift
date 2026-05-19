@@ -624,4 +624,88 @@ struct MigrationTests {
         }
         #expect(count == 0)
     }
+
+    // MARK: - v17 memory_entry_link
+
+    @Test func test_v17_creates_memory_entry_link_table_columns_and_indexes() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+        let columns = try await manager.read { db in
+            try db.columns(in: "memory_entry_link").map(\.name)
+        }
+        let indexNames = try await manager.read { db in
+            try Row.fetchAll(
+                db,
+                sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+                arguments: ["memory_entry_link"]
+            ).compactMap { $0["name"] as String? }
+        }
+
+        #expect(tableNames.contains("memory_entry_link"))
+        #expect(columns.contains("id"))
+        #expect(columns.contains("fromMemoryEntryId"))
+        #expect(columns.contains("toMemoryEntryId"))
+        #expect(columns.contains("relation"))
+        #expect(columns.contains("createdAt"))
+        #expect(indexNames.contains("idx_memory_entry_link_fromMemoryEntryId"))
+        #expect(indexNames.contains("idx_memory_entry_link_toMemoryEntryId"))
+        #expect(indexNames.contains("idx_memory_entry_link_relation"))
+    }
+
+    @Test func test_v17_memory_entry_link_cascades_when_from_memory_deleted() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation", characterCardId: card.id)
+        let link = MemoryEntryLinkRecord(
+            id: "link-from-cascade",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .summarizes,
+            createdAt: Date()
+        )
+
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try observation.insert(db)
+            try link.insert(db)
+            try db.execute(sql: "DELETE FROM memory_entry WHERE id = ?", arguments: [observation.id])
+        }
+
+        let count = try await manager.read { db in
+            try MemoryEntryLinkRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
+
+    @Test func test_v17_memory_entry_link_cascades_when_to_memory_deleted() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source-target-cascade", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation-target-cascade", characterCardId: card.id)
+        let link = MemoryEntryLinkRecord(
+            id: "link-to-cascade",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .summarizes,
+            createdAt: Date()
+        )
+
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try observation.insert(db)
+            try link.insert(db)
+            try db.execute(sql: "DELETE FROM memory_entry WHERE id = ?", arguments: [source.id])
+        }
+
+        let count = try await manager.read { db in
+            try MemoryEntryLinkRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
 }

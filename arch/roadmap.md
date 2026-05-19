@@ -4,7 +4,7 @@
 
 项目分 6 个阶段推进，每个阶段产出可独立验证的成果。后一阶段依赖前一阶段的产物。
 
-## 当前落地状态（2026-05-17）
+## 当前落地状态（2026-05-18）
 
 - 工程基线已落地：`OpenChat.xcodeproj`、`OpenChat` app target、`OpenChatTests` test target、GRDB Swift Package、四层源码目录
 - 自动化验证已通过：
@@ -57,6 +57,7 @@
   - `MemoryRecallToolTests`
   - `WorldBookRecallToolTests`
   - `BackgroundSourceTests`
+- 2026-05-18 Phase 5 Memory reflect focused closeout 通过 84 tests / 5 suites，覆盖 `MemoryReflectModelsTests`、`VectorStoreTests`、`DatabaseManagerMemoryTests`、`MigrationTests`、`AgentPolicyTests`；alternate simulator full suite 通过 360 tests / 66 suites。
 - 已补齐的工程实现证据：
   - 工程生成与 target 依赖：`scripts/generate_xcodeproj.rb`
   - App 装配：`OpenChat/OpenChatApp.swift`、`OpenChat/App/DependencyContainer.swift`

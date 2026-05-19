@@ -1,0 +1,200 @@
+2026-05-18 00:27:09 CST
+
+Task: Phase 5 Memory Reflect / Observation Synthesis implementation.
+Plan: docs/superpowers/plans/2026-05-17-memory-reflect-observation-synthesis/README.md
+
+Pre-edit propagation audit:
+- Lane A DB/VectorStore audit completed. memory_entry_link does not exist; latest migration is v16_create_world_book_entry_embedding_meta; v17 must be append-only.
+- Lane B executor/API audit completed. APIClient.sendMessage can be reused; do not change ResponsesAPIRequest or provider request shape.
+- Lane C UI/docs audit completed. MemoryListViewModel currently has load/delete/deleteAll only; manual reflect UI requires new state, selection, visible draft/apply/error, localization, and tests if implemented.
+
+Pre-existing dirty worktree:
+ M OpenChat.xcodeproj/project.pbxproj
+ M OpenChat.xcodeproj/xcshareddata/xcschemes/OpenChat.xcscheme
+ M OpenChat/Features/Chat/Models/MessageDisplayItem.swift
+ M OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift
+ M OpenChat/Features/Chat/Views/ChatView.swift
+ M OpenChat/Features/Chat/Views/MessageBubbleView.swift
+ M OpenChat/Shared/Components/MarkdownTextView.swift
+ M PLANING.md
+ M arch/modules/chat.md
+?? OpenChatTests/Features/ChatTests/StreamingRenderSegmentationTests.swift
+?? comp_swap/
+?? docs/superpowers/plans/2026-05-17-memory-reflect-observation-synthesis/
+
+Tests:
+- NOT RUN yet. Implementation not started at this evidence checkpoint.
+
+2026-05-18 00:42 CST
+
+5A DB/link persistence worker:
+- Appended v17_create_memory_entry_link only; v1-v16 untouched.
+- Added MemoryEntryLinkRecord in existing target-backed MemoryEntryProvenanceRecord.swift.
+- Added DatabaseManager save/fetch APIs with empty-id, self-link, relation validation, and from/to/relation input dedupe.
+- Added migration and DB manager tests for table/index presence, FK cascade on both link endpoints, fetch by from, fetch by to, batch fetch, dedupe, and invalid relation not written.
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+
+Result:
+- PASS.
+- Swift Testing reported 55 tests in 3 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_00-42-25-+0800.xcresult
+- Build warning observed: existing MigrationTests.swift:308 `var migrator` never mutated. Not introduced by 5A.
+
+2026-05-18 00:45 CST
+
+5A rerun after persisted from/to/relation dedupe tightening:
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MemoryReflectModelsTests'
+
+Result:
+- PASS.
+- Swift Testing reported 64 tests in 3 suites passed. The selected MemoryReflectModelsTests suite included concurrent 5B parser/executor additions present in the worktree.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_00-44-43-+0800.xcresult
+
+Command:
+git diff --check
+
+Result:
+- PASS.
+
+2026-05-18 00:49 CST
+
+5B Reflect parser/executor worker:
+- Added typed MemoryReflectError cases for parser/executor failures.
+- Added MemoryReflectParser in existing target-backed MemoryReflectModels.swift.
+  - Strips ```json fences.
+  - Requires a single JSON object.
+  - Parses content/type/basedOn/confidence/suggestedAction.
+  - Rejects empty content/basedOn, unknown basedOn ids, invalid MemoryType/action, invalid confidence, and array/multiple observation output.
+- Added MemoryReflectPromptBuilder in MemoryReflectModels.swift.
+  - Emits stable system/user pair.
+  - User payload includes characterCardId, task raw value, and source memories with id/type/content only.
+  - System instruction requires ONLY one JSON object.
+- Added MemoryReflectExecutor in MemoryReflectModels.swift.
+  - Injects DatabaseManager + APIClient.
+  - Fetches sources via fetchMemories(ids:), restores request source order, rejects missing ids and cross-character memories.
+  - Calls APIClient.sendMessage with conservative ModelParameters.
+  - Returns MemoryReflectResult with observation + diagnostics.
+  - Does not write DB.
+- Added AgentPolicy.reflectDefault() with llm + databaseRead + internalDiagnostics, no web, no DB write, persistent-write confirmation required.
+- Appended parser/executor/policy tests to existing target-backed test files. No new Swift files were added, so no Xcode project membership change was required.
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+
+Result:
+- Initial sandboxed run built but failed to launch the simulator test runner:
+  - NSMachErrorDomain Code=-308 "(ipc/mig) server died"
+  - xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_00-44-59-+0800.xcresult
+- `xcrun simctl list devices available | rg 'iPhone'` also failed inside sandbox with CoreSimulatorService connection invalid.
+- Reran simulator listing outside sandbox and confirmed iPhone 17 Pro destinations exist.
+- Reran focused tests outside sandbox.
+- PASS.
+- Swift Testing reported 19 tests in 2 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_00-48-11-+0800.xcresult
+
+2026-05-18 01:15 CST
+
+5C apply/manual review worker:
+- Added VectorStore.insert(entry:embedding:links:) so memory_entry, memory_embedding, and memory_entry_link write in one transaction. Link validation rejects empty ids, self links, invalid relations, duplicate links, and links whose from id does not match the inserted entry. Link/FK failures roll back entry + embedding.
+- Added MemoryManager.applyReflectObservation(...). It only applies insert_observation, creates a new memory_entry with sourceConversationId nil, observation memory type/content, conservative importance 60, and one summarizes link per basedOn id. Original source memories are retained.
+- Apply validates all basedOn ids exist and belong to the target character before embedding/DB write. mark_duplicate and needs_user_review are rejected with typed MemoryReflectApplyError.
+- Added MemoryListViewModel manual review state: selected ids, running/draft/applying/error, runReflect(task:), applyReflectObservation(), default endpoint/model/API key resolution, and visible typed errors.
+- Wired DependencyContainer + CharacterCardDetailView to inject MemoryReflectExecutor and APIKeyStore into MemoryListViewModel.
+- Updated MemoryListView with Organize Memories, 2-5 source selection, draft preview, Apply/Cancel, and visible failure. No chat/background automatic LLM trigger added.
+- Added Localizable.xcstrings entries for new user-visible strings.
+- Appended target-backed tests to existing MemoryReflectModelsTests and VectorStoreTests; no new Swift test file/project membership changes.
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests'
+
+Result:
+- PASS.
+- Swift Testing reported 43 tests in 3 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-14-22-+0800.xcresult
+- xcstringstool compile succeeded for Localizable.xcstrings during build. Ruby JSON parse check also passed.
+
+2026-05-18 01:19 CST
+
+5C post-cleanup rerun after moving duplicate-link validation back into VectorStore private scope:
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests'
+
+Result:
+- BUILD completed, but simulator launch failed twice on iOS 26.5 iPhone 17 Pro with FBSOpenApplicationServiceErrorDomain Code=1 / FBSOpenApplicationErrorDomain Code=6 Busy: Application failed preflight checks.
+- xcresults:
+  - /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-16-49-+0800.xcresult
+  - /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-17-50-+0800.xcresult
+
+Command:
+xcrun simctl list devices available
+
+Result:
+- Needed outside-sandbox CoreSimulator access; sandboxed simctl failed with CoreSimulatorService connection invalid. Outside sandbox listed iOS 26.4 and iOS 26.5 iPhone destinations.
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests'
+
+Result:
+- PASS on alternate iOS 26.4 iPhone 17 Pro.
+- Swift Testing reported 43 tests in 3 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-19-13-+0800.xcresult
+
+2026-05-18 Lead closeout verification
+
+Command:
+git diff --check
+
+Result:
+- PASS. No whitespace errors reported.
+
+Command:
+python3 -m json.tool OpenChat/Resources/Localizable.xcstrings >/dev/null
+
+Result:
+- PASS. Localizable.xcstrings is valid JSON.
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryReflectModelsTests' '-only-testing:OpenChatTests/VectorStoreTests' '-only-testing:OpenChatTests/DatabaseManagerMemoryTests' '-only-testing:OpenChatTests/MigrationTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+
+Result:
+- PASS.
+- Swift Testing reported 84 tests in 5 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-21-54-+0800.xcresult
+
+Full suite:
+- NOT RUN in this Phase 5 closeout. Focused Memory / DB / AgentPolicy suite covers the new behavior surface. Earlier simulator Busy/preflight failures were environment runner failures; focused reruns passed on available destinations.
+
+Docs / propagation-audit writeback:
+- Updated arch/modules/memory/index.md, data-model.md, hindsight-lite.md, testing.md, ui-management.md, embedding-vector-store.md.
+- Updated arch/data-model.md and PLANING.md.
+- Appended 2026-05-18 Memory Reflect Observation Synthesis Phase 5 incremental audit to arch/AntiEntropy/propagation-audit.md.
+- Updated harness/2026.05.18/memory-reflect-observation-synthesis/index.md.
+
+Closeout boundaries:
+- Manual reflect review/apply is implemented.
+- idle/background automatic reflect is not implemented.
+- mark_duplicate / needs_user_review are not auto-applied and do not delete or overwrite source memories.
+- Unified [Background] block and Background request-shape audit remain future work.
+
+2026-05-18 Full-suite retry
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+
+Result:
+- FAILED before test assertions at simulator launch.
+- Error: FBSOpenApplicationServiceErrorDomain Code=1 / FBSOpenApplicationErrorDomain Code=6 Busy, "Application failed preflight checks".
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-39-44-+0800.xcresult
+
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'id=F8D0D88B-71FD-471F-855A-B2B5D8267117'
+
+Result:
+- PASS on alternate simulator.
+- Swift Testing reported 360 tests in 66 suites passed.
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.18_01-42-36-+0800.xcresult

@@ -1,11 +1,11 @@
 # Hindsight-lite 完善设计
 
-> 状态：Phase A recall ordering、Phase B recall trace / fallback tiers、Phase C retain provenance / dedupe、Phase D reflect contract / Responses request-shape 已实现；2026-05-17 Phase 4-6 已完成 `MemoryRecallTool`、`MemoryBackgroundSource`、`BackgroundWorker` / `BackgroundPacket` 和 Chat-Prompt compatible switch。reflect executor、`memory_entry_link` migration、统一 `[Background]` block 和 Background request-shape audit 仍为后续规划。
+> 状态：Phase A recall ordering、Phase B recall trace / fallback tiers、Phase C retain provenance / dedupe、Phase D reflect contract / Responses request-shape 已实现；2026-05-17 Phase 4-6 已完成 `MemoryRecallTool`、`MemoryBackgroundSource`、`BackgroundWorker` / `BackgroundPacket` 和 Chat-Prompt compatible switch；2026-05-18 Phase 5 已完成手动 reflect executor、review/apply 和 `v17_create_memory_entry_link`。统一 `[Background]` block、Background request-shape audit、idle/background 自动整理、duplicate 自动删除和冲突自动解决仍为后续规划。
 > 目标：用轻量 retain / recall / reflect 设计关闭 `arch/AntiEntropy/problem.md` 中剩余的记忆系统问题。
 
 本页参考 Hindsight 论文的三段式操作：retain、recall、reflect。论文把 agent memory 视为可推理的结构化底座，并强调证据、推断和可追踪更新的区别。OpenChat 不需要完整复刻论文中的多网络记忆系统，当前目标是把已有 `memory_entry` / `memory_embedding` 演进成低延迟、可解释、可测试的本地轻量版本。
 
-边界说明：本页只定义 Memory 层完善。世界书向量化与 Background runtime 是独立计划；当前 Memory 输出已可被 `MemoryRecallTool` / `MemoryBackgroundSource` 包装并进入 `BackgroundPacket` 兼容链路，但 reflect executor、`memory_entry_link` 和统一 `[Background]` block 不属于本页已实现范围。
+边界说明：本页只定义 Memory 层完善。世界书向量化与 Background runtime 是独立计划；当前 Memory 输出已可被 `MemoryRecallTool` / `MemoryBackgroundSource` 包装并进入 `BackgroundPacket` 兼容链路；当前 reflect 只通过 Memory 管理页手动整理和确认 apply，不进入每轮 Chat send，也不启用 idle/background 自动触发。
 
 参考：<https://arxiv.org/abs/2512.12818>
 
@@ -155,14 +155,14 @@ memory_entry_provenance
   updatedAt DATETIME
 ```
 
-可选后续表：
+Phase 5 已追加 link companion table：
 
 ```text
 memory_entry_link
   id TEXT PRIMARY KEY
   fromMemoryEntryId TEXT
   toMemoryEntryId TEXT
-  relation TEXT              // reinforces | contradicts | supersedes | summarizes
+  relation TEXT              // summarizes | duplicates | reinforces
   createdAt DATETIME
 ```
 
@@ -178,6 +178,8 @@ memory_entry_link
 - `OpenChat/Core/Database/Migrations.swift`：`v14_create_memory_entry_provenance`
 - `OpenChat/Core/Database/DatabaseManager+Memory.swift`：provenance CRUD
 - `OpenChat/Core/Memory/VectorStore.swift`：`insert(entries:provenances:)` 原子写入
+- `OpenChat/Core/Database/Migrations.swift`：`v17_create_memory_entry_link`
+- `OpenChat/Core/Database/DatabaseManager+Memory.swift`：link save/fetch/validation
 
 ### 6.2 Extraction prompt v2
 
@@ -232,7 +234,7 @@ LLM 输出建议：
 - `sourceMessageIds` 必须是本批 ids 子集；无效 id 会从 provenance 中过滤。
 - `confidence` 只表示抽取器自报置信，不参与最终 truth 判定；在 provenance 中 clamp 到 0...1。
 - `action == skip` 不写入 DB，只计入 diagnostics。
-- `action == reinforce` 第一版不覆盖旧 memory，也不新增重复记忆，直接跳过插入；后续 reflect 计划可扩展 `memory_entry_link`。
+- `action == reinforce` 第一版不覆盖旧 memory，也不新增重复记忆，直接跳过插入；后续若需要把 reinforce 变成持久关系，应通过 `memory_entry_link(relation = reinforces)` 和 review flow 扩展。
 
 ### 6.3 去重策略
 
@@ -241,7 +243,7 @@ LLM 输出建议：
 1. **同批去重**：同一 extraction response 内 `dedupeKey` 相同只保留 importance 更高或更短的一条；没有 `dedupeKey` 时用 normalized content 作为临时 key。
 2. **近邻去重**：抽取前给 LLM 最近/最相关的 existing memory hints（relationship / summary / high importance，最多 5 条），让它返回 `reinforce` 或 `skip`。
 
-向量近似去重留给后续 reflect 计划。
+向量近似去重、跨批 duplicate 自动处理和旧记忆自动删除仍留给后续计划。
 
 写入原则：
 
@@ -330,9 +332,9 @@ Phase B 已把旧“语义失败或低相关时取最近 N 条”改成分层：
 - UI 不显示原始 distance 给普通用户，只显示“相关 / 近期补充 / fallback”这类解释。
 - 后续可按 embedding 模型版本保存 threshold，避免换模型后沿用旧尺度。
 
-## 8. Phase D：Reflect / observation synthesis
+## 8. Phase D / Phase 5：Reflect / observation synthesis
 
-Phase D 当前只落地 Memory 层最小 contract，不实现 reflect LLM executor 或 UI 入口。
+Phase D 先落地 Memory 层最小 contract。2026-05-18 Phase 5 已在该 contract 上追加手动入口、LLM executor、structured parser、review/apply 和 `memory_entry_link` based-on 持久化。
 
 Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain 已经使用 LLM 抽取，但它只是结构化保存；recall 默认应是本地检索和排序。
 
@@ -340,8 +342,8 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 
 允许：
 
-- 用户在记忆管理页点击“整理记忆”。
-- App 空闲或后台低频触发。
+- 用户在记忆管理页选择 2-5 条记忆后点击“整理记忆”（已实现）。
+- App 空闲或后台低频触发（未实现）。
 - 后续 BackgroundWorker 若发现重复/冲突 cluster，可生成整理任务。
 
 禁止：
@@ -362,7 +364,7 @@ struct MemoryReflectRequest: Sendable {
 }
 ```
 
-规划中的 LLM 输入：
+当前 executor 的 LLM 输入 payload：
 
 ```json
 {
@@ -396,7 +398,7 @@ struct MemoryReflectObservation: Sendable {
 - suggested action contract 为 `insert_observation`、`mark_duplicate`、`needs_user_review`。
 - 第一版 relation contract 为 `summarizes`、`duplicates`、`reinforces`。
 
-规划中的 LLM 输出：
+当前 parser 接受的 LLM 输出：
 
 ```json
 {
@@ -414,11 +416,22 @@ struct MemoryReflectObservation: Sendable {
 - 原始记忆默认保留。
 - 冲突解决或删除建议进入 review，不自动破坏历史证据。
 - 自动注入 prompt 时，observation 可以比原始 cluster 有更高优先级，但仍受 recall relevance 控制。
+- 当前 only `.insertObservation` 可自动 apply；`.markDuplicate` / `.needsUserReview` 会被拒绝，不能自动删除、覆盖或替代来源记忆。
+- confirmed apply 会创建新的 `memory_entry`，生成 embedding，并以 `memory_entry_link(relation = summarizes)` 指向所有 `basedOn` source memories。
 
 实现证据：
 
 - `OpenChat/Core/Memory/MemoryReflectModels.swift`
+- `OpenChat/Core/Memory/MemoryManager.swift`
+- `OpenChat/Core/Memory/VectorStore.swift`
+- `OpenChat/Core/Database/Migrations.swift`
+- `OpenChat/Core/Database/DatabaseManager+Memory.swift`
+- `OpenChat/Features/CharacterCard/ViewModels/MemoryListViewModel.swift`
+- `OpenChat/Features/CharacterCard/Views/MemoryListView.swift`
 - `OpenChatTests/Core/MemoryTests/MemoryReflectModelsTests.swift`
+- `OpenChatTests/Core/MemoryTests/VectorStoreTests.swift`
+- `OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift`
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
 
 ## 9. Phase D：Background 适配边界与 Responses API
 
@@ -442,7 +455,7 @@ MemoryRecallResult
 3. `MemoryRecallTool` / `MemoryBackgroundSource` 把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
 4. `BackgroundWorker` / `BackgroundPacket` / packet-aware `PromptAssembler` 接入 Chat 主链路，保持 `[Memories]` 兼容 block。
 
-后续迁移只剩统一 `[Background]` block、Character / ConversationState sources、diagnostics UI 和 synthesis/reflect 相关工作。
+后续迁移只剩统一 `[Background]` block、Character / ConversationState sources、diagnostics UI、idle/background reflect 自动触发和 duplicate/conflict review policy。
 
 ### 9.2 Responses API system folding
 
@@ -491,7 +504,8 @@ MemoryRecallResult
 | extraction prompt v2 parsing | source range、confidence、tags、action 兼容 |
 | provenance migration | companion table 追加，不破坏旧数据 |
 | dedupe behavior | 同批重复不重复写入 |
-| reflect output validation | 已覆盖：observation 必须有 `basedOn`，request 必须有 source ids，relation 集合最小化 |
+| reflect output validation | 已覆盖：observation 必须有 `basedOn`，request 必须有 source ids，relation 集合最小化，parser 拒绝数组/多 observation/未知 basedOn/type/action/confidence |
+| reflect executor/apply | 已覆盖：executor 保持 source order、不写 DB、拒绝 missing/cross-character source；confirmed apply 原子写 entry + embedding + links，embedding/link 失败回滚 |
 | Responses API request shape | 已覆盖：当前 `[Memories]` block 不丢失；统一 `[Background]` block 留给后续独立计划 |
 
 建议 focused verification：
@@ -509,7 +523,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | B2 | fallback tiers + keyword/recent high-value candidate | 否，可先用现有表 |
 | C | provenance companion table + extraction prompt v2 | 是（v14） |
 | D | reflect contract + Responses request-shape | 否 |
-| E | reflect executor / `memory_entry_link` / basedOn 表 | 是 |
+| E | reflect executor / `memory_entry_link` / basedOn 表 | 是（v17，手动入口已实现） |
 | F | MemoryBackgroundSource 接入 Background | 已完成 Phase 4-6 compatible switch；统一 `[Background]` block 未启用 |
 
-Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。2026-05-17 后续 Phase 4-6 已完成 Memory source tool / adapter、BackgroundWorker / packet 和 Chat-Prompt compatible switch。剩余工作是 reflect executor、`memory_entry_link` 持久化、统一 `[Background]` block、Character / ConversationState sources 和 packet diagnostics UI。
+Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。2026-05-17 后续 Phase 4-6 已完成 Memory source tool / adapter、BackgroundWorker / packet 和 Chat-Prompt compatible switch。2026-05-18 Phase 5 focused closeout 已通过 84 tests / 5 suites。剩余工作是统一 `[Background]` block、Character / ConversationState sources、packet diagnostics UI、idle/background reflect 自动触发、duplicate/conflict review policy 和 UI 自动化。

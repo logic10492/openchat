@@ -195,4 +195,129 @@ struct DatabaseManagerMemoryTests {
         #expect(fetched.contains(where: { $0.content == "First" }))
         #expect(fetched.contains(where: { $0.content == "Third" }))
     }
+
+    @Test func test_save_memory_entry_links_dedupes_and_fetches_by_from() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source-a", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation-a", characterCardId: card.id)
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try observation.insert(db)
+        }
+
+        let firstLink = MemoryEntryLinkRecord(
+            id: "link-a",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .summarizes,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let duplicateLink = MemoryEntryLinkRecord(
+            id: "link-a-duplicate",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .summarizes,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+
+        try await manager.saveMemoryEntryLinks([firstLink, duplicateLink])
+        try await manager.saveMemoryEntryLinks([
+            MemoryEntryLinkRecord(
+                id: "link-a-second-save-duplicate",
+                fromMemoryEntryId: observation.id,
+                toMemoryEntryId: source.id,
+                relation: .summarizes,
+                createdAt: Date(timeIntervalSince1970: 3)
+            )
+        ])
+
+        let fetched = try await manager.fetchMemoryEntryLinks(fromMemoryEntryId: observation.id)
+        #expect(fetched == [firstLink])
+        #expect(fetched.first?.relationValue == .summarizes)
+    }
+
+    @Test func test_fetch_memory_entry_links_by_to() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source-b", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation-b", characterCardId: card.id)
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try observation.insert(db)
+        }
+        let link = MemoryEntryLinkRecord(
+            id: "link-b",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .reinforces,
+            createdAt: Date(timeIntervalSince1970: 3)
+        )
+
+        try await manager.saveMemoryEntryLinks([link])
+
+        let fetched = try await manager.fetchMemoryEntryLinks(toMemoryEntryId: source.id)
+        #expect(fetched == [link])
+    }
+
+    @Test func test_fetch_memory_entry_links_by_memory_entry_ids_returns_from_and_to_matches() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source-c", characterCardId: card.id)
+        let duplicateSource = TestHelpers.makeMemoryEntry(id: "memory-link-source-d", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation-c", characterCardId: card.id)
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try duplicateSource.insert(db)
+            try observation.insert(db)
+        }
+        let summarizes = MemoryEntryLinkRecord(
+            id: "link-c",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: .summarizes,
+            createdAt: Date(timeIntervalSince1970: 4)
+        )
+        let duplicates = MemoryEntryLinkRecord(
+            id: "link-d",
+            fromMemoryEntryId: duplicateSource.id,
+            toMemoryEntryId: observation.id,
+            relation: .duplicates,
+            createdAt: Date(timeIntervalSince1970: 5)
+        )
+
+        try await manager.saveMemoryEntryLinks([summarizes, duplicates])
+
+        let fetched = try await manager.fetchMemoryEntryLinks(memoryEntryIds: [source.id, observation.id])
+        #expect(fetched == [summarizes, duplicates])
+    }
+
+    @Test func test_invalid_memory_entry_link_relation_is_not_written() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard()
+        let source = TestHelpers.makeMemoryEntry(id: "memory-link-source-invalid", characterCardId: card.id)
+        let observation = TestHelpers.makeMemoryEntry(id: "memory-link-observation-invalid", characterCardId: card.id)
+        try await manager.write { db in
+            try card.insert(db)
+            try source.insert(db)
+            try observation.insert(db)
+        }
+        let invalidLink = MemoryEntryLinkRecord(
+            id: "link-invalid",
+            fromMemoryEntryId: observation.id,
+            toMemoryEntryId: source.id,
+            relation: "conflicts",
+            createdAt: Date(timeIntervalSince1970: 6)
+        )
+
+        await #expect(throws: MemoryEntryLinkValidationError.invalidRelation("conflicts")) {
+            try await manager.saveMemoryEntryLinks([invalidLink])
+        }
+
+        let fetched = try await manager.fetchMemoryEntryLinks(memoryEntryIds: [source.id, observation.id])
+        #expect(fetched.isEmpty)
+    }
 }
