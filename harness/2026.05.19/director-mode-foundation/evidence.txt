@@ -1,0 +1,96 @@
+Director Mode Foundation Evidence
+Date: 2026-05-19
+Scope: docs/superpowers/plans/2026-05-19-director-mode-foundation
+
+Pre-implementation cleanup:
+- Existing docs/plan workspace was committed first:
+  9adad8e docs: add director mode foundation plan
+
+New runtime files:
+- OpenChat/Core/Stage/DirectorMode.swift
+- OpenChat/Core/Stage/StageInstruction.swift
+- OpenChat/Core/Stage/DirectorPlan.swift
+- OpenChat/Core/Stage/DirectorDiagnostics.swift
+
+New / modified tests:
+- OpenChatTests/Core/StageTests/DirectorContractTests.swift
+- OpenChatTests/Core/AgentCoreTests/AgentPolicyTests.swift
+
+Xcode project:
+- ruby scripts/generate_xcodeproj.rb was run to add new Swift files to the target.
+- scripts/generate_xcodeproj.rb was not modified.
+- Signing values remain script-owned:
+  - PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com
+  - DEVELOPMENT_TEAM = GZAC7644XS
+  - CODE_SIGN_STYLE = Automatic
+  - test PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.tests
+
+Simulator discovery:
+Command:
+xcrun simctl list devices available | rg 'iPhone'
+
+Result:
+- Sandboxed attempt failed because CoreSimulatorService/log access was unavailable.
+- Escalated retry succeeded and showed available iPhone 17 Pro / iPhone 17 simulator devices.
+
+Focused Director / AgentPolicy verification:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/DirectorContractTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+
+Result:
+- 16 tests / 2 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-16-00-+0800.xcresult
+
+Prompt / Chat / Background regression first attempt:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+
+Result:
+- Failed before Swift Testing assertions.
+- xcodebuild exit code 65.
+- Reason: Simulator device failed to launch fukujusou.openchat.com; request denied as Busy ("Application failed preflight checks").
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-16-39-+0800.xcresult
+
+Prompt / Chat / Background regression retry:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+
+Result:
+- 40 tests / 4 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-17-33-+0800.xcresult
+
+Full suite:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=F8D0D88B-71FD-471F-855A-B2B5D8267117'
+
+Result:
+- 372 tests / 67 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-23-28-+0800.xcresult
+
+Whitespace:
+Command:
+git diff --check
+
+Result:
+- Passed; no whitespace errors.
+
+Contract summary:
+- DirectorMode stable raw values: silent, agent, userControlled.
+- StageInputRole.director is input semantics, not MessageRecord.role == user.
+- StageInstruction defaults to hiddenFromCharacters and rejects empty content.
+- DirectorPlan is stage control only; no assistant text / API messages / DB write operation.
+- StagePromptLayerPlan is a pure future prompt order helper, not production PromptAssembler integration.
+- AgentPolicy.directorDefault allows optional LLM but denies web search, network tools, DB write, and user-visible draft.
+
+Remaining boundaries:
+- No DB migration.
+- No Chat UI / InputBar change.
+- No ChatViewModel.generateResponse director branch.
+- No production PromptAssembler request-shape change.
+- No Stage DB/UI.
+- No Director executor/controller/runtime.
+- No multi-character participant binding or multi-speaker parser.
+- No Exa / LibMan / web search.

@@ -1,6 +1,6 @@
 # Stage 迁移计划
 
-> 状态：目标架构规划，尚未实现。
+> 状态：Director contract foundation 已落地；Stage runtime、Stage DB/UI、用户导演输入 UI、多角色输出仍未实现。
 
 ## Phase 0：文档和边界
 
@@ -15,16 +15,21 @@
 
 新增基础类型：
 
-- `StageRecord` 或 conversation 扩展字段。
-- `StageParticipant`
-- `DirectorMode`
-- `StageInputRole`
-- `SpeakerTurn`
-- `DirectorPlan`
+- 已落地：`DirectorMode`
+- 已落地：`StageInputRole`
+- 已落地：`StageInstruction`
+- 已落地：`DirectorInput`
+- 已落地：`SpeakerTurn`
+- 已落地：`DirectorPlan`
+- 已落地：`DirectorDiagnostics`
+- 未落地：`StageRecord` 或 conversation 扩展字段。
+- 未落地：`StageParticipant`
 
 第一阶段不改变现有 Chat UI，只在架构层准备 DTO 和测试。
 
 2026-05-19 计划包入口：顶层路线 Phase 6 先拆出 Director / 导演模式 foundation，见 `docs/superpowers/plans/2026-05-19-director-mode-foundation/README.md`。该计划包只整理 `DirectorPlan`、`DirectorMode`、`StageInstruction`、mode policy 和 prompt boundary contract；不提前实现 Stage DB/UI 或多角色输出。
+
+2026-05-19 closeout：上述 Director contract subset 已进入 `OpenChat/Core/Stage/*` 并由 `DirectorContractTests` / `AgentPolicyTests` 覆盖。该 closeout 不新增 DB migration，不修改 `ConversationRecord` / `MessageRecord`，不修改 Chat UI / InputBar，也不把 Director Instructions 注入 production prompt。
 
 ## Phase 2：用户导演输入
 
@@ -56,6 +61,8 @@
 - Director agent 生成结构化 `DirectorPlan`。
 - DirectorPlan 只用于 stage control，不直接显示为 assistant 回复。
 - silent mode 下完全跳过 Director agent。
+
+当前状态：policy 与 DTO contract 已落地；executor/controller、schema repair、timeout behavior 和 Chat/Stage 调度接入仍未实现。
 
 ## Phase 5：Background 接入 Stage
 

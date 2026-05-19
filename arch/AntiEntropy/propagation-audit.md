@@ -1248,3 +1248,102 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - duplicate/conflict 用户审阅专页和自动合并策略未实现。
 - 统一 `[Background]` block 与 Background request-shape audit 未实现。
 - Memory reflect UI 尚无 XCUITest 端到端点击覆盖。
+
+## Director Mode Foundation Phase 6 增量传播审计（2026-05-19）
+
+范围：`OpenChat/Core/Stage/*`、`OpenChatTests/Core/StageTests/DirectorContractTests.swift`、`OpenChatTests/Core/AgentCoreTests/AgentPolicyTests.swift`、Xcode project target membership、Stage / Director arch 文档、PLANING、harness closeout。
+
+审计模式：窄范围增量审计。该轮只落 Director / 导演模式 contract foundation，不接入 Chat 主链路，不新增 DB migration，不修改 UI / InputBar / production `PromptAssembler` / Background runtime。
+
+### 静态传播面
+
+新增 production surface：
+
+- `OpenChat/Core/Stage/DirectorMode.swift`
+- `OpenChat/Core/Stage/StageInstruction.swift`
+- `OpenChat/Core/Stage/DirectorPlan.swift`
+- `OpenChat/Core/Stage/DirectorDiagnostics.swift`
+
+新增 / 修改 test surface：
+
+- `OpenChatTests/Core/StageTests/DirectorContractTests.swift`
+- `OpenChatTests/Core/AgentCoreTests/AgentPolicyTests.swift`
+
+Xcode project：
+
+- 已运行 `ruby scripts/generate_xcodeproj.rb`，新增 Stage source/test 进入 target。
+- `scripts/generate_xcodeproj.rb` 未修改。
+- `PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com`、`DEVELOPMENT_TEAM = GZAC7644XS`、`CODE_SIGN_STYLE = Automatic` 保持脚本既有值；test bundle id 仍为 `com.openchat.app.tests`。
+
+未修改面：
+
+- 未修改 `OpenChat/Core/Database/Migrations.swift`、`ConversationRecord.swift`、`MessageRecord.swift`。
+- 未修改 `OpenChat/Features/Chat/Views/InputBarView.swift` 或 Chat UI。
+- 未修改 `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`。
+- 未修改 `OpenChat/Core/PromptEngine/PromptAssembler.swift` 生产链路。
+- 未修改 `OpenChat/Core/Background/*` 生产行为。
+- 未修改 `OpenChat/Resources/Localizable.xcstrings`。
+
+### 行为传播结论
+
+新增 contract data flow：
+
+```text
+future chat/stage snapshot
+  -> DirectorInput
+  -> DirectorPlan
+       -> stageInstructions
+       -> speakerPlan hints
+       -> diagnostics
+  -> future Stage prompt/runtime
+```
+
+结论：
+
+- `DirectorMode` 固化 `silent` / `agent` / `userControlled` raw value、Codable、CaseIterable contract。
+- `StageInputRole.director` 是 input semantics，不是 `MessageRecord.role == "user"` 的普通角色台词映射。
+- `StageInstruction` 默认 `hiddenFromCharacters`，空白 content 会抛出 typed `StageInstructionError.emptyContent`。
+- `SpeakerTurn` 只是 Phase 6 hint，允许 participant / character id 为空，不表示 multi-character output 已实现。
+- `DirectorPlan` 只包含 mode、stageInstructions、speakerPlan、diagnostics，不包含 assistant text、API messages 或 persistence operation。
+- `StagePromptLayerPlan` 只表达 future prompt order，测试锁定 `directorInstructions` 位于 `currentBackground` 之后、`currentTurn` 之前；未接入 production request shape。
+- `AgentPolicy.directorDefault(allowsLLM:)` 仍允许可选 `.llm`，但不开放 web search、network tools、database write 或 user-visible draft。
+
+### 验证
+
+Focused Director / AgentPolicy command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/DirectorContractTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：16 tests / 2 suites passed，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-16-00-+0800.xcresult`。
+
+Prompt / Chat / Background regression command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=F8D0D88B-71FD-471F-855A-B2B5D8267117' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：40 tests / 4 suites passed，`** TEST SUCCEEDED **`。默认 name-based `iPhone 17 Pro` regression attempt 先遇到 simulator Busy / preflight launch failure，未进入测试体；换用明确 UDID 后通过。
+
+Full suite command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=F8D0D88B-71FD-471F-855A-B2B5D8267117'
+```
+
+结果：372 tests / 67 suites passed，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_09-23-28-+0800.xcresult`。
+
+Whitespace check：`git diff --check` 通过。
+
+### 未完成边界
+
+- Director executor/controller/runtime 未实现。
+- Stage runtime、Stage DB schema、Stage persistence、Stage UI 未实现。
+- 输入栏“作为用户 / 作为导演”切换未实现。
+- Multi-character participant binding、speaker metadata、多 speaker output parser 未实现。
+- DirectorPlan 未注入 `ChatViewModel.generateResponse(...)` 当前主链路。
+- Director Instructions 未注入 production `PromptAssembler` request body。
+- Responses API Stage request-shape guarantees 未实现。
+- Exa / LibMan / web search 未接入。
+- 普通角色仍不是 AgentCore agent，也没有 tool call 权限。

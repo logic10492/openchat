@@ -32,6 +32,36 @@ struct AgentPolicyTests {
         }
     }
 
+    @Test func test_directorDefault_deterministicHasNoLLMAndNoExternalEffects() {
+        let policy = AgentPolicy.directorDefault()
+
+        #expect(policy.allowedCapabilities.contains(.deterministic))
+        #expect(policy.allowedCapabilities.contains(.internalDiagnostics))
+        #expect(!policy.allowedCapabilities.contains(.llm))
+        #expect(!policy.allowedCapabilities.contains(.webSearch))
+        #expect(!policy.allowedCapabilities.contains(.databaseWrite))
+        #expect(!policy.allowedCapabilities.contains(.userVisibleDraft))
+        #expect(!policy.toolUsePolicy.allowNetwork)
+        #expect(policy.toolUsePolicy.allowedToolNames.isEmpty)
+        #expect(!policy.sideEffectPolicy.allowDatabaseWrite)
+        #expect(policy.confirmationPolicy.requiredForPersistentWrite)
+        #expect(!policy.visibilityPolicy.exposeDraftToUser)
+    }
+
+    @Test func test_directorDefault_llmStillDeniesNetworkToolsAndPersistentWrites() {
+        let policy = AgentPolicy.directorDefault(allowsLLM: true)
+
+        #expect(policy.allowedCapabilities.contains(.llm))
+        #expect(!policy.allowedCapabilities.contains(.webSearch))
+        #expect(!policy.allowedCapabilities.contains(.databaseWrite))
+        #expect(!policy.allowedCapabilities.contains(.userVisibleDraft))
+        #expect(!policy.toolUsePolicy.allowNetwork)
+        #expect(policy.toolUsePolicy.allowedToolNames.isEmpty)
+        #expect(!policy.sideEffectPolicy.allowDatabaseWrite)
+        #expect(policy.confirmationPolicy.requiredForPersistentWrite)
+        #expect(!policy.visibilityPolicy.exposeDraftToUser)
+    }
+
     @Test func test_librarianDraftDefault_allowsWebDraft_butRequiresPersistentWriteConfirmation() {
         let policy = AgentPolicy.librarianDraftDefault()
 

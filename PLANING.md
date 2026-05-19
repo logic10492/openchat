@@ -38,9 +38,9 @@ Memory Hindsight-lite repair
 - Phase 5 focused closeout：`MemoryReflectModelsTests`、`VectorStoreTests`、`DatabaseManagerMemoryTests`、`MigrationTests`、`AgentPolicyTests` 共 84 tests / 5 suites passed；`git diff --check` 和 `Localizable.xcstrings` JSON parse 通过。随后在 alternate simulator `id=F8D0D88B-71FD-471F-855A-B2B5D8267117` 跑 full suite，360 tests / 66 suites passed。
 - 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
 - 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
-- 当前下一步建议进入 Director / 多角色同场 / Stage；idle/background 自动 reflect 与 duplicate/conflict review policy 可作为后续 Memory 增量计划处理。
+- 当前下一步建议进入 Director runtime / 多角色同场 / Stage；idle/background 自动 reflect 与 duplicate/conflict review policy 可作为后续 Memory 增量计划处理。
 - LibMan 不属于主链路 RP 体验，优先级下调到 UI 自动化 baseline 之后。
-- Stage、Director、多角色同场、LibMan 仍是后续阶段。
+- Stage、Director runtime、多角色同场、LibMan 仍是后续阶段；Director contract foundation 已完成。
 
 ```text
 WorldBook + Memory + Character State + Conversation State
@@ -266,7 +266,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ### Phase 0：规划固化（已完成）
 
 - 保持 `arch/modules/background/*` 为目标架构文档。
-- 当时明确 Background / LibMan / Stage 内容尚未实现；当前 Background 已完成 source tools、worker、packet 和 compatible prompt switch，LibMan / Stage / Director runtime 仍未实现。
+- 当时明确 Background / LibMan / Stage 内容尚未实现；当前 Background 已完成 source tools、worker、packet 和 compatible prompt switch，Director contract foundation 已完成，LibMan / Stage / Director runtime 仍未实现。
 - 后续修改源码前先更新对应计划或 issue。
 
 ### Phase 1：Memory Hindsight-lite repair（已完成）
@@ -330,10 +330,11 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 
 ### Phase 6：Director / 导演模式
 
-- 建立 `DirectorPlan` / director policy / stage instruction 的最小 contract。
+- 已建立 `DirectorPlan` / director policy / stage instruction 的最小 contract。
 - 导演可以调度场景、节奏、发言顺序和冲突提示，但不替角色写最终台词。
-- 支持 `silent`、`agent`、`userControlled` 三种导演模式的 contract 与测试边界。
-- 用户导演输入不应被保存为角色听到的普通台词，除非用户显式要求。
+- 已支持 `silent`、`agent`、`userControlled` 三种导演模式的 raw value / Codable contract 与测试边界。
+- 用户导演输入已建模为 stage instruction contract；输入栏切换、持久化和端到端 history 隔离测试仍留到后续 Stage UI / persistence 阶段。
+- Director executor/controller、Stage DB/UI、多角色输出、DirectorPlan 注入当前 Chat 主链路均未实现。
 - 计划包：`docs/superpowers/plans/2026-05-19-director-mode-foundation/README.md`。
 
 ### Phase 7：多角色同场基础
@@ -411,7 +412,7 @@ xcodebuild test \
 - CharacterState / ConversationState source 尚未实现。
 - LibMan 尚未实现。
 - Stage 系统尚未实现。
-- Director agent / 导演模式尚未实现。
+- Director contract foundation 已实现；Director agent runtime / 导演模式 Chat 接入尚未实现。
 - 多角色同场参与尚未实现。
 - idle/background 自动 reflect、duplicate 自动删除和冲突自动解决尚未实现。
 - Background diagnostics 已有 DTO / tests，尚未进入用户可见调试界面。

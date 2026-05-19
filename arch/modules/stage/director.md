@@ -1,12 +1,14 @@
 # Director / 导演
 
-> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在；Director runtime / `DirectorPlan` executor 尚未实现。
+> 状态：Director contract foundation 已落地；Director executor / controller runtime、Stage DB/UI、多角色输出仍未实现。AgentCore foundation source 已存在，Director runtime 后续复用该 policy boundary。
 
 Director 是 Stage 的舞台调度者。它可以影响场景节奏、参与角色和发言计划，但不能替角色成为用户正在对话的 persona。
 
 Director agent 模式后续应复用 `AgentCore`，但只输出结构化 `DirectorPlan`。它不能替角色写台词，也不能把内部分析作为主聊天 assistant message。
 
 2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.directorDefault(allowsLLM:)`，默认不开放 web / database write；AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。这只是后续 Director 的 policy contract，不代表 Stage / Director runtime 已接入。
+
+2026-05-19 closeout：Director contract foundation 已新增 `OpenChat/Core/Stage/DirectorMode.swift`、`StageInstruction.swift`、`DirectorPlan.swift`、`DirectorDiagnostics.swift`，并由 `OpenChatTests/Core/StageTests/DirectorContractTests.swift` 与 `AgentPolicyTests.swift` 覆盖三种 mode、stage instruction validation、speaker plan hint、diagnostics、prompt-order contract helper 和 Director policy 红线。该 closeout 仍未实现 Director executor/controller、Chat 主链路接入、Stage DB/UI、输入栏导演切换、多角色 participant 绑定或多 speaker output parser。
 
 ## 1. 三种工作模式
 
@@ -76,6 +78,8 @@ enum StageInputRole: String, Codable, Sendable {
 }
 ```
 
+当前 source 已落地 `StageInputRole` 作为输入语义 contract；`StageInputRole.director` 不等于 `MessageRecord.role == "user"`，也不会在 Phase 6 自动产生普通 user-to-character message。输入栏切换、持久化和端到端“不进入普通 history”测试留到后续 Stage UI / persistence 阶段。
+
 当用户切换为 `director`：
 
 - 本轮输入作为 stage instruction。
@@ -100,6 +104,14 @@ enum DirectorMode: String, Codable, Sendable {
 ```
 
 `DirectorPlan` 是结构化计划，不是 chat message。
+
+当前 source contract：
+
+- `DirectorMode`: `silent`、`agent`、`userControlled`，raw value / Codable / CaseIterable 已测试。
+- `StageInstruction`: `source` 为 user / director agent / system default；默认 `visibility == hiddenFromCharacters`；空白 content 会抛出 typed `StageInstructionError.emptyContent`。
+- `SpeakerTurn`: 仅为 Phase 6 hint，允许 participant / character id 为空，不代表多角色输出已实现。
+- `DirectorDiagnostics`: 只承载 warning、omitted instruction ids、policy profile 和 metadata，不承载 assistant draft。
+- `StagePromptLayerPlan`: 纯 contract helper，锁定 future prompt order 中 `directorInstructions` 位于 `currentBackground` 之后、`currentTurn` 之前；未接入 production `PromptAssembler`。
 
 ## 4. 与 BackgroundWorker 的区别
 

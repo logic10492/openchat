@@ -1,6 +1,6 @@
 # Stage Prompt Flow
 
-> 状态：目标架构规划，尚未实现。
+> 状态：Stage prompt runtime 仍为目标架构；2026-05-19 已落地 Director Instructions 的纯 contract order helper，production `PromptAssembler` / Chat request shape 未改变。
 
 ## 1. 目标 Prompt 层次
 
@@ -14,6 +14,8 @@ Stage prompt 应在现有四层 prompt 基础上扩展，而不是完全推翻�
 4. Current Background：BackgroundPacket 输出的世界书、记忆、角色状态、场景状态。
 5. Director Instructions：用户或导演 agent 的本轮舞台指令。
 6. Current Turn：用户输入 + 时间。
+
+2026-05-19 Director foundation 只新增 `StagePromptLayerPlan.defaultLayerOrder`，用测试锁定 `Director Instructions` 位于 `Current Background` 之后、`Current Turn` 之前。该 helper 不读取 DB、不生成 `ChatMessage`、不调用 `PromptAssembler.preview(...)` / `assemble(...)`，也不改变当前生产 API request body。
 
 ## 2. Director 输入位置
 
@@ -89,3 +91,5 @@ Responses API 会把 system messages 合并到 `instructions`。Stage 的多层 
 - Stage Identity 是否在 instructions 中保序。
 - Background block 是否仍在 Current Turn 之前表达。
 - Director Instructions 是否不会被误当作普通用户台词。
+
+2026-05-19 closeout 只记录并测试了 layer-order contract；Responses API 下 Stage Identity / Director Instructions 的 request-shape snapshot 仍未实现，必须在真正接入 Stage prompt 时补充。

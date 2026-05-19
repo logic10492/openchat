@@ -2,7 +2,7 @@
 
 > 生成日期：2026-05-19
 > 范围：顶层路线 Phase 6：Director / 导演模式 contract foundation。
-> 状态：计划包整理完成，尚未实现 Director runtime、Stage runtime、Stage DB/UI 或多角色输出。
+> 状态：Director contract foundation 已完成；Director runtime、Stage runtime、Stage DB/UI 或多角色输出仍未实现。
 
 ## 目标
 
@@ -28,10 +28,14 @@ Director 是舞台调度者，不是用户正在对话的角色。它可以建�
 - `OpenChat/Core/AgentCore/AgentPolicy.swift`：`AgentPolicy.directorDefault(allowsLLM:)` 已存在，可选 LLM，但不开放 web search / network tools / database write。
 - `OpenChatTests/Core/AgentCoreTests/AgentPolicyTests.swift`：已有 director policy boundary 测试。
 - `arch/modules/stage/*`：已有 Stage / Director / prompt-flow 目标架构文档。
+- `OpenChat/Core/Stage/DirectorMode.swift`：`DirectorMode` 与 `StageInputRole` contract 已实现。
+- `OpenChat/Core/Stage/StageInstruction.swift`：stage instruction source / visibility / validation contract 已实现。
+- `OpenChat/Core/Stage/DirectorPlan.swift`：`DirectorInput`、`SpeakerTurn`、`DirectorPlan` contract 已实现。
+- `OpenChat/Core/Stage/DirectorDiagnostics.swift`：diagnostics 与 prompt-order helper contract 已实现。
+- `OpenChatTests/Core/StageTests/DirectorContractTests.swift`：Director DTO / prompt boundary focused tests 已实现。
 
 尚未实现：
 
-- `DirectorPlan`、`DirectorInput`、`StageInstruction`、`DirectorDiagnostics` runtime types。
 - Director executor / controller。
 - Stage DB schema、Stage UI、用户导演输入 UI。
 - 多角色 participant 绑定、speaker metadata、多角色连续输出。
@@ -107,6 +111,17 @@ ruby scripts/generate_xcodeproj.rb
 - `userControlled` mode 把用户导演输入建模为 `StageInstruction`，不作为普通 user-to-character 台词保存。
 - docs / harness 明确 Director runtime、Stage DB/UI、多角色输出均未实现。
 - `git diff --check` 通过。
+
+## Closeout 记录
+
+2026-05-19 实施完成：
+
+- 新增 `OpenChat/Core/Stage/*` Director contract types。
+- 新增 `OpenChatTests/Core/StageTests/DirectorContractTests.swift`，并扩展 `AgentPolicyTests.swift`。
+- 运行 `ruby scripts/generate_xcodeproj.rb` 加入 target；签名值仍由脚本管理。
+- Focused Director / AgentPolicy：16 tests / 2 suites passed。
+- Prompt / Chat / Background regression：40 tests / 4 suites passed。
+- Full suite 结果以 `harness/2026.05.19/director-mode-foundation/index.md` 为准。
 
 ## 写回要求
 
