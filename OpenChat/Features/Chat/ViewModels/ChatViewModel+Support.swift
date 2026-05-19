@@ -45,11 +45,23 @@ extension ChatViewModel {
         persistUserMessage: Bool
     ) async throws {
         let endpoint = try await resolveEndpointConfig()
+        let stageContext = try await databaseManager.fetchStageContext(conversationId: conversation.id)
+        let stageTurnPlan = try stageContext.map {
+            try directorExecutor.execute(
+                DirectorRuntimeInput(
+                    stageContext: $0,
+                    inputRole: stageInputRole,
+                    currentInput: prompt
+                )
+            )
+        }
+        let activeSpeakerCardId = stageTurnPlan?.participant?.characterCardId
+        let resolvedCharacterCardId = activeSpeakerCardId ?? selectedCharacterCardID ?? conversation.characterCardId
 
         var userMessageRecord: MessageRecord?
         if persistUserMessage {
             let sortOrder = try await databaseManager.nextSortOrder(conversationId: conversation.id)
-            let record = MessageRecord(
+            var record = MessageRecord(
                 id: UUID().uuidString,
                 conversationId: conversation.id,
                 role: "user",
@@ -60,12 +72,16 @@ extension ChatViewModel {
                 sortOrder: sortOrder,
                 createdAt: .now
             )
+            record.stageId = stageTurnPlan?.stage.id
+            record.speakerKind = MessageSpeakerKind.participant.rawValue
+            record.speakerId = nil
+            record.speakerName = String(localized: "You")
             try await databaseManager.saveMessage(record)
             messages.append(MessageDisplayItem(record: record))
             userMessageRecord = record
         }
 
-        let characterCard = try await databaseManager.fetchCharacterCard(id: selectedCharacterCardID ?? conversation.characterCardId)
+        let characterCard = try await databaseManager.fetchCharacterCard(id: resolvedCharacterCardId)
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
 
@@ -122,6 +138,7 @@ extension ChatViewModel {
                 conversation: conversation,
                 characterCard: characterCard,
                 backgroundPacket: backgroundPacket,
+                stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
                 endpoint: endpoint
             )
@@ -135,6 +152,7 @@ extension ChatViewModel {
                 conversation: conversation,
                 characterCard: characterCard,
                 backgroundPacket: backgroundPacket,
+                stageTurnPlan: stageTurnPlan,
                 processedHistory: history,
                 currentInput: prompt,
                 endpoint: endpoint
@@ -167,6 +185,7 @@ extension ChatViewModel {
                     worldBook: worldBook,
                     worldBookEntries: recalledWorldBookEntries,
                     memories: memories,
+                    stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
                     endpoint: endpoint
                 )
@@ -178,6 +197,7 @@ extension ChatViewModel {
                     worldBookEntries: recalledWorldBookEntries,
                     memories: memories,
                     recentMessages: promptHistoryMessages,
+                    stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
                     endpoint: endpoint
                 )
@@ -197,6 +217,7 @@ extension ChatViewModel {
                     worldBookEntries: recalledWorldBookEntries,
                     memories: memories,
                     processedHistory: history,
+                    stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
                     endpoint: endpoint
                 )
@@ -209,6 +230,7 @@ extension ChatViewModel {
                     memories: memories,
                     recentMessages: promptHistoryMessages,
                     processedHistory: history,
+                    stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
                     endpoint: endpoint
                 )
@@ -223,7 +245,7 @@ extension ChatViewModel {
             baseSortOrder = try await databaseManager.nextSortOrder(conversationId: conversation.id)
         }
 
-        let assistantRecord = MessageRecord(
+        var assistantRecord = MessageRecord(
             id: UUID().uuidString,
             conversationId: conversation.id,
             role: "assistant",
@@ -235,6 +257,10 @@ extension ChatViewModel {
             createdAt: .now,
             reasoningContent: nil
         )
+        assistantRecord.stageId = stageTurnPlan?.stage.id
+        assistantRecord.speakerKind = stageTurnPlan?.participant.map { _ in MessageSpeakerKind.participant.rawValue }
+        assistantRecord.speakerId = stageTurnPlan?.participant?.id
+        assistantRecord.speakerName = stageTurnPlan?.participant?.displayName ?? characterCard?.name
         messages.append(MessageDisplayItem(record: assistantRecord))
 
         isGenerating = true
@@ -269,7 +295,7 @@ extension ChatViewModel {
 
                 let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
                 let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
-                let completed = MessageRecord(
+                var completed = MessageRecord(
                     id: assistantRecord.id,
                     conversationId: assistantRecord.conversationId,
                     role: assistantRecord.role,
@@ -281,6 +307,10 @@ extension ChatViewModel {
                     createdAt: assistantRecord.createdAt,
                     reasoningContent: finalReasoning
                 )
+                completed.stageId = assistantRecord.stageId
+                completed.speakerKind = assistantRecord.speakerKind
+                completed.speakerId = assistantRecord.speakerId
+                completed.speakerName = assistantRecord.speakerName
                 try await databaseManager.saveMessage(completed)
 
                 // Compute streaming stats
@@ -421,7 +451,7 @@ extension ChatViewModel {
             return
         }
 
-        let partial = MessageRecord(
+        var partial = MessageRecord(
             id: assistantRecord.id,
             conversationId: assistantRecord.conversationId,
             role: assistantRecord.role,
@@ -433,7 +463,42 @@ extension ChatViewModel {
             createdAt: assistantRecord.createdAt,
             reasoningContent: finalReasoning
         )
+        partial.stageId = assistantRecord.stageId
+        partial.speakerKind = assistantRecord.speakerKind
+        partial.speakerId = assistantRecord.speakerId
+        partial.speakerName = assistantRecord.speakerName
         try await databaseManager.saveMessage(partial)
+    }
+
+    func saveDirectorInstruction(_ content: String) async throws {
+        let stageContext: StageContext
+        if let existing = try await databaseManager.fetchStageContext(conversationId: conversation.id) {
+            stageContext = existing
+        } else {
+            let created = try await databaseManager.createStage(
+                conversationId: conversation.id,
+                title: conversation.title,
+                directorMode: .userControlled
+            )
+            stageContext = StageContext(stage: created, participants: [], instructions: [])
+        }
+
+        let now = Date()
+        let instruction = try StageInstruction.userDirected(
+            id: UUID().uuidString,
+            content: content,
+            createdAt: now
+        )
+        let record = StageInstructionRecord(
+            id: instruction.id,
+            stageId: stageContext.stage.id,
+            source: instruction.source.rawValue,
+            content: instruction.content,
+            visibility: instruction.visibility.rawValue,
+            createdAt: instruction.createdAt
+        )
+        try await databaseManager.saveStageInstruction(record)
+        await loadStage()
     }
 
     func triggerMemoryExtraction() {

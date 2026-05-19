@@ -374,6 +374,160 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(storedCurrentInputs.count == 1)
     }
 
+    @Test func test_directorInput_isPersistedAsStageInstructionNotUserMessage() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "director-input-conversation")
+        try await databaseManager.saveConversation(conversation)
+        _ = try await databaseManager.createStage(
+            conversationId: conversation.id,
+            title: "Stage",
+            directorMode: .userControlled
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.loadStage()
+        viewModel.stageInputRole = .director
+        viewModel.inputText = "Let Mara enter late."
+        await viewModel.sendMessage()
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        let context = try #require(try await databaseManager.fetchStageContext(conversationId: conversation.id))
+
+        #expect(storedMessages.isEmpty)
+        #expect(context.instructions.map(\.content) == ["Let Mara enter late."])
+        #expect(viewModel.inputText.isEmpty)
+    }
+
+    @Test func test_stageParticipantPrompt_persistsSpeakerMetadata() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-stage",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-stage",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let mara = TestHelpers.makeCharacterCard(id: "card-mara", name: "Mara")
+        let io = TestHelpers.makeCharacterCard(id: "card-io", name: "Io")
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.characterCardId = mara.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.write { db in
+            try mara.insert(db)
+            try io.insert(db)
+        }
+        try await databaseManager.saveConversation(conversation)
+        let stage = try await databaseManager.createStage(
+            conversationId: conversation.id,
+            title: "Stage",
+            directorMode: .silent
+        )
+        _ = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: mara)
+        _ = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: io)
+        try await databaseManager.saveStageInstruction(
+            StageInstructionRecord(
+                id: "stage-instruction-1",
+                stageId: stage.id,
+                source: StageInstructionSource.user.rawValue,
+                content: "Keep the scene quiet.",
+                visibility: StageInstructionVisibility.hiddenFromCharacters.rawValue,
+                createdAt: Date(timeIntervalSince1970: 1)
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Stage reply"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Mara, answer first."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        #expect(request.messages.contains {
+            $0.role == "system" && $0.content.contains("[Stage]")
+        })
+        #expect(request.messages.contains {
+            $0.role == "system" && $0.content.contains("[Director Instructions]") && $0.content.contains("Keep the scene quiet.")
+        })
+        #expect(request.messages.contains {
+            $0.role == "system" && $0.content.contains("[Stage Participants]") && $0.content.contains("Active Speaker: Mara")
+        })
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        let assistant = try #require(storedMessages.first { $0.role == "assistant" })
+        #expect(assistant.stageId == stage.id)
+        #expect(assistant.speakerKindValue == .participant)
+        #expect(assistant.speakerName == "Mara")
+    }
+
     @Test func test_stream_failure_after_partial_delta_persists_visible_assistant_content() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let now = Date()

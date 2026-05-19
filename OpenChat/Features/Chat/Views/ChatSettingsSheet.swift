@@ -59,6 +59,50 @@ struct ChatSettingsSheet: View {
                     Toggle(String(localized: "Slow Plot Progression (Beta)"), isOn: slowPlotModeBinding)
                 }
 
+                Section(String(localized: "Stage")) {
+                    if viewModel.isStageEnabled {
+                        Picker(String(localized: "Director Mode"), selection: directorModeBinding) {
+                            ForEach(DirectorMode.allCases, id: \.rawValue) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .onChange(of: viewModel.directorMode) { _, mode in
+                            Task { await viewModel.setDirectorMode(mode) }
+                        }
+
+                        if viewModel.stageParticipants.isEmpty {
+                            Text(String(localized: "No stage participants"))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(viewModel.stageParticipants) { participant in
+                                HStack {
+                                    Label(participant.displayName, systemImage: "person.fill")
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        Task { await viewModel.removeStageParticipant(participant) }
+                                    } label: {
+                                        Image(systemName: "minus.circle")
+                                    }
+                                    .accessibilityLabel(String(localized: "Remove participant"))
+                                }
+                            }
+                        }
+
+                        Picker(String(localized: "Add Participant"), selection: addParticipantBinding) {
+                            Text(String(localized: "Select Character")).tag(Optional<String>.none)
+                            ForEach(viewModel.availableCharacterCards) { card in
+                                Text(card.name).tag(Optional(card.id))
+                            }
+                        }
+                    } else {
+                        Button {
+                            Task { await viewModel.enableStage() }
+                        } label: {
+                            Label(String(localized: "Enable Stage"), systemImage: "theatermasks")
+                        }
+                    }
+                }
+
                 Section(String(localized: "Model")) {
                     LabeledContent(String(localized: "Temperature")) {
                         Text(viewModel.modelTemperature.formatted(.number.precision(.fractionLength(2))))
@@ -168,5 +212,33 @@ struct ChatSettingsSheet: View {
     private var reasoningEffortBinding: Binding<ReasoningEffort> {
         @Bindable var viewModel = viewModel
         return $viewModel.reasoningEffort
+    }
+
+    private var directorModeBinding: Binding<DirectorMode> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.directorMode
+    }
+
+    private var addParticipantBinding: Binding<String?> {
+        Binding<String?>(
+            get: { nil },
+            set: { id in
+                guard let id else { return }
+                Task { await viewModel.addStageParticipant(characterCardId: id) }
+            }
+        )
+    }
+}
+
+private extension DirectorMode {
+    var displayName: String {
+        switch self {
+        case .silent:
+            String(localized: "Silent")
+        case .agent:
+            String(localized: "Agent")
+        case .userControlled:
+            String(localized: "User Controlled")
+        }
     }
 }

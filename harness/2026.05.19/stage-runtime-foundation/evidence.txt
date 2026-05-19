@@ -1,0 +1,106 @@
+Stage Runtime Foundation Evidence
+Date: 2026-05-19
+Scope: Stage / Director runtime + Stage DB/UI + user director input
+
+New runtime files:
+- OpenChat/Core/Database/DatabaseManager+Stage.swift
+- OpenChat/Core/Database/Records/StageRecord.swift
+- OpenChat/Core/Database/Records/StageParticipantRecord.swift
+- OpenChat/Core/Database/Records/StageInstructionRecord.swift
+- OpenChat/Core/Stage/StageModels.swift
+- OpenChat/Core/Stage/DirectorController.swift
+- OpenChat/Core/Stage/DirectorExecutor.swift
+
+Modified runtime files:
+- OpenChat/Core/Database/Migrations.swift
+- OpenChat/Core/Database/Records/ConversationRecord.swift
+- OpenChat/Core/Database/Records/MessageRecord.swift
+- OpenChat/Core/PromptEngine/PromptAssembler.swift
+- OpenChat/Core/Stage/DirectorMode.swift
+- OpenChat/Features/Chat/Models/MessageDisplayItem.swift
+- OpenChat/Features/Chat/ViewModels/ChatViewModel.swift
+- OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift
+- OpenChat/Features/Chat/Views/ChatSettingsSheet.swift
+- OpenChat/Features/Chat/Views/ChatView.swift
+- OpenChat/Features/Chat/Views/InputBarView.swift
+- OpenChat/Features/Chat/Views/MessageBubbleView.swift
+- OpenChat/Resources/Localizable.xcstrings
+
+Modified tests:
+- OpenChatTests/Core/DatabaseTests/MigrationTests.swift
+- OpenChatTests/Core/StageTests/DirectorContractTests.swift
+- OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift
+- OpenChatTests/Core/TestHelpers.swift
+- OpenChatTests/Features/ChatTests/StreamingRenderSegmentationTests.swift
+
+Xcode project:
+- ruby scripts/generate_xcodeproj.rb was run before this handoff to add new Swift files to target membership.
+- scripts/generate_xcodeproj.rb was not modified.
+- Scheme diff is target BlueprintIdentifier regeneration only.
+- Signing values verified after regeneration:
+  - PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com
+  - DEVELOPMENT_TEAM = GZAC7644XS
+  - CODE_SIGN_STYLE = Automatic
+  - test PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.tests
+
+Focused Stage / migration / chat verification:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/DirectorContractTests' '-only-testing:OpenChatTests/MigrationTests'
+
+Result:
+- 68 tests / 3 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_20-41-58-+0800.xcresult
+
+Simulator discovery:
+Command:
+xcrun simctl list devices available | rg 'iPhone'
+
+Sandboxed result:
+- Failed because CoreSimulatorService/log access was unavailable.
+
+Escalated result:
+- iPhone 17 Pro (F8D0D88B-71FD-471F-855A-B2B5D8267117) available.
+- Additional iPhone 17 / 17 Pro Max / 17e / Air simulators available.
+
+Full suite:
+Command:
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=F8D0D88B-71FD-471F-855A-B2B5D8267117'
+
+Result:
+- 378 tests / 67 suites passed.
+- ** TEST SUCCEEDED **
+- xcresult: /Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_20-55-41-+0800.xcresult
+
+Whitespace:
+Command:
+git diff --check
+
+Result:
+- Passed; no whitespace errors.
+
+Localizable JSON:
+Command:
+python3 -m json.tool OpenChat/Resources/Localizable.xcstrings
+
+Result:
+- Passed; JSON parsed successfully.
+
+Note:
+- plutil -lint OpenChat/Resources/Localizable.xcstrings reported "Unexpected character { at line 1"; this repo resource is JSON .xcstrings, and Xcode's full-suite build successfully ran xcstringstool compile for the same file.
+
+Contract summary:
+- v18_create_stage_tables creates stage / stage_participant / stage_instruction and adds message stage/speaker metadata.
+- DirectorController deterministic policy: mentioned participant first, otherwise first active present participant by sortOrder.
+- Director input saves StageInstruction and does not persist a normal user MessageRecord.
+- Stage participant input persists user and assistant messages with speaker metadata.
+- PromptAssembler emits Stage blocks only when stageTurnPlan is present.
+- Stage UI is currently embedded in Chat Settings.
+
+Remaining boundaries:
+- No LLM Director agent.
+- DirectorMode.agent is stored but still uses deterministic controller behavior.
+- No multi-speaker output parser or one-turn multi-message split.
+- No Responses API Stage request-shape snapshot.
+- No XCUITest for Stage UI.
+- Stage participant/instruction are not yet passed into BackgroundManager request filtering.

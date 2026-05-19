@@ -19,6 +19,8 @@ struct ChatView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 InputBarView(
                     text: binding(\.inputText),
+                    inputRole: binding(\.stageInputRole),
+                    showsDirectorToggle: viewModel.isStageEnabled,
                     isGenerating: viewModel.isGenerating,
                     onSend: {
                         Task { await viewModel.sendMessage() }
@@ -91,7 +93,7 @@ struct ChatView: View {
                             MessageBubbleView(
                                 item: item,
                                 isStreaming: isStreamingMessage(item),
-                                characterName: viewModel.selectedCharacterName,
+                                characterName: item.speakerName ?? viewModel.activeStageSpeakerName ?? viewModel.selectedCharacterName,
                                 showDetailedStats: viewModel.showDetailedStats,
                                 onDelete: {
                                     Task { await viewModel.deleteMessage(item.id) }

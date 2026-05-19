@@ -69,7 +69,8 @@ enum TestHelpers {
             isCompressed: isCompressed,
             originalContent: nil,
             sortOrder: sortOrder,
-            createdAt: .now
+            createdAt: .now,
+            reasoningContent: nil
         )
     }
 

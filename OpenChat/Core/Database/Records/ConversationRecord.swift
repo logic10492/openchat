@@ -24,6 +24,7 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     static let apiEndpoint = belongsTo(APIEndpointRecord.self)
     static let messages = hasMany(MessageRecord.self)
     static let compressionCheckpoints = hasMany(CompressionCheckpointRecord.self)
+    static let stage = hasOne(StageRecord.self)
 
     var contextStrategyValue: ContextStrategy {
         ContextStrategy(rawValue: contextStrategy) ?? .truncation

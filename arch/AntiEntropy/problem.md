@@ -1,7 +1,7 @@
 # Problem Issues
 
 > 记录日期：2026-05-13
-> 更新日期：2026-05-16
+> 更新日期：2026-05-19
 > 状态：部分修复，部分仍为审计记录。
 > 范围：跨对话记忆系统的设计可靠性与当前实现风险。
 
@@ -9,9 +9,9 @@
 
 本文件记录"高概率影响用户体感"的问题，不等同于已验证 bug ticket。当前结论来自源码与 arch 文档对照以及 `xcodebuild test` 验证。
 
-2026-05-13 追加：`arch/modules/background/` 已记录 BackgroundWorker / LibMan / 世界书向量化的目标架构规划。该规划尚未实现，不能作为当前源码行为引用。
+2026-05-13 追加：`arch/modules/background/` 已记录 BackgroundWorker / LibMan / 世界书向量化的目标架构规划。2026-05-17 以后 Background source tools、deterministic worker、BackgroundPacket 和 Chat/Prompt compatible switch 已落地；LibMan、Character/ConversationState sources、统一 `[Background]` block 仍未实现。
 
-2026-05-13 追加：`arch/modules/stage/` 已记录 Stage / 多角色参与 / Director 三模式的目标架构规划。该规划尚未实现，不能作为当前源码行为引用。
+2026-05-13 追加：`arch/modules/stage/` 已记录 Stage / 多角色参与 / Director 三模式的目标架构规划。2026-05-19 Stage foundation 已落地：Stage DB、participant binding、speaker metadata、输入栏 director/participant 切换和 deterministic Director runtime 已接入 Chat/Prompt 主链路；LLM Director agent、多 speaker parser、Responses Stage snapshot 和 UI 自动化仍未实现。
 
 2026-05-13 追加：`arch/modules/memory/hindsight-lite.md` 已从概念页扩展为轻量 retain / recall / reflect 完善设计。该设计用于指导剩余 memory problem 的修复；retain provenance / dedupe 已在 Phase C 落地，reflect 最小 contract 和 Responses request-shape 已在 Phase D 落地。
 
@@ -42,8 +42,8 @@
 | ~~P2~~ | ~~recent fallback 只按时间取最近 N 条~~ | ~~低相关或近期噪声可能进入 prompt，summary/relationship 等高价值记忆没有类型优先级~~ | 已修复：semantic unavailable / no hit 改为 keyword + recent high-value；`DatabaseManager.fetchRecentHighValueMemories(...)` 只取 relationship / summary / `importance >= 70`，Chat 测试覆盖普通 recent 噪声不会进入 request。 | **Closed** |
 | ~~P2~~ | ~~提取 prompt 缺少角色卡、已有记忆、source 边界和去重约束~~ | ~~记忆内容容易泛化、重复或不贴角色关系状态~~ | 已修复：`MemoryManager.callExtractionAPI(...)` 改用结构化输入（character summary + existing memory hints + message id/sortOrder）；`ExtractedMemory` 扩展 v2 字段（source range、confidence、tags、dedupeKey、action）；同批 dedupe 保留 importance 更高或 content 更短条目；越界 source range 丢弃，无效 sourceMessageIds 从 provenance 过滤；`skip/reinforce` 不写新记忆；`VectorStore.insert(entries:provenances:)` 原子写入 `memory_entry + memory_embedding + memory_entry_provenance`。`MemoryExtractionParsingTests`、`MemoryManagerRetrievalTests` 覆盖 v2 解析、dedupe、source validation、provenance CRUD。 | **Closed** |
 | ~~P2~~ | ~~Responses API 会合并 system messages 到 `instructions`~~ | ~~`[Memories]` 的实际请求位置不再严格等于 Chat Completions message 序列中的 Current-Turn Context~~ | 已验收为 provider adapter 行为：Chat Completions 下 `[Memories]` 仍在 `messages` 中且位于 current turn user 前；Responses 下 `[Memories]` 存在于 `instructions`，非 system `input` 不重复 current input，且 `[Memories]` 不被拼进 user message。Background block request-shape 留给后续独立 Background 计划包。 | **Closed** |
-| P2 | Background 目标架构尚未落地 | WorldBook 与 Memory 仍是两套直接注入逻辑，无法由后台员工统一排序、去重、裁剪 | `arch/modules/background/` 已记录目标；当前源码仍由 `PromptAssembler` 分别处理 world book entries 与 memories。该项留给后续独立 Background / 世界书向量化计划，不阻塞当前 Memory 层完善包。 | Planned |
-| P2 | Stage 目标架构尚未落地 | 当前 Chat 仍是单主角色对话，不支持多角色同场、导演模式或用户导演输入 | `arch/modules/stage/` 已记录目标；当前源码仍是 `ChatViewModel` + 单 conversation 生成链路 | Planned |
+| ~~P2~~ | ~~Background 目标架构尚未落地~~ | ~~WorldBook 与 Memory 仍是两套直接注入逻辑，无法由后台员工统一排序、去重、裁剪~~ | 已部分关闭：Background source tools、deterministic worker、BackgroundPacket、BackgroundManager 和 Chat/Prompt compatible switch 已落地。剩余 Character/ConversationState sources、统一 `[Background]` block、LibMan / Exa 和 synthesis worker 仍为后续计划。 | **Partial** |
+| ~~P2~~ | ~~Stage 目标架构尚未落地~~ | ~~当前 Chat 仍是单主角色对话，不支持多角色同场、导演模式或用户导演输入~~ | 已部分关闭：Stage DB/UI foundation、多角色 participant binding、speaker metadata、用户导演输入和 deterministic Director runtime 已落地。剩余 LLM Director agent、多 speaker parser、Responses Stage snapshot、Stage XCUITest 和独立 Stage 管理页仍为后续计划。 | **Partial** |
 | ~~P3~~ | ~~记忆提取/检索可观测性不足~~ | ~~用户很难判断"没生成""没检索到""被预算裁掉"还是"模型忽略了"~~ | 部分修复：提取阶段已通过 `MemoryExtractionIndicator` 显示 extracting/completed/failed 状态；检索阶段已有 Memory 内部 trace。trace 尚未接入 UI，prompt budget 裁剪 omission 仍未回写。 | **Partial** |
 
 ## 建议修复顺序（剩余）
@@ -51,9 +51,9 @@
 1. ~~优化提取 prompt：加入角色卡摘要、已有记忆摘要、source message 范围、去重要求与更严格 JSON schema。~~（Phase C 已完成）
 2. ~~追加 Hindsight-lite provenance schema，再考虑低频 reflect observation。~~（Phase C 已完成 provenance schema；Phase D 已完成 reflect 最小 contract）
 3. ~~Responses API `[Memories]` request-shape 验收。~~（Phase D 已完成当前 `[Memories]` request-shape 验收）
-4. 独立计划包：reflect LLM executor / UI 入口 / `memory_entry_link` migration。
-5. 独立计划包：世界书向量化。
-6. 独立计划包：BackgroundWorker / BackgroundPacket 统一调度。
+4. 独立计划包：idle/background reflect、duplicate/conflict review 和 retrieval trace UI。
+5. 独立计划包：CharacterState / ConversationState Background sources 与统一 `[Background]` block。
+6. 独立计划包：Stage Responses snapshot、Stage XCUITest、LLM Director agent 或多 speaker parser。
 
 ## 三边一致性待办
 

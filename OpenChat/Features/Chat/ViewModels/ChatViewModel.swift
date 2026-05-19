@@ -15,6 +15,8 @@ final class ChatViewModel {
     let titleGenerator: TitleGenerator
     let apiKeyStore: any APIKeyStore
     let appState: AppState
+    @ObservationIgnored
+    let directorExecutor = DeterministicDirectorExecutor()
 
     var conversation: ConversationRecord
     var messages: [MessageDisplayItem] = []
@@ -26,8 +28,12 @@ final class ChatViewModel {
     private(set) var availableCharacterCards: [CharacterCardRecord] = []
     private(set) var availableWorldBooks: [WorldBookRecord] = []
     private(set) var availableModelsForEndpoint: [EndpointModelRecord] = []
+    private(set) var stage: StageRecord?
+    private(set) var stageParticipants: [StageParticipantRecord] = []
+    private(set) var stageInstructions: [StageInstructionRecord] = []
 
     var inputText = ""
+    var stageInputRole: StageInputRole = .participant
     var selectedEndpointID: String?
     var selectedModelName: String?
     var selectedCharacterCardID: String?
@@ -53,6 +59,28 @@ final class ChatViewModel {
               let card = availableCharacterCards.first(where: { $0.id == id }),
               let worldBookId = card.worldBookId else { return nil }
         return availableWorldBooks.first(where: { $0.id == worldBookId })?.name
+    }
+
+    var isStageEnabled: Bool {
+        stage?.isEnabled == true
+    }
+
+    var directorMode: DirectorMode {
+        get { stage?.directorModeValue ?? .silent }
+        set {
+            guard var stage else { return }
+            stage.directorMode = newValue.rawValue
+            stage.updatedAt = .now
+            self.stage = stage
+        }
+    }
+
+    var activeStageSpeakerName: String? {
+        stageParticipants
+            .filter { $0.isActive && $0.visibilityValue == .present }
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .first?
+            .displayName
     }
 
     @ObservationIgnored
@@ -121,6 +149,23 @@ final class ChatViewModel {
             availableCharacterCards = try await characterCards
             availableWorldBooks = try await worldBooks
             await loadModelsForEndpoint()
+            await loadStage()
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func loadStage() async {
+        do {
+            if let context = try await databaseManager.fetchStageContext(conversationId: conversation.id) {
+                stage = context.stage
+                stageParticipants = context.participants
+                stageInstructions = context.instructions
+            } else {
+                stage = nil
+                stageParticipants = []
+                stageInstructions = []
+            }
         } catch {
             appState.present(error: error.localizedDescription)
         }
@@ -144,12 +189,16 @@ final class ChatViewModel {
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty, !isGenerating else { return }
 
-        // Generate title first if this is a fresh conversation
-        if !conversation.isTitleGenerated {
-            await generateTitleIfNeeded(userMessage: trimmedInput)
-        }
-
         do {
+            if stageInputRole.isDirectorInstructionInput {
+                try await saveDirectorInstruction(trimmedInput)
+                inputText = ""
+                return
+            }
+            // Generate title first if this is a fresh conversation
+            if !conversation.isTitleGenerated {
+                await generateTitleIfNeeded(userMessage: trimmedInput)
+            }
             try await generateResponse(for: trimmedInput, persistUserMessage: true)
             inputText = ""
         } catch {
@@ -274,6 +323,68 @@ final class ChatViewModel {
 
         do {
             try await databaseManager.saveConversation(conversation)
+            if let stage {
+                try await databaseManager.setStageDirectorMode(stageId: stage.id, mode: stage.directorModeValue)
+            }
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func enableStage() async {
+        do {
+            let resolvedStage = if let stage {
+                stage
+            } else {
+                try await databaseManager.createStage(
+                    conversationId: conversation.id,
+                    title: conversation.title,
+                    directorMode: .silent
+                )
+            }
+            stage = resolvedStage
+            if let selectedCharacterCardID,
+               let card = availableCharacterCards.first(where: { $0.id == selectedCharacterCardID }) {
+                _ = try await databaseManager.addStageParticipant(
+                    stageId: resolvedStage.id,
+                    characterCard: card
+                )
+            }
+            await loadStage()
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func setDirectorMode(_ mode: DirectorMode) async {
+        guard let stage else { return }
+        do {
+            try await databaseManager.setStageDirectorMode(stageId: stage.id, mode: mode)
+            await loadStage()
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func addStageParticipant(characterCardId: String) async {
+        do {
+            if stage == nil {
+                await enableStage()
+            }
+            guard let stage,
+                  let card = availableCharacterCards.first(where: { $0.id == characterCardId })
+            else { return }
+            _ = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: card)
+            await loadStage()
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func removeStageParticipant(_ participant: StageParticipantRecord) async {
+        do {
+            try await databaseManager.removeStageParticipant(id: participant.id)
+            await loadStage()
         } catch {
             appState.present(error: error.localizedDescription)
         }

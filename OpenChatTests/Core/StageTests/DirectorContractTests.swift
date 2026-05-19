@@ -146,6 +146,73 @@ struct DirectorContractTests {
         #expect(turn.intent == .remainSilent)
         #expect(turn.maxTokens == nil)
     }
+
+    @Test func test_directorController_userInputChoosesFirstActiveParticipant() throws {
+        let context = StageContext(
+            stage: StageRecord(
+                id: "stage-1",
+                conversationId: "conversation-1",
+                title: "Scene",
+                directorMode: DirectorMode.silent.rawValue,
+                isEnabled: true,
+                createdAt: Date(timeIntervalSince1970: 1),
+                updatedAt: Date(timeIntervalSince1970: 1)
+            ),
+            participants: [
+                StageParticipantRecord(
+                    id: "participant-1",
+                    stageId: "stage-1",
+                    characterCardId: "card-1",
+                    displayName: "Mara",
+                    visibility: StageParticipantVisibility.present.rawValue,
+                    isActive: true,
+                    sortOrder: 1,
+                    createdAt: Date(timeIntervalSince1970: 1),
+                    updatedAt: Date(timeIntervalSince1970: 1)
+                )
+            ],
+            instructions: []
+        )
+
+        let plan = try DirectorController().planTurn(
+            stageContext: context,
+            inputRole: .participant,
+            currentInput: "What do you do?"
+        )
+
+        #expect(plan.participant?.id == "participant-1")
+        #expect(plan.directorPlan.speakerPlan.first?.participantId == "participant-1")
+        #expect(plan.directorInstructionPrompt == nil)
+    }
+
+    @Test func test_directorController_directorInputCreatesHiddenInstructionOnlyTurn() throws {
+        let context = StageContext(
+            stage: StageRecord(
+                id: "stage-1",
+                conversationId: "conversation-1",
+                title: "Scene",
+                directorMode: DirectorMode.userControlled.rawValue,
+                isEnabled: true,
+                createdAt: Date(timeIntervalSince1970: 1),
+                updatedAt: Date(timeIntervalSince1970: 1)
+            ),
+            participants: [],
+            instructions: []
+        )
+
+        let plan = try DirectorController().planTurn(
+            stageContext: context,
+            inputRole: .director,
+            currentInput: "Let Mara stay silent.",
+            now: Date(timeIntervalSince1970: 2)
+        )
+
+        #expect(plan.isDirectorOnlyTurn)
+        #expect(plan.participant == nil)
+        #expect(plan.visibleInstructions.map(\.content) == ["Let Mara stay silent."])
+        #expect(plan.directorPlan.speakerPlan.isEmpty)
+        #expect(plan.directorInstructionPrompt?.contains("[Director Instructions]") == true)
+    }
 }
 
 private func index(of layer: StagePromptLayer, in layers: [StagePromptLayer]) -> Int {

@@ -1,6 +1,8 @@
 # 多角色 Stage
 
-> 状态：目标架构规划，尚未实现。
+> 状态：多角色同场 foundation 已落地；当前只支持一轮一个 active speaker 输出，不支持多 speaker 连续输出 parser。
+
+2026-05-19 closeout：`stage_participant` 表、`StageParticipantRecord`、`StageParticipantVisibility`、`MessageSpeakerKind`、`StageTurnPlan` 已落地。Chat Settings 可为当前 Stage 添加多个角色；`DirectorController` 当前默认策略为“输入点名优先，否则选择 sortOrder 最小的 active present participant”。assistant message 会保存 `stageId`、`speakerKind`、`speakerId`、`speakerName`。
 
 ## 1. 角色边界
 
@@ -23,28 +25,29 @@ Stage 支持多个角色共同参与，但每个角色仍是 persona，不是 ag
 
 ## 2. Stage 参与者
 
-目标数据结构：
+当前数据结构：
 
 ```swift
 struct StageParticipant: Identifiable, Sendable {
     let id: String
     let characterCardId: String
     let displayName: String
-    let participationState: ParticipationState
+    let visibility: StageParticipantVisibility
+    let isActive: Bool
+    let sortOrder: Int
 }
 
-enum ParticipationState: String, Codable, Sendable {
-    case active
-    case presentButSilent
-    case offStage
+enum StageParticipantVisibility: String, Codable, Sendable {
+    case present
+    case hidden
 }
 ```
 
 语义：
 
-- `active`：本轮可发言。
-- `presentButSilent`：在场但默认不发言，可被提及或观察。
-- `offStage`：不在当前场景，不参与本轮 prompt。
+- `present + isActive`：本轮可作为 speaker。
+- `hidden` 或 `isActive == false`：当前 deterministic selector 不会选作 speaker。
+- 当前没有单独 `offStage` 状态；需要退场语义时应后续扩展 visibility / participation state，而不是复用 message role。
 
 ## 3. 发言计划
 
@@ -76,23 +79,28 @@ enum SpeakerIntent: String, Codable, Sendable {
 卡伦: ...
 ```
 
-存储上建议保留 speaker metadata：
+存储上已追加 speaker metadata：
 
 ```swift
-struct StageMessageMetadata: Codable, Sendable {
-    let speakerType: StageSpeakerType
-    let characterCardId: String?
-    let directorMode: DirectorMode?
-}
+var stageId: String?
+var speakerKind: String?
+var speakerId: String?
+var speakerName: String?
 ```
 
-如果沿用 `message.role == assistant`，需要额外字段区分具体角色。该 schema 改动应通过新 migration 追加，不能修改旧 migration。
+当前沿用 `message.role == assistant`，通过 v18 追加字段区分具体角色。`speakerName` 是显示快照；`speakerId` 当前保存 `stage_participant.id`，不是 `character_card.id`。
 
 ## 5. 默认发言策略
 
 没有 Director agent 或用户导演指令时：
 
 - 优先当前用户直接点名的角色。
-- 其次最近活跃角色。
+- 其次选择 sortOrder 最小的 active present participant。
 - 若多个角色都相关，选择一个主回复角色，其他角色保持 silent。
 - 不自动让所有 active 角色每轮都说话，避免输出臃肿。
+
+尚未实现：
+
+- 最近活跃角色选择。
+- 多角色 persona 摘要 block；当前 active speaker persona 仍通过既有 `CharacterCardRecord` 注入。
+- 多 speaker output parser 和一轮多 assistant message 拆分。

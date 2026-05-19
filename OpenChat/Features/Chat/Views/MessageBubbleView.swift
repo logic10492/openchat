@@ -81,10 +81,18 @@ struct MessageBubbleView: View {
     }
 
     private var roleName: String {
+        if let speakerName = item.speakerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !speakerName.isEmpty {
+            return speakerName
+        }
+
         switch item.role {
-        case "user": String(localized: "You")
-        case "assistant": characterName ?? String(localized: "Assistant")
-        default: String(localized: "System")
+        case "user":
+            return String(localized: "You")
+        case "assistant":
+            return characterName ?? String(localized: "Assistant")
+        default:
+            return String(localized: "System")
         }
     }
 
@@ -213,7 +221,8 @@ struct MessageBubbleView: View {
                 isCompressed: false,
                 originalContent: nil,
                 sortOrder: 0,
-                createdAt: .now
+                createdAt: .now,
+                reasoningContent: nil
             )
         ),
         onDelete: {},
@@ -234,7 +243,8 @@ struct MessageBubbleView: View {
                 isCompressed: false,
                 originalContent: nil,
                 sortOrder: 1,
-                createdAt: .now
+                createdAt: .now,
+                reasoningContent: nil
             )
         ),
         onDelete: {},
@@ -255,7 +265,8 @@ struct MessageBubbleView: View {
                 isCompressed: false,
                 originalContent: nil,
                 sortOrder: 2,
-                createdAt: .now
+                createdAt: .now,
+                reasoningContent: nil
             )
         ),
         isStreaming: true,

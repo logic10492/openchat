@@ -51,6 +51,62 @@ struct MigrationTests {
         #expect(tableNames.contains("message"))
     }
 
+    @Test func test_v18_creates_stage_tables_and_message_speaker_columns() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+        let messageColumns = try await manager.read { db in
+            try db.columns(in: "message").map(\.name)
+        }
+
+        #expect(tableNames.contains("stage"))
+        #expect(tableNames.contains("stage_participant"))
+        #expect(tableNames.contains("stage_instruction"))
+        #expect(messageColumns.contains("stageId"))
+        #expect(messageColumns.contains("speakerKind"))
+        #expect(messageColumns.contains("speakerId"))
+        #expect(messageColumns.contains("speakerName"))
+    }
+
+    @Test func test_v18_stage_cascade_removes_participants_and_instructions() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "stage-cascade-conversation")
+        let card = TestHelpers.makeCharacterCard(id: "stage-cascade-card")
+        try await manager.write { db in
+            try card.insert(db)
+            try conversation.insert(db)
+        }
+        let stage = try await manager.createStage(
+            conversationId: conversation.id,
+            title: "Stage",
+            directorMode: .userControlled
+        )
+        _ = try await manager.addStageParticipant(stageId: stage.id, characterCard: card)
+        try await manager.saveStageInstruction(
+            StageInstructionRecord(
+                id: "instruction-1",
+                stageId: stage.id,
+                source: StageInstructionSource.user.rawValue,
+                content: "Hold the reveal.",
+                visibility: StageInstructionVisibility.hiddenFromCharacters.rawValue,
+                createdAt: Date(timeIntervalSince1970: 1)
+            )
+        )
+
+        try await manager.deleteConversation(id: conversation.id)
+
+        let participantCount = try await manager.read { db in
+            try StageParticipantRecord.fetchCount(db)
+        }
+        let instructionCount = try await manager.read { db in
+            try StageInstructionRecord.fetchCount(db)
+        }
+        #expect(participantCount == 0)
+        #expect(instructionCount == 0)
+    }
+
     @Test func test_foreign_key_cascade_removes_world_book_entries() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let worldBook = TestHelpers.makeWorldBook()

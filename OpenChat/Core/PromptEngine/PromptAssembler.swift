@@ -8,6 +8,7 @@ struct PromptAssembler {
         worldBookEntries: [WorldBookEntryRecord],
         memories: [MemoryEntryRecord] = [],
         recentMessages: [MessageRecord],
+        stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> PromptAssemblyPreview {
@@ -24,6 +25,7 @@ struct PromptAssembler {
             characterCard: characterCard,
             selectedWorldBookEntries: selectedWorldBookEntries,
             memories: memories,
+            stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint,
             totalBudget: totalBudget
@@ -36,6 +38,7 @@ struct PromptAssembler {
         worldBook: WorldBookRecord?,
         worldBookEntries: [WorldBookEntryRecord],
         memories: [MemoryEntryRecord] = [],
+        stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> PromptAssemblyPreview {
@@ -51,6 +54,7 @@ struct PromptAssembler {
             characterCard: characterCard,
             selectedWorldBookEntries: selectedWorldBookEntries,
             memories: memories,
+            stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint,
             totalBudget: totalBudget
@@ -62,6 +66,7 @@ struct PromptAssembler {
         characterCard: CharacterCardRecord?,
         selectedWorldBookEntries: [WorldBookEntryRecord],
         memories: [MemoryEntryRecord],
+        stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig,
         totalBudget: Int
@@ -94,6 +99,7 @@ struct PromptAssembler {
 
         return preview(
             systemPrompt: systemPrompt,
+            stageTurnPlan: stageTurnPlan,
             characterDescription: characterDescription,
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
@@ -110,6 +116,7 @@ struct PromptAssembler {
         conversation: ConversationRecord,
         characterCard: CharacterCardRecord?,
         backgroundPacket: BackgroundPacket,
+        stageTurnPlan: StageTurnPlan?,
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> PromptAssemblyPreview {
@@ -122,6 +129,7 @@ struct PromptAssembler {
 
         return preview(
             systemPrompt: systemPrompt,
+            stageTurnPlan: stageTurnPlan,
             characterDescription: characterDescription,
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
@@ -134,8 +142,26 @@ struct PromptAssembler {
         )
     }
 
+    static func preview(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        backgroundPacket: BackgroundPacket,
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> PromptAssemblyPreview {
+        preview(
+            conversation: conversation,
+            characterCard: characterCard,
+            backgroundPacket: backgroundPacket,
+            stageTurnPlan: nil,
+            currentInput: currentInput,
+            endpoint: endpoint
+        )
+    }
+
     private static func preview(
         systemPrompt: String,
+        stageTurnPlan: StageTurnPlan? = nil,
         characterDescription: String?,
         scenario: String?,
         slowPlotMode: Bool,
@@ -146,14 +172,18 @@ struct PromptAssembler {
         timeContext: String,
         totalBudget: Int
     ) -> PromptAssemblyPreview {
+        let stageIdentityMessage = stageTurnPlan.map { ChatMessage(role: "system", content: $0.stageIdentityPrompt) }
         let systemMessage = ChatMessage(role: "system", content: systemPrompt)
+        let participantMessage = stageTurnPlan?.participantPrompt.map { ChatMessage(role: "system", content: $0) }
         let characterMessage = characterDescription.map { ChatMessage(role: "system", content: $0) }
         let scenarioMessage = scenario.map { ChatMessage(role: "system", content: $0) }
         let slowPlotMessage: ChatMessage? = slowPlotMode
             ? ChatMessage(role: "system", content: AppConstants.slowPlotModePrompt)
             : nil
         let stableIdentityMessages = [
+            stageIdentityMessage,
             systemMessage,
+            participantMessage,
             characterMessage,
             scenarioMessage,
             slowPlotMessage,
@@ -185,10 +215,14 @@ struct PromptAssembler {
         let exampleDialogsBlock = makeExampleDialogsBlock(trimmedExampleDialogs)
         let worldBookBlock = makeWorldBookBlock(trimmedWorldBookItems)
         let memoryBlock = makeMemoryBlock(trimmedMemoryItems)
+        let directorInstructionBlock = stageTurnPlan?.directorInstructionPrompt.map {
+            ChatMessage(role: "system", content: $0)
+        }
         let currentTurnContextMessages = [
             exampleDialogsBlock,
             worldBookBlock,
             memoryBlock,
+            directorInstructionBlock,
         ].compactMap { $0 }
 
         let actualFixedTokens =
@@ -232,6 +266,7 @@ struct PromptAssembler {
         memories: [MemoryEntryRecord] = [],
         recentMessages: [MessageRecord],
         processedHistory: [MessageRecord],
+        stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> AssemblyResult {
@@ -242,6 +277,7 @@ struct PromptAssembler {
             worldBookEntries: worldBookEntries,
             memories: memories,
             recentMessages: recentMessages,
+            stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint
         )
@@ -255,6 +291,7 @@ struct PromptAssembler {
         worldBookEntries: [WorldBookEntryRecord],
         memories: [MemoryEntryRecord] = [],
         processedHistory: [MessageRecord],
+        stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> AssemblyResult {
@@ -264,6 +301,27 @@ struct PromptAssembler {
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
             memories: memories,
+            stageTurnPlan: stageTurnPlan,
+            currentInput: currentInput,
+            endpoint: endpoint
+        )
+        return assemble(processedHistory: processedHistory, context: context)
+    }
+
+    static func assemble(
+        conversation: ConversationRecord,
+        characterCard: CharacterCardRecord?,
+        backgroundPacket: BackgroundPacket,
+        stageTurnPlan: StageTurnPlan?,
+        processedHistory: [MessageRecord],
+        currentInput: String,
+        endpoint: APIEndpointConfig
+    ) -> AssemblyResult {
+        let context = preview(
+            conversation: conversation,
+            characterCard: characterCard,
+            backgroundPacket: backgroundPacket,
+            stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint
         )
@@ -278,14 +336,15 @@ struct PromptAssembler {
         currentInput: String,
         endpoint: APIEndpointConfig
     ) -> AssemblyResult {
-        let context = preview(
+        assemble(
             conversation: conversation,
             characterCard: characterCard,
             backgroundPacket: backgroundPacket,
+            stageTurnPlan: nil,
+            processedHistory: processedHistory,
             currentInput: currentInput,
             endpoint: endpoint
         )
-        return assemble(processedHistory: processedHistory, context: context)
     }
 
     private static func assemble(

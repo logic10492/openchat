@@ -14,8 +14,13 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord, Identifiable,
     var sortOrder: Int
     var createdAt: Date
     var reasoningContent: String?
+    var stageId: String? = nil
+    var speakerKind: String? = nil
+    var speakerId: String? = nil
+    var speakerName: String? = nil
 
     static let conversation = belongsTo(ConversationRecord.self)
+    static let stage = belongsTo(StageRecord.self)
 
     var chatMessage: ChatMessage {
         ChatMessage(role: role, content: content)
@@ -23,5 +28,10 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord, Identifiable,
 
     var isSystemMessage: Bool {
         role == "system"
+    }
+
+    var speakerKindValue: MessageSpeakerKind? {
+        guard let speakerKind else { return nil }
+        return MessageSpeakerKind(rawValue: speakerKind)
     }
 }

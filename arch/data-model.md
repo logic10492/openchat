@@ -319,8 +319,14 @@ struct ConversationRecord: Codable, FetchableRecord, PersistableRecord {
 | sortOrder | INTEGER | NOT NULL | 排序序号（时间顺序递增） |
 | createdAt | TEXT | NOT NULL | ISO 8601 |
 | reasoningContent | TEXT | | 模型返回的角色思考链，例如 DeepSeek V4 `reasoning_content` |
+| stageId | TEXT | FK → stage.id, ON DELETE SET NULL | Stage 消息来源（可选） |
+| speakerKind | TEXT | | 发言者类型：`participant` / `director` / `system` |
+| speakerId | TEXT | | Stage participant id 或未来 director/system id |
+| speakerName | TEXT | | 消息显示名快照，避免角色重命名影响历史展示 |
 
-**外键**：`conversationId` → `conversation(id)` ON DELETE CASCADE
+**外键**：
+- `conversationId` → `conversation(id)` ON DELETE CASCADE
+- `stageId` → `stage(id)` ON DELETE SET NULL
 
 **Swift Record**:
 ```swift
@@ -336,6 +342,10 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord {
     var sortOrder: Int
     var createdAt: Date
     var reasoningContent: String?
+    var stageId: String?
+    var speakerKind: String?
+    var speakerId: String?
+    var speakerName: String?
 
     static let conversation = belongsTo(ConversationRecord.self)
 
@@ -346,7 +356,130 @@ struct MessageRecord: Codable, FetchableRecord, PersistableRecord {
 
 ---
 
-### 6b. conversation_compression_checkpoint — 会话压缩检查点
+### 6a. stage — 舞台
+
+一个 Stage 绑定到一个 Conversation，用于保存导演模式、多角色参与和舞台级指令。当前最小实现是一会话最多一个 Stage。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| conversationId | TEXT | NOT NULL, UNIQUE, FK → conversation.id | 所属会话 |
+| title | TEXT | | 舞台标题，当前默认来自 conversation title |
+| directorMode | TEXT | NOT NULL, DEFAULT 'silent' | `silent` / `agent` / `userControlled` |
+| isEnabled | BOOLEAN | NOT NULL, DEFAULT 1 | 是否启用 Stage |
+| createdAt | DATETIME | NOT NULL | 创建时间 |
+| updatedAt | DATETIME | NOT NULL | 更新时间 |
+
+**外键**：
+- `conversationId` → `conversation(id)` ON DELETE CASCADE
+
+**索引 / 约束**：
+- `UNIQUE(conversationId)`
+- `idx_stage_conversationId`
+
+**Swift Record**：
+```swift
+struct StageRecord: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendable, Equatable {
+    static let databaseTableName = "stage"
+    var id: String
+    var conversationId: String
+    var title: String?
+    var directorMode: String
+    var isEnabled: Bool
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let conversation = belongsTo(ConversationRecord.self)
+    static let participants = hasMany(StageParticipantRecord.self)
+    static let instructions = hasMany(StageInstructionRecord.self)
+}
+```
+
+---
+
+### 6b. stage_participant — 舞台参与角色
+
+保存一个 Stage 中绑定的角色卡和本地显示名快照。当前 runtime 只把 `present + isActive` 的 participant 作为候选 speaker。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| stageId | TEXT | NOT NULL, FK → stage.id | 所属舞台 |
+| characterCardId | TEXT | NOT NULL, FK → character_card.id | 绑定角色卡 |
+| displayName | TEXT | NOT NULL | 舞台内显示名快照 |
+| visibility | TEXT | NOT NULL, DEFAULT 'present' | `present` / `hidden` |
+| isActive | BOOLEAN | NOT NULL, DEFAULT 1 | 是否可作为当前 speaker |
+| sortOrder | INTEGER | NOT NULL | 舞台内排序 |
+| createdAt | DATETIME | NOT NULL | 创建时间 |
+| updatedAt | DATETIME | NOT NULL | 更新时间 |
+
+**外键**：
+- `stageId` → `stage(id)` ON DELETE CASCADE
+- `characterCardId` → `character_card(id)` ON DELETE CASCADE
+
+**索引 / 约束**：
+- `UNIQUE(stageId, characterCardId)`
+- `idx_stage_participant_stageId(stageId, sortOrder)`
+- `idx_stage_participant_characterCardId`
+
+**Swift Record**：
+```swift
+struct StageParticipantRecord: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendable, Equatable {
+    static let databaseTableName = "stage_participant"
+    var id: String
+    var stageId: String
+    var characterCardId: String
+    var displayName: String
+    var visibility: String
+    var isActive: Bool
+    var sortOrder: Int
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let stage = belongsTo(StageRecord.self)
+    static let characterCard = belongsTo(CharacterCardRecord.self)
+}
+```
+
+---
+
+### 6c. stage_instruction — 舞台指令
+
+保存用户或未来 Director agent 产生的舞台级指令。当前用户导演输入会写入该表，且不写入普通 `message` history。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| stageId | TEXT | NOT NULL, FK → stage.id | 所属舞台 |
+| source | TEXT | NOT NULL, DEFAULT 'user' | `user` / `directorAgent` / `systemDefault` |
+| content | TEXT | NOT NULL | 指令正文 |
+| visibility | TEXT | NOT NULL, DEFAULT 'hiddenFromCharacters' | `hiddenFromCharacters` / `visibleToParticipants` / `debugOnly` |
+| createdAt | DATETIME | NOT NULL | 创建时间 |
+
+**外键**：
+- `stageId` → `stage(id)` ON DELETE CASCADE
+
+**索引**：
+- `idx_stage_instruction_stageId(stageId, createdAt)`
+
+**Swift Record**：
+```swift
+struct StageInstructionRecord: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendable, Equatable {
+    static let databaseTableName = "stage_instruction"
+    var id: String
+    var stageId: String
+    var source: String
+    var content: String
+    var visibility: String
+    var createdAt: Date
+
+    static let stage = belongsTo(StageRecord.self)
+}
+```
+
+---
+
+### 6d. conversation_compression_checkpoint — 会话压缩检查点
 
 存储 Codex 风格的持久化上下文压缩 checkpoint。checkpoint 不替换或删除原始 `message` 记录；prompt 侧读取最近有效 checkpoint，并拼接 checkpoint 后的真实 message history。
 
@@ -491,6 +624,11 @@ memory_entry 1 ──── 0..* memory_entry_link
 conversation 1 ──── 0..* memory_entry
 conversation 1 ──── 0..* message
 conversation 1 ──── 0..* conversation_compression_checkpoint
+conversation 1 ──── 0..1 stage
+stage 1 ──── 0..* stage_participant
+stage 1 ──── 0..* stage_instruction
+stage 1 ──── 0..* message
+character_card 1 ──── 0..* stage_participant
 ```
 
 关系说明：
@@ -503,12 +641,18 @@ conversation 1 ──── 0..* conversation_compression_checkpoint
 - 一条 `memory_entry` 可通过 `memory_entry_link` 指向其他 memory，保留 reflect observation 的 based-on 来源
 - 一个 `conversation` 包含多条 `message`
 - 一个 `conversation` 包含多条 `conversation_compression_checkpoint`，用于复用旧历史压缩摘要
+- 一个 `conversation` 最多包含一个 `stage`
+- 一个 `stage` 包含多个 `stage_participant` 和 `stage_instruction`
+- 一个 `stage` 可关联多条带 speaker metadata 的 `message`
 - 一个 `conversation` 可关联多条 `memory_entry`（记忆来源）
 - 删除 `conversation` 时级联删除其所有 `message`
 - 删除 `conversation` 时级联删除其所有 `conversation_compression_checkpoint`
+- 删除 `conversation` 时级联删除其 `stage`，并级联删除 stage participants / instructions
+- 删除 `stage` 时，关联 `message.stageId` 置 NULL，保留消息文本和 speaker 快照
 - 删除 `api_endpoint` 时，关联 `conversation_compression_checkpoint` 的 `endpointId` 置 NULL
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
 - 删除 `character_card` 时级联删除其所有 `memory_entry`
+- 删除 `character_card` 时级联删除对应 `stage_participant`
 - 删除 `memory_entry` 时级联删除以它为 from/to endpoint 的 `memory_entry_link`
 - 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
 - 删除 `api_endpoint` 时，级联删除其所有 `endpoint_model`
@@ -915,6 +1059,32 @@ migrator.registerMigration("v17_create_memory_entry_link") { db in
 - `OpenChat/Core/Memory/VectorStore.swift` 的 `insert(entry:embedding:links:)` 原子写 entry、embedding 和 links。
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 schema、索引和 from/to cascade。
 - `OpenChatTests/Core/DatabaseTests/DatabaseManagerMemoryTests.swift` 覆盖 link fetch/dedupe/invalid relation。
+
+### v18_create_stage_tables
+
+新增 Stage 最小运行时持久层。该迁移追加三张 Stage 表，并为 `message` 追加 speaker metadata 列；不修改 v1-v17。
+
+```swift
+migrator.registerMigration("v18_create_stage_tables") { db in
+    try db.create(table: Historical.stageTable) { ... }
+    try db.create(table: Historical.stageParticipantTable) { ... }
+    try db.create(table: Historical.stageInstructionTable) { ... }
+    try db.alter(table: Historical.messageTable) { t in
+        t.add(column: "stageId", .text)
+        t.add(column: "speakerKind", .text)
+        t.add(column: "speakerId", .text)
+        t.add(column: "speakerName", .text)
+    }
+}
+```
+
+实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` 追加 `v18_create_stage_tables`，使用 `Migrations.Historical` 本地常量。
+- `OpenChat/Core/Database/Records/StageRecord.swift`、`StageParticipantRecord.swift`、`StageInstructionRecord.swift` 定义 GRDB Record。
+- `OpenChat/Core/Database/Records/MessageRecord.swift` 追加 `stageId`、`speakerKind`、`speakerId`、`speakerName` 和 `speakerKindValue`。
+- `OpenChat/Core/Database/DatabaseManager+Stage.swift` 提供 `fetchStageContext`、`createStage`、`setStageDirectorMode`、participant add/remove 和 `saveStageInstruction`。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 stage tables、message speaker columns 和 conversation cascade。
 
 ---
 

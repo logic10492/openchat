@@ -40,7 +40,8 @@ struct CompressionStrategy: ContextStrategyProtocol {
             isCompressed: true,
             originalContent: olderMessages.map(\.content).joined(separator: "\n"),
             sortOrder: olderMessages.last?.sortOrder ?? 0,
-            createdAt: olderMessages.last?.createdAt ?? .now
+            createdAt: olderMessages.last?.createdAt ?? .now,
+            reasoningContent: nil
         )
         return [summaryMessage] + recentMessages
     }

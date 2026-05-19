@@ -1,12 +1,12 @@
 import Foundation
 
-enum DirectorMode: String, Codable, Sendable, CaseIterable {
+enum DirectorMode: String, Codable, Sendable, CaseIterable, Hashable {
     case silent
     case agent
     case userControlled
 }
 
-enum StageInputRole: String, Codable, Sendable, CaseIterable {
+enum StageInputRole: String, Codable, Sendable, CaseIterable, Hashable {
     case participant
     case director
 

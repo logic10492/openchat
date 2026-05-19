@@ -33,7 +33,8 @@ struct StreamingRenderSegmentationTests {
             isCompressed: false,
             originalContent: nil,
             sortOrder: 1,
-            createdAt: .now
+            createdAt: .now,
+            reasoningContent: nil
         )
         var item = MessageDisplayItem(record: record)
         let originalRevision = item.contentRenderRevision

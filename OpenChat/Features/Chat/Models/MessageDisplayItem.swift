@@ -13,6 +13,10 @@ struct MessageDisplayItem: Identifiable, Hashable {
     var createdAt: Date
     var sortOrder: Int
     var streamingStats: StreamingStats?
+    var stageId: String?
+    var speakerKind: MessageSpeakerKind?
+    var speakerId: String?
+    var speakerName: String?
 
     init(record: MessageRecord) {
         id = record.id
@@ -27,6 +31,10 @@ struct MessageDisplayItem: Identifiable, Hashable {
         createdAt = record.createdAt
         sortOrder = record.sortOrder
         streamingStats = nil
+        stageId = record.stageId
+        speakerKind = record.speakerKindValue
+        speakerId = record.speakerId
+        speakerName = record.speakerName
     }
 
     mutating func appendContentDelta(_ delta: String) {
@@ -41,11 +49,15 @@ struct MessageDisplayItem: Identifiable, Hashable {
             && lhs.contentRenderRevision == rhs.contentRenderRevision
             && lhs.reasoningContent == rhs.reasoningContent
             && lhs.streamingStats == rhs.streamingStats
+            && lhs.speakerName == rhs.speakerName
+            && lhs.speakerKind == rhs.speakerKind
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(contentRenderRevision)
         hasher.combine(reasoningContent)
+        hasher.combine(speakerName)
+        hasher.combine(speakerKind)
     }
 }

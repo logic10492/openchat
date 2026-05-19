@@ -1,6 +1,8 @@
 # Stage Prompt Flow
 
-> 状态：Stage prompt runtime 仍为目标架构；2026-05-19 已落地 Director Instructions 的纯 contract order helper，production `PromptAssembler` / Chat request shape 未改变。
+> 状态：Stage prompt 最小 runtime 已接入 production `PromptAssembler` / Chat request shape；Responses API Stage snapshot、LLM Director agent prompt 和多 speaker parser 仍未实现。
+
+2026-05-19 runtime closeout：`PromptAssembler.preview(...)` / `assemble(...)` 新增 `stageTurnPlan: StageTurnPlan?` 兼容参数。Stage enabled 时，`ChatViewModel+Support.generateResponse(...)` 会先执行 `DeterministicDirectorExecutor`，再把 `StageTurnPlan` 传入 Preview / Context / Assemble 链路。Stage blocks 保持现有四层 prompt 结构：Stage Identity 与 participants 属于 Stable Identity；Director Instructions 属于 Current-Turn Context，位于 BackgroundPacket 输出后、Current Turn 前。
 
 ## 1. 目标 Prompt 层次
 
@@ -15,7 +17,7 @@ Stage prompt 应在现有四层 prompt 基础上扩展，而不是完全推翻�
 5. Director Instructions：用户或导演 agent 的本轮舞台指令。
 6. Current Turn：用户输入 + 时间。
 
-2026-05-19 Director foundation 只新增 `StagePromptLayerPlan.defaultLayerOrder`，用测试锁定 `Director Instructions` 位于 `Current Background` 之后、`Current Turn` 之前。该 helper 不读取 DB、不生成 `ChatMessage`、不调用 `PromptAssembler.preview(...)` / `assemble(...)`，也不改变当前生产 API request body。
+2026-05-19 Director foundation 先新增 `StagePromptLayerPlan.defaultLayerOrder`，用测试锁定 `Director Instructions` 位于 `Current Background` 之后、`Current Turn` 之前。runtime closeout 随后把同一顺序落到 production `PromptAssembler`：`StageTurnPlan.stageIdentityPrompt` 和 `participantPrompt` 进入 stable identity messages；`directorInstructionPrompt` 进入 current-turn context messages。
 
 ## 2. Director 输入位置
 
@@ -24,6 +26,8 @@ Stage prompt 应在现有四层 prompt 基础上扩展，而不是完全推翻�
 - 输入进入 `Director Instructions`。
 - 不作为普通 user-to-character 台词。
 - 是否让角色“听见”该指令应是显式选项。
+
+当前实现：`StageInstruction.userDirected(...)` 默认 `visibility == hiddenFromCharacters`，但 prompt runtime 会把保存的 stage instructions 注入 `[Director Instructions]`，作为对模型的舞台控制信息；它不以普通 `user` history message 形式出现。后续如果需要“角色可见 / debug only / 完全隐藏”三种效果差异，需要在 prompt policy 中继续拆分 visibility semantics。
 
 Director agent 模式下：
 
@@ -92,4 +96,4 @@ Responses API 会把 system messages 合并到 `instructions`。Stage 的多层 
 - Background block 是否仍在 Current Turn 之前表达。
 - Director Instructions 是否不会被误当作普通用户台词。
 
-2026-05-19 closeout 只记录并测试了 layer-order contract；Responses API 下 Stage Identity / Director Instructions 的 request-shape snapshot 仍未实现，必须在真正接入 Stage prompt 时补充。
+2026-05-19 runtime closeout 已通过 Chat Completions request capture 覆盖 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 的生产 request shape。Responses API 下 Stage Identity / Director Instructions 的 folding snapshot 仍未实现，必须在启用 Stage + Responses 组合前补充。

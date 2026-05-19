@@ -1,7 +1,9 @@
 # Stage 系统
 
-> 状态：目标架构规划，尚未实现。
+> 状态：Stage / Director 最小运行时已落地；多 speaker 输出 parser、LLM Director agent、独立 Stage 列表页和 UI 自动化仍未实现。
 > 目标：把当前单角色 Chat 扩展为支持多角色共同参与的 Stage，同时引入可控的导演 agent。
+
+2026-05-19 closeout：Stage foundation 已追加 `stage`、`stage_participant`、`stage_instruction` 三张表和 `message` speaker metadata；`ChatViewModel` 已能在 Chat Settings 中启用 Stage、绑定多个角色、切换 DirectorMode，并在输入栏切换 participant / director。正常 participant 输入会经 `DeterministicDirectorExecutor -> DirectorController` 选择一个 active speaker，把 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 注入当前 `PromptAssembler` 主链路；director 输入保存为隐藏 stage instruction，不保存为普通 user message，也不触发 API 请求。
 
 Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍然是 persona；Stage 负责多角色参与、发言顺序、导演介入和舞台级状态管理。
 
@@ -35,25 +37,28 @@ Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍�
 | [prompt-flow.md](prompt-flow.md) | Stage 与 Background / PromptAssembler 的目标数据流 |
 | [migration-plan.md](migration-plan.md) | 从当前 Chat 迁移到 Stage 的阶段计划 |
 
-## 4. 目标数据流
+## 4. 当前最小数据流
 
 ```text
 User input
-  -> StageViewModel
+  -> ChatViewModel
   -> DirectorController
-       -> decide director mode behavior
-       -> optional stage instructions
-       -> speaker plan
+       -> deterministic speaker plan
+       -> optional hidden stage instruction
   -> BackgroundManager.prepare(...)
-  -> StagePromptAssembler
-       -> stage identity
-       -> character personas
+  -> PromptAssembler
+       -> [Stage]
+       -> [Stage Participants]
+       -> character persona
        -> background packet
        -> conversation history
+       -> [Director Instructions]
        -> current turn
   -> APIClient.streamMessage(...)
-  -> one or more staged assistant messages
+  -> one staged assistant message with speaker metadata
 ```
+
+当前仍只输出一个 assistant message；多角色连续输出、speaker block parser、schema repair 和多 message 拆分属于后续阶段。
 
 ## 5. 与 Background 的关系
 
@@ -65,3 +70,5 @@ Stage 负责“谁在场、谁发言、导演是否介入”。Background 负责
 - Background 不决定最终角色发言内容。
 - Director 可以给 BackgroundManager 提供 stage-level request，例如当前场景重点、参与角色、导演指令。
 - BackgroundWorker 仍无发言权。
+
+当前实现边界：Stage prompt 已接入 `BackgroundPacket` 后的 `PromptAssembler`，但还没有把 active participant / director instruction 作为 `BackgroundManager` source request 参数传入；背景检索仍沿用既有 Memory / WorldBook / BackgroundSource 规则。

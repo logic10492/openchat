@@ -12,6 +12,9 @@ enum Migrations {
         static let memoryEntryTable = "memory_entry"
         static let memoryEmbeddingTable = "memory_embedding"
         static let memoryEntryLinkTable = "memory_entry_link"
+        static let stageTable = "stage"
+        static let stageParticipantTable = "stage_participant"
+        static let stageInstructionTable = "stage_instruction"
         static let worldBookEntryEmbeddingTable = "world_book_entry_embedding"
         static let worldBookEntryEmbeddingMetaTable = "world_book_entry_embedding_meta"
         static let endpointModelTable = "endpoint_model"
@@ -24,6 +27,10 @@ enum Migrations {
         static let worldBookEntryBeforeHistory = "before_history"
         static let contextStrategyTruncation = "truncation"
         static let compressionModeStandard = "standard"
+        static let directorModeSilent = "silent"
+        static let stageParticipantVisibilityPresent = "present"
+        static let stageInstructionSourceUser = "user"
+        static let stageInstructionVisibilityHidden = "hiddenFromCharacters"
     }
 
     static func makeMigrator() -> DatabaseMigrator {
@@ -296,6 +303,77 @@ enum Migrations {
                 index: "idx_memory_entry_link_relation",
                 on: Historical.memoryEntryLinkTable,
                 columns: ["relation"]
+            )
+        }
+        migrator.registerMigration("v18_create_stage_tables") { db in
+            try db.create(table: Historical.stageTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("conversationId", .text).notNull()
+                    .references(Historical.conversationTable, onDelete: .cascade)
+                t.column("title", .text)
+                t.column("directorMode", .text).notNull().defaults(to: Historical.directorModeSilent)
+                t.column("isEnabled", .boolean).notNull().defaults(to: true)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.uniqueKey(["conversationId"])
+            }
+            try db.create(
+                index: "idx_stage_conversationId",
+                on: Historical.stageTable,
+                columns: ["conversationId"]
+            )
+
+            try db.create(table: Historical.stageParticipantTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("stageId", .text).notNull()
+                    .references(Historical.stageTable, onDelete: .cascade)
+                t.column("characterCardId", .text).notNull()
+                    .references(Historical.characterCardTable, onDelete: .cascade)
+                t.column("displayName", .text).notNull()
+                t.column("visibility", .text).notNull().defaults(to: Historical.stageParticipantVisibilityPresent)
+                t.column("isActive", .boolean).notNull().defaults(to: true)
+                t.column("sortOrder", .integer).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.uniqueKey(["stageId", "characterCardId"])
+            }
+            try db.create(
+                index: "idx_stage_participant_stageId",
+                on: Historical.stageParticipantTable,
+                columns: ["stageId", "sortOrder"]
+            )
+            try db.create(
+                index: "idx_stage_participant_characterCardId",
+                on: Historical.stageParticipantTable,
+                columns: ["characterCardId"]
+            )
+
+            try db.create(table: Historical.stageInstructionTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("stageId", .text).notNull()
+                    .references(Historical.stageTable, onDelete: .cascade)
+                t.column("source", .text).notNull().defaults(to: Historical.stageInstructionSourceUser)
+                t.column("content", .text).notNull()
+                t.column("visibility", .text).notNull().defaults(to: Historical.stageInstructionVisibilityHidden)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_stage_instruction_stageId",
+                on: Historical.stageInstructionTable,
+                columns: ["stageId", "createdAt"]
+            )
+
+            try db.alter(table: Historical.messageTable) { t in
+                t.add(column: "stageId", .text)
+                    .references(Historical.stageTable, onDelete: .setNull)
+                t.add(column: "speakerKind", .text)
+                t.add(column: "speakerId", .text)
+                t.add(column: "speakerName", .text)
+            }
+            try db.create(
+                index: "idx_message_stageId",
+                on: Historical.messageTable,
+                columns: ["stageId", "sortOrder"]
             )
         }
         return migrator

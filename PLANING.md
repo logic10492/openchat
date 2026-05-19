@@ -38,9 +38,10 @@ Memory Hindsight-lite repair
 - Phase 5 focused closeout：`MemoryReflectModelsTests`、`VectorStoreTests`、`DatabaseManagerMemoryTests`、`MigrationTests`、`AgentPolicyTests` 共 84 tests / 5 suites passed；`git diff --check` 和 `Localizable.xcstrings` JSON parse 通过。随后在 alternate simulator `id=F8D0D88B-71FD-471F-855A-B2B5D8267117` 跑 full suite，360 tests / 66 suites passed。
 - 当前工作区验证结果：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 通过 330 tests / 65 suites；`xcodebuild build` 通过；模拟器安装与 `fukujusou.openchat.com` 启动 smoke 通过。
 - 当前缺口：项目尚无独立 `OpenChatUITests` target；现有 E2E 只到 build/install/launch smoke，尚未自动点击用户路径。
-- 当前下一步建议进入 Director runtime / 多角色同场 / Stage；idle/background 自动 reflect 与 duplicate/conflict review policy 可作为后续 Memory 增量计划处理。
+- 当前工作区已落地 Director runtime / 多角色同场 / Stage foundation：Stage DB、participant binding、speaker metadata、Chat Settings Stage 入口、输入栏 participant/director 切换、deterministic DirectorController/Executor 和 Stage prompt 注入。
+- 当前下一步建议进入 Stage UI 自动化 baseline、Responses API Stage request-shape snapshot、LLM Director agent 或多 speaker output parser 的独立计划；idle/background 自动 reflect 与 duplicate/conflict review policy 可作为后续 Memory 增量计划处理。
 - LibMan 不属于主链路 RP 体验，优先级下调到 UI 自动化 baseline 之后。
-- Stage、Director runtime、多角色同场、LibMan 仍是后续阶段；Director contract foundation 已完成。
+- Stage foundation、Director deterministic runtime 和多角色同场单 speaker 输出已完成；LLM Director agent、多 speaker parser、独立 Stage 列表页、UI 自动化和 LibMan 仍是后续阶段。
 
 ```text
 WorldBook + Memory + Character State + Conversation State
@@ -204,18 +205,18 @@ LibMan 是素材构建 agent，不是聊天 agent。
 
 ## 7. Stage / 多角色舞台
 
-Stage 是 Chat 的目标扩展形态。
+Stage 是 Chat 的扩展形态；当前已在 Chat Settings 中提供最小入口。
 
 目标：
 
-- 一个 Stage 可以绑定多个角色卡。
-- 多个角色可以在同一场景中共同参与。
-- Stage 拥有 Director / 导演。
-- 导演有三种工作模式：
+- 已落地：一个 Stage 可以绑定多个角色卡。
+- 已落地：多个角色可以在同一场景中共同参与，当前一轮仍只选择一个 active speaker 输出。
+- 已落地：Stage 拥有 Director / 导演最小 deterministic controller。
+- 已落地：导演有三种工作模式：
   - `silent` / 闭嘴：导演不主动介入。
   - `agent` / agent 模式：导演后台调度场景、节奏、发言顺序和冲突提示。
   - `userControlled` / 用户接管模式：用户以导演身份直接发出舞台指令。
-- 不论当前模式如何，用户都可以临时以导演角色说话。
+- 已落地：不论当前模式如何，用户都可以临时以导演角色说话。
 
 边界：
 
@@ -223,6 +224,28 @@ Stage 是 Chat 的目标扩展形态。
 - 导演不替角色写最终台词。
 - 导演输出是 `DirectorPlan` / stage instructions，不是 assistant message。
 - 用户导演输入不应被保存为角色听到的普通台词，除非用户显式要求。
+
+当前实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` `v18_create_stage_tables`
+- `OpenChat/Core/Database/Records/StageRecord.swift`
+- `OpenChat/Core/Database/Records/StageParticipantRecord.swift`
+- `OpenChat/Core/Database/Records/StageInstructionRecord.swift`
+- `OpenChat/Core/Database/DatabaseManager+Stage.swift`
+- `OpenChat/Core/Stage/StageModels.swift`
+- `OpenChat/Core/Stage/DirectorController.swift`
+- `OpenChat/Core/Stage/DirectorExecutor.swift`
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift`
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`
+- `OpenChat/Features/Chat/Views/InputBarView.swift`
+- `OpenChat/Features/Chat/Views/ChatSettingsSheet.swift`
+
+仍未实现：
+
+- `agent` mode 仍未调用 LLM Director agent。
+- 多 speaker output parser 和一轮多 assistant message 拆分未实现。
+- Stage 没有独立列表页；当前入口在 Chat Settings。
+- Responses API 下 Stage system block folding snapshot 待补。
 
 参考文档：
 
@@ -266,7 +289,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ### Phase 0：规划固化（已完成）
 
 - 保持 `arch/modules/background/*` 为目标架构文档。
-- 当时明确 Background / LibMan / Stage 内容尚未实现；当前 Background 已完成 source tools、worker、packet 和 compatible prompt switch，Director contract foundation 已完成，LibMan / Stage / Director runtime 仍未实现。
+- 当时明确 Background / LibMan / Stage 内容尚未实现；当前 Background 已完成 source tools、worker、packet 和 compatible prompt switch，Stage foundation 与 Director deterministic runtime 已完成，LibMan、LLM Director agent 和多 speaker parser 仍未实现。
 - 后续修改源码前先更新对应计划或 issue。
 
 ### Phase 1：Memory Hindsight-lite repair（已完成）
@@ -331,36 +354,40 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ### Phase 6：Director / 导演模式
 
 - 已建立 `DirectorPlan` / director policy / stage instruction 的最小 contract。
+- 已建立 deterministic `DirectorController` / `DirectorExecutor` runtime。
 - 导演可以调度场景、节奏、发言顺序和冲突提示，但不替角色写最终台词。
 - 已支持 `silent`、`agent`、`userControlled` 三种导演模式的 raw value / Codable contract 与测试边界。
-- 用户导演输入已建模为 stage instruction contract；输入栏切换、持久化和端到端 history 隔离测试仍留到后续 Stage UI / persistence 阶段。
-- Director executor/controller、Stage DB/UI、多角色输出、DirectorPlan 注入当前 Chat 主链路均未实现。
+- 用户导演输入已建模并接入 UI：输入栏 Stage enabled 时可切换 participant / director；director input 写入 `stage_instruction`，不进入普通 message history。
+- `StageTurnPlan` 已注入当前 Chat / Prompt 主链路。
+- LLM Director agent、schema repair、timeout behavior、AgentCore executor wiring、多 speaker parser 仍未实现。
 - 计划包：`docs/superpowers/plans/2026-05-19-director-mode-foundation/README.md`。
 
 ### Phase 7：多角色同场基础
 
-- 定义 Stage participant / speaker / visibility / stage action 等基础 DTO。
-- Stage 可绑定多个角色卡，并保留每个角色的身份、世界书、关系和可见性边界。
+- 已定义 Stage participant / speaker / visibility 基础 DTO：`StageParticipantVisibility`、`MessageSpeakerKind`、`StageParticipant`、`StageContext`、`StageTurnPlan`。
+- Stage 可绑定多个角色卡，并保存每个 participant 的 displayName、visibility、isActive 和 sortOrder。
 - 第一阶段只选择本轮主 speaker，不做多角色连续输出。
-- 多角色同场必须在 Stage UI/数据结构正式落地前先完成 contract 与测试边界。
+- stage action 尚未设计；角色 persona 摘要仍只对 active speaker 走现有 `CharacterCardRecord`。
 
 ### Phase 8：Stage 基础落地
 
-- 新增 Stage / participant / director DTO。
-- 接入 Stage 数据模型和最小 UI 入口。
-- 建立导演模式和用户导演输入的测试边界。
+- 已新增 Stage / participant / director DTO。
+- 已接入 Stage 数据模型和最小 UI 入口：Chat Settings 可启用 Stage、切换 Director Mode、添加/移除 participant。
+- 已建立导演模式和用户导演输入的测试边界。
 
 ### Phase 9：用户导演输入
 
-- 输入栏支持“作为用户说话 / 作为导演说话”。
-- 导演输入进入 stage instruction。
-- 任意导演模式下用户都能临时接管。
+- 已落地：输入栏支持 participant / director。
+- 已落地：导演输入进入 `stage_instruction`。
+- 已落地：任意导演模式下用户都能临时接管。
+- 已覆盖：director input 不保存普通 user message，不触发 API 请求。
 
 ### Phase 10：多角色 Stage 输出
 
-- Stage 绑定多个角色。
-- Director/default policy 选择本轮主 speaker。
-- 第一阶段只输出一个角色回复，后续再扩展多角色连续输出。
+- 已落地：Stage 绑定多个角色。
+- 已落地：Director/default policy 选择本轮主 speaker。
+- 已落地：第一阶段只输出一个角色回复，并持久化 assistant speaker metadata。
+- 未落地：多角色连续输出、speaker block parser、解析失败 diagnostics 和多 message 拆分。
 
 ### Phase 11：UI 自动化 baseline
 
@@ -377,7 +404,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - 在 App 启动路径增加 `--ui-testing` / `--mock-api` 等启动参数，UI 测试模式下使用临时数据库、`InMemoryAPIKeyStore` 和可预测 seed data。
 - 增加 mock API seam，让 UI 测试中的发送消息流程返回固定 assistant response，不访问真实 OpenAI-compatible endpoint。
 - 第一批只覆盖最短关键路径：启动 -> 新建会话 -> 发送消息 -> mock assistant response 可见；设置页新增 endpoint；角色卡 / 世界书创建后可在 Chat 设置中选择。
-- Stage 基线落地后，补充 Stage 创建、导演模式切换、多角色 participant 选择等 UI smoke。
+- Stage foundation 已落地，下一步应补充 Stage 创建、导演模式切换、多角色 participant 选择、director input history 隔离等 UI smoke。
 - 第二批再覆盖破坏性操作与错误路径：重命名 / 删除会话、保存失败可见、endpoint 连接失败提示、memory extraction indicator 不阻塞发送。
 
 验收命令：
@@ -411,9 +438,9 @@ xcodebuild test \
 - UI testing mode、mock API seam、seed data、稳定 accessibility identifiers 尚未实现。
 - CharacterState / ConversationState source 尚未实现。
 - LibMan 尚未实现。
-- Stage 系统尚未实现。
-- Director contract foundation 已实现；Director agent runtime / 导演模式 Chat 接入尚未实现。
-- 多角色同场参与尚未实现。
+- Stage foundation 已实现；独立 Stage 列表页和 UI 自动化仍未实现。
+- Director contract foundation 与 deterministic runtime 已实现；LLM Director agent runtime 未实现。
+- 多角色同场参与与单 speaker 输出已实现；多 speaker 连续输出未实现。
 - idle/background 自动 reflect、duplicate 自动删除和冲突自动解决尚未实现。
 - Background diagnostics 已有 DTO / tests，尚未进入用户可见调试界面。
 - 本地化资源仍有缺口，需要补齐 `Localizable.xcstrings` 中缺失的 UI 文案 key。

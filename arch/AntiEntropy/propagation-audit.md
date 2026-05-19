@@ -1336,7 +1336,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 Whitespace check：`git diff --check` 通过。
 
-### 未完成边界
+### 当时未完成边界
+
+以下是 Director contract foundation closeout 当时的边界；其中 Stage runtime / DB / UI / prompt 接入已由下一节 `Stage Runtime Foundation 增量传播审计（2026-05-19）` 关闭，LLM Director agent、多 speaker parser、Responses Stage snapshot 和 XCUITest 仍保留为后续计划。
 
 - Director executor/controller/runtime 未实现。
 - Stage runtime、Stage DB schema、Stage persistence、Stage UI 未实现。
@@ -1347,3 +1349,97 @@ Whitespace check：`git diff --check` 通过。
 - Responses API Stage request-shape guarantees 未实现。
 - Exa / LibMan / web search 未接入。
 - 普通角色仍不是 AgentCore agent，也没有 tool call 权限。
+
+## Stage Runtime Foundation 增量传播审计（2026-05-19）
+
+范围：Stage DB schema、Director deterministic runtime、Chat/Prompt 主链路接入、Stage Chat UI、speaker metadata、director input history isolation、Stage arch / harness 写回。
+
+审计模式：窄范围增量审计。该轮把上一节未完成的 Stage runtime / DB / UI foundation 补齐，但仍不实现 LLM Director agent、多 speaker parser、Responses API Stage snapshot 或独立 Stage 列表页。
+
+### 静态传播面
+
+新增 production surface：
+
+- `OpenChat/Core/Database/DatabaseManager+Stage.swift`
+- `OpenChat/Core/Database/Records/StageRecord.swift`
+- `OpenChat/Core/Database/Records/StageParticipantRecord.swift`
+- `OpenChat/Core/Database/Records/StageInstructionRecord.swift`
+- `OpenChat/Core/Stage/StageModels.swift`
+- `OpenChat/Core/Stage/DirectorController.swift`
+- `OpenChat/Core/Stage/DirectorExecutor.swift`
+
+修改 production surface：
+
+- `OpenChat/Core/Database/Migrations.swift` 追加 `v18_create_stage_tables`。
+- `OpenChat/Core/Database/Records/ConversationRecord.swift` 追加 stage relation。
+- `OpenChat/Core/Database/Records/MessageRecord.swift` 追加 stage / speaker metadata。
+- `OpenChat/Core/PromptEngine/PromptAssembler.swift` 追加 `stageTurnPlan` 兼容参数和 Stage system blocks。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` 管理 Stage state、DirectorMode、participants 和 input role。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` 在 generateResponse 前执行 Director，并保存 speaker metadata。
+- `OpenChat/Features/Chat/Views/InputBarView.swift` 显示 participant / director segmented picker。
+- `OpenChat/Features/Chat/Views/ChatSettingsSheet.swift` 提供 Stage enable、DirectorMode、participants add/remove。
+- `OpenChat/Features/Chat/Views/MessageBubbleView.swift` 优先显示 speakerName。
+- `OpenChat/Resources/Localizable.xcstrings` 补齐新增 Stage UI key。
+
+测试传播面：
+
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`
+- `OpenChatTests/Core/StageTests/DirectorContractTests.swift`
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`
+- `OpenChatTests/Core/TestHelpers.swift`
+- `OpenChatTests/Features/ChatTests/StreamingRenderSegmentationTests.swift`
+
+### 行为传播结论
+
+主链路：
+
+```text
+ChatViewModel.sendMessage
+  -> participant input: generateResponse
+       -> DatabaseManager.fetchStageContext
+       -> DeterministicDirectorExecutor.execute
+       -> DirectorController.planTurn
+       -> BackgroundManager.prepare
+       -> PromptAssembler.preview(stageTurnPlan:)
+       -> ContextManager.prepareHistory
+       -> PromptAssembler.assemble(stageTurnPlan:)
+       -> APIClient.streamMessage
+       -> MessageRecord(stageId/speakerKind/speakerId/speakerName)
+  -> director input: saveDirectorInstruction
+       -> stage_instruction
+       -> no ordinary user message
+       -> no API request
+```
+
+结论：
+
+- Stage persistence 已通过 `stage` / `stage_participant` / `stage_instruction` 和 `message` speaker metadata 落地。
+- Stage UI 当前内嵌于 Chat Settings，不是独立 Stage management surface。
+- 多角色同场当前只决定一个 active speaker；不会让多个角色同轮连续输出。
+- Director runtime 当前 deterministic，不调用 LLM，也不复用 AgentCore executor。
+- `agent` DirectorMode 当前只是持久化 mode 值；行为仍走 deterministic controller。
+- Director input 作为 stage instruction 写库，不作为普通 `message.role == user` 进入历史。
+- Stage prompt 通过 `StageTurnPlan` 注入 `[Stage]`、`[Stage Participants]`、`[Director Instructions]`。
+- Background request 尚未消费 Stage participant / instruction 作为 source filter；Background 仍沿用当前 Memory / WorldBook candidate 规则。
+
+### 验证
+
+Focused Stage / migration / chat command：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/DirectorContractTests' '-only-testing:OpenChatTests/MigrationTests'
+```
+
+结果：68 tests / 3 suites passed，`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.19_20-41-58-+0800.xcresult`。
+
+最终 full-suite、`git diff --check` 和 `Localizable.xcstrings` JSON parse 结果见 `harness/2026.05.19/stage-runtime-foundation/evidence.txt`。
+
+### 未完成边界
+
+- LLM Director agent / AgentCore executor wiring 未实现。
+- `agent` mode 未生成 LLM `DirectorPlan`。
+- 多 speaker output parser、speaker block schema、parser diagnostics 和一轮多 assistant message 拆分未实现。
+- Responses API Stage request-shape folding snapshot 未实现。
+- Stage 创建/participant/director UI 尚无 XCUITest 自动化。
+- Stage participant / director instruction 尚未传入 `BackgroundManager` source request。
+- 角色仍不是 AgentCore agent，也没有 tool call 权限。
