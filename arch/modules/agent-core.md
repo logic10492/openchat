@@ -1,6 +1,6 @@
 # AgentCore 基座设计
 
-> 状态：AgentCore foundation 已落地并完成 closeout；BackgroundWorker / Director / LibMan runtime 仍未实现。
+> 状态：AgentCore foundation 已落地并完成 closeout；BackgroundWorker / BackgroundPacket / BackgroundManager 已作为第一个 consumer 落地；Director / LibMan runtime 仍未实现。
 > 目标：为 BackgroundWorker、Director、LibMan、reflect / state updater 等后台能力提供共享的任务执行、权限和诊断骨架，避免每个 agent/worker 各自重复实现运行时约束。
 
 AgentCore 是后续后台能力的基座，不是临时最小实现，也不是“把角色 agent 化”的入口。OpenChat 的对话角色仍是 persona；角色回复由主聊天模型根据角色卡、历史、Background 和当前输入生成。角色回复的展示适配不属于 AgentCore 范围。
@@ -29,16 +29,26 @@ AgentCore 是后续后台能力的基座，不是临时最小实现，也不是�
 - Full suite：303 tests / 58 suites passed。
 - `ruby scripts/generate_xcodeproj.rb` 已重新生成 Xcode project；AgentCore source/test 已进入 target，签名配置仍来自脚本中的既有值。
 
-本页只把 AgentCore foundation contract 记为已实现。BackgroundWorker、Director、LibMan、LLM executor、ToolBroker 和 Background runtime 仍保持未实现边界。
+本页把 AgentCore foundation contract 记为已实现，并记录 BackgroundWorker 作为第一个受限 consumer 已落地。Director、LibMan、LLM executor 和 ToolBroker 仍保持未实现边界。
 
 仍未实现：
 
 - `LLMAgentExecutor`
 - `ToolBroker` / `ToolExecutor`
-- `Core/Background`、`BackgroundWorker`、`BackgroundPacket`
 - Director runtime
 - LibMan runtime / Exa broker
 - reflect executor / relationship updater / conversation state tracker runtime
+
+已实现的 Background consumer：
+
+- `OpenChat/Core/Background/BackgroundPolicy.swift`
+- `OpenChat/Core/Background/BackgroundPacket.swift`
+- `OpenChat/Core/Background/BackgroundDiagnostics.swift`
+- `OpenChat/Core/Background/BackgroundWorker.swift`
+- `OpenChat/Core/Background/BackgroundManager.swift`
+- `OpenChat/Core/Background/BackgroundAssembler.swift`
+
+Background Worker / Prompt Switch Phase 5/6 closeout 已证明 deterministic worker、packet diagnostics、manager orchestration 和 Chat / Prompt packet-compatible switch；统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 仍为后续范围。
 
 ## 1. 核心原则
 
@@ -294,7 +304,7 @@ Core/AgentCore/
 
 1. 先稳定 AgentCore contract：identity、capability/policy、task/result、diagnostics、executor、tool/side-effect boundary。
 2. 先暴露 Memory / WorldBook 内部 read-only source tool：`MemoryRecallTool` 包装 `MemoryManager.recallMemories(...)`，`WorldBookRecallTool` 包装 `WorldBookSource.recallEntries(...)`。
-3. 再以 BackgroundWorker 作为第一个 AgentCore consumer，使用 deterministic executor 验证 policy 与 diagnostics；worker 只消费 `BackgroundCandidate`，不复制 Memory / WorldBook recall logic。
+3. BackgroundWorker 已作为第一个 AgentCore consumer 落地，使用 deterministic policy 验证权限与 diagnostics；worker 只消费 `BackgroundCandidate`，不复制 Memory / WorldBook recall logic。
 4. DirectorAgent 后续复用 AgentCore，但默认只输出 `DirectorPlan`。
 5. LibManAgent 后续复用 AgentCore，并显式打开 `webSearch` 与 `userVisibleDraft`。
 6. reflect / relationship updater 后续复用 AgentCore，并强制 provenance / based-on ids。

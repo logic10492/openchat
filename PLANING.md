@@ -266,7 +266,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 ### Phase 0：规划固化（已完成）
 
 - 保持 `arch/modules/background/*` 为目标架构文档。
-- 明确 Background / LibMan / Stage 内容尚未实现。
+- 当时明确 Background / LibMan / Stage 内容尚未实现；当前 Background 已完成 source tools、worker、packet 和 compatible prompt switch，LibMan / Stage / Director runtime 仍未实现。
 - 后续修改源码前先更新对应计划或 issue。
 
 ### Phase 1：Memory Hindsight-lite repair（已完成）
@@ -334,6 +334,7 @@ Hindsight-lite 不应替代 Background，而应成为 Background 的一部分：
 - 导演可以调度场景、节奏、发言顺序和冲突提示，但不替角色写最终台词。
 - 支持 `silent`、`agent`、`userControlled` 三种导演模式的 contract 与测试边界。
 - 用户导演输入不应被保存为角色听到的普通台词，除非用户显式要求。
+- 计划包：`docs/superpowers/plans/2026-05-19-director-mode-foundation/README.md`。
 
 ### Phase 7：多角色同场基础
 

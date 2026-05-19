@@ -24,6 +24,8 @@
 
 第一阶段不改变现有 Chat UI，只在架构层准备 DTO 和测试。
 
+2026-05-19 计划包入口：顶层路线 Phase 6 先拆出 Director / 导演模式 foundation，见 `docs/superpowers/plans/2026-05-19-director-mode-foundation/README.md`。该计划包只整理 `DirectorPlan`、`DirectorMode`、`StageInstruction`、mode policy 和 prompt boundary contract；不提前实现 Stage DB/UI 或多角色输出。
+
 ## Phase 2：用户导演输入
 
 目标：
