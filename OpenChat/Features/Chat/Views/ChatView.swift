@@ -136,28 +136,42 @@ struct ChatView: View {
                 }
             }
             .simultaneousGesture(scrollPauseGesture)
-            .onChange(of: viewModel.messages.map(\.id)) { _, newIDs in
-                guard let lastID = newIDs.last else { return }
-                proxy.scrollTo(lastID, anchor: .bottom)
+            .onChange(of: viewModel.messages.map(\.id)) { oldIDs, newIDs in
+                guard newIDs.count > oldIDs.count, let lastID = newIDs.last else { return }
+                if viewModel.isGenerating {
+                    guard shouldFollowStreaming else { return }
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                } else if oldIDs.isEmpty || viewModel.messages.last?.role == "user" {
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                }
+            }
+            .onChange(of: viewModel.isGenerating) { _, isGenerating in
+                if isGenerating {
+                    shouldFollowStreaming = true
+                    guard let lastID = viewModel.messages.last?.id else { return }
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                } else {
+                    shouldFollowStreaming = false
+                    cancelFollowResume()
+                }
             }
             .onChange(of: latestStreamingRevision) { _, _ in
-                guard shouldFollowStreaming, let last = viewModel.messages.last else { return }
+                guard viewModel.isGenerating, shouldFollowStreaming, let last = viewModel.messages.last else { return }
                 proxy.scrollTo(last.id, anchor: .bottom)
             }
             .onChange(of: followResumeGeneration) { _, _ in
-                guard shouldFollowStreaming, let last = viewModel.messages.last else { return }
+                guard viewModel.isGenerating, shouldFollowStreaming, let last = viewModel.messages.last else { return }
                 proxy.scrollTo(last.id, anchor: .bottom)
             }
             .onChange(of: isTouchingMessageList) { _, isTouching in
                 if isTouching {
-                    resumeFollowTask?.cancel()
-                } else {
+                    cancelFollowResume()
+                } else if viewModel.isGenerating {
                     scheduleFollowResume()
                 }
             }
             .onDisappear {
-                resumeFollowTask?.cancel()
-                resumeFollowTask = nil
+                cancelFollowResume()
             }
         }
     }
@@ -204,18 +218,34 @@ struct ChatView: View {
                 }
             }
             .onEnded { _ in
-                scheduleFollowResume()
+                if viewModel.isGenerating {
+                    scheduleFollowResume()
+                }
             }
     }
 
-    private func scheduleFollowResume() {
+    private func cancelFollowResume() {
         resumeFollowTask?.cancel()
+        resumeFollowTask = nil
+    }
+
+    private func scheduleFollowResume() {
+        guard viewModel.isGenerating else {
+            cancelFollowResume()
+            return
+        }
+        cancelFollowResume()
         resumeFollowTask = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             await MainActor.run {
+                guard viewModel.isGenerating else {
+                    resumeFollowTask = nil
+                    return
+                }
                 shouldFollowStreaming = true
                 followResumeGeneration &+= 1
+                resumeFollowTask = nil
             }
         }
     }
