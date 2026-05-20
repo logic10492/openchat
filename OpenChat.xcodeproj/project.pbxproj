@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -270,7 +270,7 @@
 		02C4F9A055704AD45CF96406 /* SideEffectPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SideEffectPolicy.swift; sourceTree = "<group>"; };
 		039BD5C4F7C7B588A69E9D82 /* WorldBookImportView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookImportView.swift; sourceTree = "<group>"; };
 		0618FB8D571E53394519E6C0 /* CharacterCardEditorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CharacterCardEditorView.swift; sourceTree = "<group>"; };
-		06CD9FC97C8DC53CD16B1680 /* Contents.json */ = {isa = PBXFileReference; includeInIndex = 1; path = Contents.json; sourceTree = "<group>"; };
+		06CD9FC97C8DC53CD16B1680 /* Contents.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = Contents.json; sourceTree = "<group>"; };
 		0B41A7DB233EC12A1BB77A00 /* WorldBookEmbeddingIndexer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookEmbeddingIndexer.swift; sourceTree = "<group>"; };
 		0BD2167ACBC96079E970F084 /* SettingsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		0C28092F7942A60E3FDE3207 /* OpenChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -279,7 +279,7 @@
 		0E0B2ABECC2D0824838EC1DE /* BackgroundSourceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackgroundSourceTests.swift; sourceTree = "<group>"; };
 		0EE6820B9146CBC3C0CB931F /* AgentDiagnosticsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentDiagnosticsTests.swift; sourceTree = "<group>"; };
 		0EEC252C23DA4B7D45F82ADE /* WorldBookError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookError.swift; sourceTree = "<group>"; };
-		0F30C0D529E1B6894B83606B /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		0F30C0D529E1B6894B83606B /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		1211871F0BCDCDEE249AD61D /* MemoryManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryManager.swift; sourceTree = "<group>"; };
 		1259E973DAD4573B74556FD8 /* MemoryEntryProvenanceRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryEntryProvenanceRecord.swift; sourceTree = "<group>"; };
 		134DF09C9333EFF04EE16505 /* StatsBarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatsBarView.swift; sourceTree = "<group>"; };
@@ -409,7 +409,7 @@
 		918E445987B712485197C425 /* WorldBookEmbeddingTextBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookEmbeddingTextBuilderTests.swift; sourceTree = "<group>"; };
 		9205AC49A0FB8E1FC9A78133 /* APIClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
 		927A7A3422E75C75DD0F608C /* DatabaseManager+Conversations.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "DatabaseManager+Conversations.swift"; sourceTree = "<group>"; };
-		9480A6BB5DBCDB8DB16F80C6 /* tokenizer.json */ = {isa = PBXFileReference; includeInIndex = 1; path = tokenizer.json; sourceTree = "<group>"; };
+		9480A6BB5DBCDB8DB16F80C6 /* tokenizer.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = tokenizer.json; sourceTree = "<group>"; };
 		94F7C1391DE93A1181CF1812 /* ThinkingFeatureTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThinkingFeatureTests.swift; sourceTree = "<group>"; };
 		968D5EF22AAE5842277D0CF5 /* MockURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
 		9717D6842764E41CB16DAEF3 /* PromptAssembler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptAssembler.swift; sourceTree = "<group>"; };
@@ -498,7 +498,7 @@
 		FB7862E2411BAD4BC6D4F1C6 /* EndpointModelRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EndpointModelRecord.swift; sourceTree = "<group>"; };
 		FD4D582E596344556BDE9C38 /* BackgroundWorker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackgroundWorker.swift; sourceTree = "<group>"; };
 		FD4F124A0A0532B58F78AF16 /* AgentDiagnostics.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentDiagnostics.swift; sourceTree = "<group>"; };
-		FD9B107B6C6A481896AE5277 /* MultilingualE5Small.mlpackage */ = {isa = PBXFileReference; includeInIndex = 1; path = MultilingualE5Small.mlpackage; sourceTree = "<group>"; };
+		FD9B107B6C6A481896AE5277 /* MultilingualE5Small.mlpackage */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.mlpackage; path = MultilingualE5Small.mlpackage; sourceTree = "<group>"; };
 		FE30639835896ED936758473 /* DirectorPlan.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DirectorPlan.swift; sourceTree = "<group>"; };
 		FED046D6E1F39ADC67A71793 /* PromptAssemblyModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptAssemblyModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -540,7 +540,6 @@
 				6E5FD0A4E59859EEE61B6174 /* WorldBookEditorViewModel.swift */,
 				54AFABE6E82E8D3A3266E920 /* WorldBookListViewModel.swift */,
 			);
-			name = ViewModels;
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
@@ -556,7 +555,6 @@
 				B1C35F1BEA5ED29ACDCCDDA6 /* WorldBookSource.swift */,
 				783D7FBC7FA0C9C4E380BE11 /* WorldBookVectorStore.swift */,
 			);
-			name = WorldBook;
 			path = WorldBook;
 			sourceTree = "<group>";
 		};
@@ -571,7 +569,6 @@
 				B3CF6D0C1737AEFFFD9AEB41 /* MemoryReflectModelsTests.swift */,
 				31761BC41C7833F4506AD0E0 /* VectorStoreTests.swift */,
 			);
-			name = MemoryTests;
 			path = MemoryTests;
 			sourceTree = "<group>";
 		};
@@ -581,7 +578,6 @@
 				1582043E1969E1D6F8964314 /* ViewModels */,
 				1E7891A77203FA4F54F9F808 /* Views */,
 			);
-			name = Settings;
 			path = Settings;
 			sourceTree = "<group>";
 		};
@@ -600,7 +596,6 @@
 				F0A894B12AF860938629B19A /* Migrations.swift */,
 				9F6BE87AA67D8254A2284F27 /* Records */,
 			);
-			name = Database;
 			path = Database;
 			sourceTree = "<group>";
 		};
@@ -611,7 +606,6 @@
 				8EE761F2194DE4436FE24EA2 /* ViewModels */,
 				7502D193EAEAD92AE0E3846B /* Views */,
 			);
-			name = Chat;
 			path = Chat;
 			sourceTree = "<group>";
 		};
@@ -622,7 +616,6 @@
 				BEE4D49F3EF0E1E4F39074B5 /* PromptAssemblerTests.swift */,
 				786EA1AA02EBE4F3055CB80C /* TokenCounterTests.swift */,
 			);
-			name = PromptEngineTests;
 			path = PromptEngineTests;
 			sourceTree = "<group>";
 		};
@@ -640,7 +633,6 @@
 				193C9426F66149AB13D480F0 /* APIEndpointEditorViewModel.swift */,
 				0BD2167ACBC96079E970F084 /* SettingsViewModel.swift */,
 			);
-			name = ViewModels;
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
@@ -649,7 +641,6 @@
 			children = (
 				A6F87672B26ABE224F88679C /* StageUITests.swift */,
 			);
-			name = OpenChatUITests;
 			path = OpenChatUITests;
 			sourceTree = "<group>";
 		};
@@ -661,7 +652,6 @@
 				F6EEBCCAC0C0B66E39932470 /* ModelParametersView.swift */,
 				223D2E00A10147943982E003 /* SettingsView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -670,7 +660,6 @@
 			children = (
 				B075778E768E600174DDB89D /* APIKeyStore.swift */,
 			);
-			name = Secrets;
 			path = Secrets;
 			sourceTree = "<group>";
 		};
@@ -679,7 +668,6 @@
 			children = (
 				6209A220767FE79C6DF4FFB8 /* CharacterCardField.swift */,
 			);
-			name = Models;
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -690,7 +678,6 @@
 				9DECE156278C50A930C8E1CC /* LoadingIndicator.swift */,
 				7AB52A6CF5F253D3D74A66E3 /* MarkdownTextView.swift */,
 			);
-			name = Components;
 			path = Components;
 			sourceTree = "<group>";
 		};
@@ -704,7 +691,6 @@
 				0C60CBE7CE24A6038709F191 /* BackgroundWorkerTests.swift */,
 				2B61C1B2CCAF4B11921D2F53 /* LibrarianDraftTaskTests.swift */,
 			);
-			name = BackgroundTests;
 			path = BackgroundTests;
 			sourceTree = "<group>";
 		};
@@ -715,7 +701,6 @@
 				77DF3207690A9F43CA1B5506 /* CharacterCardListViewModel.swift */,
 				EA69F3B2A63B0143ECB6775C /* MemoryListViewModel.swift */,
 			);
-			name = ViewModels;
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
@@ -725,7 +710,6 @@
 				C4BF0B7BBFCB48EA7DF3B0B5 /* ViewModels */,
 				E3517C64F70E873BF33915E9 /* Views */,
 			);
-			name = Conversation;
 			path = Conversation;
 			sourceTree = "<group>";
 		};
@@ -734,7 +718,6 @@
 			children = (
 				B39E9744E206495DF9409CCF /* StageManagementViewModelTests.swift */,
 			);
-			name = StageTests;
 			path = StageTests;
 			sourceTree = "<group>";
 		};
@@ -751,7 +734,6 @@
 				E232213CD99F48FF55EC9719 /* StageModels.swift */,
 				7AD7609DC9A73247C440D0A4 /* StageSpeakerBlockParser.swift */,
 			);
-			name = Stage;
 			path = Stage;
 			sourceTree = "<group>";
 		};
@@ -761,7 +743,6 @@
 				C7413C733DC4D1655F7D36D4 /* StageManagementView.swift */,
 				ED7F30514750D2163BF6D5A9 /* StageManagementViewModel.swift */,
 			);
-			name = Stage;
 			path = Stage;
 			sourceTree = "<group>";
 		};
@@ -770,7 +751,6 @@
 			children = (
 				06CD9FC97C8DC53CD16B1680 /* Contents.json */,
 			);
-			name = Assets.xcassets;
 			path = Assets.xcassets;
 			sourceTree = "<group>";
 		};
@@ -785,7 +765,6 @@
 				DEE076E7C34A80230221A988 /* TokenBudget.swift */,
 				44451DABB1E5EF557D0E987A /* TokenCounter.swift */,
 			);
-			name = PromptEngine;
 			path = PromptEngine;
 			sourceTree = "<group>";
 		};
@@ -796,7 +775,6 @@
 				0F30C0D529E1B6894B83606B /* Localizable.xcstrings */,
 				AE7BC41E57A653896BD51603 /* Models */,
 			);
-			name = Resources;
 			path = Resources;
 			sourceTree = "<group>";
 		};
@@ -810,7 +788,6 @@
 				D052D58F55CA0A0DB99F9A43 /* WorldBookSourceTests.swift */,
 				535FBE6E05AD290A57676A4F /* WorldBookVectorStoreTests.swift */,
 			);
-			name = WorldBookTests;
 			path = WorldBookTests;
 			sourceTree = "<group>";
 		};
@@ -826,7 +803,6 @@
 				8A7E6188FFBB957A37408981 /* PreparedHistoryTests.swift */,
 				4763138B0FD7E98C9FD84DCC /* TruncationStrategyTests.swift */,
 			);
-			name = ContextManagerTests;
 			path = ContextManagerTests;
 			sourceTree = "<group>";
 		};
@@ -838,7 +814,6 @@
 				33387AC24ECE9C930251B7D8 /* StageTests */,
 				F6917E24B446B15A50450096 /* WorldBookTests */,
 			);
-			name = Features;
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -848,7 +823,6 @@
 				40353DE879F12458762EF108 /* SidebarView.swift */,
 				EB4D8147C7CFF05CBD98888D /* WelcomeView.swift */,
 			);
-			name = Support;
 			path = Support;
 			sourceTree = "<group>";
 		};
@@ -859,7 +833,6 @@
 				E1C8DBE2CBCE4CF61D5E29C2 /* MessageDisplayItem.swift */,
 				BEA70F9B486AA6557DDF1936 /* StreamingStats.swift */,
 			);
-			name = Models;
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -875,7 +848,6 @@
 				419159E2344BD0D099F24690 /* RetrievalTraceView.swift */,
 				134DF09C9333EFF04EE16505 /* StatsBarView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -888,7 +860,6 @@
 				6AB14239FAB473F1620DDB6F /* DependencyContainer.swift */,
 				5F0F5FB767B709DF6BA8D9D6 /* UITestingSupport.swift */,
 			);
-			name = App;
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -900,7 +871,6 @@
 				039BD5C4F7C7B588A69E9D82 /* WorldBookImportView.swift */,
 				62E433DCFF7ACE4AFE6C2D0E /* WorldBookListView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -915,7 +885,6 @@
 				709AB90B981A682C8CCB6CF6 /* Support */,
 				FCD665A49EF1D70ADE57484D /* WorldBook */,
 			);
-			name = Features;
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -926,7 +895,6 @@
 				BE72EC9FC476C3B0188C389B /* String+Token.swift */,
 				904E33A230B34FCCB76CF8A4 /* View+Modifiers.swift */,
 			);
-			name = Extensions;
 			path = Extensions;
 			sourceTree = "<group>";
 		};
@@ -936,7 +904,6 @@
 				59FFCDB9D99ED92BC2E843AA /* ChatViewModel+Support.swift */,
 				276D53C4E0F91D5EFBDAA6A5 /* ChatViewModel.swift */,
 			);
-			name = ViewModels;
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
@@ -947,7 +914,6 @@
 				E515E18AF07BCF773C134104 /* Core */,
 				64F5C6AA9070881F7C5E0E2E /* Features */,
 			);
-			name = OpenChatTests;
 			path = OpenChatTests;
 			sourceTree = "<group>";
 		};
@@ -957,7 +923,6 @@
 				DC6E9D3B79283CFA2A5A6CBD /* APIEndpointEditorViewModelSecurityTests.swift */,
 				8D76DA7D54FC9AF5EFCFCB7E /* SettingsViewModelWorldBookIndexTests.swift */,
 			);
-			name = SettingsTests;
 			path = SettingsTests;
 			sourceTree = "<group>";
 		};
@@ -978,7 +943,6 @@
 				2EC526724B7F30155D157AD7 /* SSEStreamParser.swift */,
 				995B293024068705B703A2FF /* TitleGenerator.swift */,
 			);
-			name = Networking;
 			path = Networking;
 			sourceTree = "<group>";
 		};
@@ -997,7 +961,6 @@
 				8ADAEB89B63745E582B04A38 /* PreparedHistory.swift */,
 				F440EFA78CE24E6B5FAE9F76 /* TruncationStrategy.swift */,
 			);
-			name = ContextManager;
 			path = ContextManager;
 			sourceTree = "<group>";
 		};
@@ -1015,7 +978,6 @@
 				90715BCA345A38ED1E2CC34B /* VectorStore.swift */,
 				A54D5FC1589E6547305EC38F /* XLMRobertaTokenizer.swift */,
 			);
-			name = Memory;
 			path = Memory;
 			sourceTree = "<group>";
 		};
@@ -1038,7 +1000,6 @@
 				5DCD52861A709D0BD5EE96D5 /* WorldBookEntryRecord.swift */,
 				3C7087F3A36FAD214A4406A4 /* WorldBookRecord.swift */,
 			);
-			name = Records;
 			path = Records;
 			sourceTree = "<group>";
 		};
@@ -1047,7 +1008,6 @@
 			children = (
 				AB7CFF301BD50792C0479987 /* Identifiable+Extensions.swift */,
 			);
-			name = Protocols;
 			path = Protocols;
 			sourceTree = "<group>";
 		};
@@ -1058,7 +1018,6 @@
 				1D08C65D307DE834C755022D /* MemoryExtractionPhaseTests.swift */,
 				484862F6795AE797A24D2763 /* StreamingRenderSegmentationTests.swift */,
 			);
-			name = ChatTests;
 			path = ChatTests;
 			sourceTree = "<group>";
 		};
@@ -1073,7 +1032,6 @@
 				5DAF1D23C068865FA96F5686 /* Resources */,
 				F321E9D87ACAD6BF7E759F63 /* Shared */,
 			);
-			name = OpenChat;
 			path = OpenChat;
 			sourceTree = "<group>";
 		};
@@ -1083,7 +1041,6 @@
 				FD9B107B6C6A481896AE5277 /* MultilingualE5Small.mlpackage */,
 				9480A6BB5DBCDB8DB16F80C6 /* tokenizer.json */,
 			);
-			name = Models;
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -1094,7 +1051,6 @@
 				42EE50F370D8565DE242BB57 /* LLMDirectorExecutorTests.swift */,
 				9C9A001FF3F8410A90176F06 /* StageSpeakerBlockParserTests.swift */,
 			);
-			name = StageTests;
 			path = StageTests;
 			sourceTree = "<group>";
 		};
@@ -1114,7 +1070,6 @@
 				634C32906BECA18396C81158 /* MemoryBackgroundSource.swift */,
 				8D77F6153B5E11397907ED51 /* WorldBookBackgroundSource.swift */,
 			);
-			name = Background;
 			path = Background;
 			sourceTree = "<group>";
 		};
@@ -1123,7 +1078,6 @@
 			children = (
 				B1A3974C499A2D2834D3235D /* ConversationListViewModel.swift */,
 			);
-			name = ViewModels;
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
@@ -1141,7 +1095,6 @@
 				352864FFFEF1B965026771D8 /* Stage */,
 				01EA87B79057CD816E554DC2 /* WorldBook */,
 			);
-			name = Core;
 			path = Core;
 			sourceTree = "<group>";
 		};
@@ -1156,7 +1109,6 @@
 				94F7C1391DE93A1181CF1812 /* ThinkingFeatureTests.swift */,
 				45C0E1272257109278235747 /* TitleGeneratorTests.swift */,
 			);
-			name = NetworkingTests;
 			path = NetworkingTests;
 			sourceTree = "<group>";
 		};
@@ -1175,7 +1127,6 @@
 			children = (
 				42231F8FD23CBA7933F95640 /* WorldBookImportFormat.swift */,
 			);
-			name = Models;
 			path = Models;
 			sourceTree = "<group>";
 		};
@@ -1186,7 +1137,6 @@
 				30DF62DC146AB4B08DE863E9 /* ViewModels */,
 				E1266E40624485E9B0629399 /* Views */,
 			);
-			name = CharacterCard;
 			path = CharacterCard;
 			sourceTree = "<group>";
 		};
@@ -1198,7 +1148,6 @@
 				0CE1131EC3BBC95A6803B6B6 /* CharacterCardListView.swift */,
 				A6411EEEB07B82F4AC10CB8B /* MemoryListView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -1220,7 +1169,6 @@
 				02C4F9A055704AD45CF96406 /* SideEffectPolicy.swift */,
 				C14D8DD92705E20B90A23839 /* ToolUsePolicy.swift */,
 			);
-			name = AgentCore;
 			path = AgentCore;
 			sourceTree = "<group>";
 		};
@@ -1230,7 +1178,6 @@
 				4A845EA4A5859FEC9A32AD4C /* ConversationListView.swift */,
 				5FF2EABC1B9007B401010ECD /* ConversationRowView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -1263,7 +1210,6 @@
 				81528C24B5815436C2C82388 /* TestJSONFactory.swift */,
 				6102751410F92ADCA300B6FF /* WorldBookTests */,
 			);
-			name = Core;
 			path = Core;
 			sourceTree = "<group>";
 		};
@@ -1276,7 +1222,6 @@
 				5CB8FD3FDEFA2267CB667DA7 /* EndpointModelTests.swift */,
 				B51EF28FCDAF2A928BA5FB49 /* MigrationTests.swift */,
 			);
-			name = DatabaseTests;
 			path = DatabaseTests;
 			sourceTree = "<group>";
 		};
@@ -1285,7 +1230,6 @@
 			children = (
 				9EA0BD8029233B0409393193 /* CriticalSaveFlowTests.swift */,
 			);
-			name = ArchitectureTests;
 			path = ArchitectureTests;
 			sourceTree = "<group>";
 		};
@@ -1296,7 +1240,6 @@
 				8B8D317B18A74BD84F5C54F0 /* Extensions */,
 				A08FB70592B67CF17524E25E /* Protocols */,
 			);
-			name = Shared;
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -1305,7 +1248,6 @@
 			children = (
 				9ACA54B935402278B8F1948B /* WorldBookEditorViewModelTests.swift */,
 			);
-			name = WorldBookTests;
 			path = WorldBookTests;
 			sourceTree = "<group>";
 		};
@@ -1325,7 +1267,6 @@
 				2135957F80F9B2337CE71CAF /* AgentPolicyTests.swift */,
 				E2EE2394E87BFB42C7579B4D /* DeterministicAgentExecutorTests.swift */,
 			);
-			name = AgentCoreTests;
 			path = AgentCoreTests;
 			sourceTree = "<group>";
 		};
@@ -1336,7 +1277,6 @@
 				009622CB8432B30CEED4068A /* ViewModels */,
 				86BAE87E4945CF3306D946EF /* Views */,
 			);
-			name = WorldBook;
 			path = WorldBook;
 			sourceTree = "<group>";
 		};
@@ -1409,8 +1349,9 @@
 		DED4B14339484F87349A9787 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					6A59B820D2965BB6AEB119CE = {
 						CreatedOnToolsVersion = 26.4;
@@ -1432,14 +1373,13 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = E4E897CC3D41C32B8DF67904;
-			minimizedProjectReferenceProxies = 0;
 			packageReferences = (
 				DA06885E1705D66E0AA78F4A /* XCRemoteSwiftPackageReference "GRDB.swift" */,
-				1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "SqliteVec" */,
+				1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "Packages/SqliteVec" */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = D10CC90F26BA7177BC10E57C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1754,7 +1694,11 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@loader_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1770,6 +1714,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1800,9 +1746,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1821,6 +1769,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -1833,7 +1782,11 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@loader_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1866,7 +1819,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1884,7 +1840,11 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@loader_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1899,6 +1859,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1929,9 +1891,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1943,6 +1907,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -1955,7 +1920,11 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/Frameworks",
+					"@loader_path/../../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.openchat.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1987,7 +1956,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = fukujusou.openchat.com;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2041,7 +2013,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "SqliteVec" */ = {
+		1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "Packages/SqliteVec" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/SqliteVec;
 		};
@@ -2066,7 +2038,7 @@
 		};
 		56506F49FC9D9357A9AEE858 /* SqliteVec */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "SqliteVec" */;
+			package = 1723FC579759D7944B14A6AB /* XCLocalSwiftPackageReference "Packages/SqliteVec" */;
 			productName = SqliteVec;
 		};
 /* End XCSwiftPackageProductDependency section */
