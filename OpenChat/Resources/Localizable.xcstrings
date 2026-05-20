@@ -333,22 +333,6 @@
         }
       }
     },
-    "Collapse Director Tools" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Collapse Director Tools"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "折叠导演工具"
-          }
-        }
-      }
-    },
     "Chats" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -389,6 +373,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除对话、角色卡和世界书"
+          }
+        }
+      }
+    },
+    "Collapse Director Tools" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Collapse Director Tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折叠导演工具"
           }
         }
       }
@@ -654,6 +655,7 @@
       }
     },
     "Director Tools" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1000,54 +1002,6 @@
         }
       }
     },
-    "Move responder down" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Move responder down"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下移回应角色"
-          }
-        }
-      }
-    },
-    "Move responder up" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Move responder up"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上移回应角色"
-          }
-        }
-      }
-    },
-    "No active stage participants" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No active stage participants"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有在场角色"
-          }
-        }
-      }
-    },
     "Missing keywords, title used as fallback." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1088,6 +1042,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模型名称"
+          }
+        }
+      }
+    },
+    "Move responder down" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move responder down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下移回应角色"
+          }
+        }
+      }
+    },
+    "Move responder up" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move responder up"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上移回应角色"
           }
         }
       }
@@ -1154,6 +1142,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新世界书"
+          }
+        }
+      }
+    },
+    "No active stage participants" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No active stage participants"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有在场角色"
           }
         }
       }
@@ -1264,6 +1269,7 @@
       }
     },
     "Order %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1445,10 +1451,8 @@
         }
       }
     },
-    "Responses" : {
-
-    },
     "Response Order" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1463,6 +1467,9 @@
           }
         }
       }
+    },
+    "Responses" : {
+
     },
     "Restore Defaults" : {
       "extractionState" : "stale",
