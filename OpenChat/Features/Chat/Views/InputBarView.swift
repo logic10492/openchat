@@ -19,11 +19,14 @@ struct InputBarView: View {
                 Picker(String(localized: "Input Role"), selection: $inputRole) {
                     Label(String(localized: "Participant"), systemImage: "person.fill")
                         .tag(StageInputRole.participant)
+                        .accessibilityIdentifier("chat.inputRole.participant")
                     Label(String(localized: "Director"), systemImage: "theatermasks.fill")
                         .tag(StageInputRole.director)
+                        .accessibilityIdentifier("chat.inputRole.director")
                 }
                 .pickerStyle(.segmented)
                 .accessibilityLabel(String(localized: "Input Role"))
+                .accessibilityIdentifier("chat.inputRolePicker")
             }
 
             HStack(alignment: .bottom, spacing: 0) {
@@ -32,6 +35,7 @@ struct InputBarView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .focused($isFocused)
+                    .accessibilityIdentifier("chat.inputText")
 
                 sendButton
                     .padding(.trailing, 8)
@@ -82,6 +86,7 @@ struct InputBarView: View {
             }
             .disabled(!canSend)
             .accessibilityLabel(String(localized: "Send message"))
+            .accessibilityIdentifier("chat.sendButton")
         }
     }
 

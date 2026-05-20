@@ -46,14 +46,25 @@ extension ChatViewModel {
     ) async throws {
         let endpoint = try await resolveEndpointConfig()
         let stageContext = try await databaseManager.fetchStageContext(conversationId: conversation.id)
-        let stageTurnPlan = try stageContext.map {
-            try directorExecutor.execute(
-                DirectorRuntimeInput(
-                    stageContext: $0,
-                    inputRole: stageInputRole,
-                    currentInput: prompt
-                )
+        let stageTurnPlan: StageTurnPlan?
+        if let stageContext {
+            let input = DirectorRuntimeInput(
+                stageContext: stageContext,
+                inputRole: stageInputRole,
+                currentInput: prompt
             )
+            if stageContext.stage.directorModeValue == .agent {
+                stageTurnPlan = try await LLMDirectorExecutor(
+                    agentExecutor: directorAgentExecutor,
+                    apiClient: apiClient,
+                    endpoint: endpoint,
+                    parameters: currentParameters
+                ).execute(input)
+            } else {
+                stageTurnPlan = try await directorExecutor.execute(input)
+            }
+        } else {
+            stageTurnPlan = nil
         }
         let activeSpeakerCardId = stageTurnPlan?.participant?.characterCardId
         let resolvedCharacterCardId = activeSpeakerCardId ?? selectedCharacterCardID ?? conversation.characterCardId
@@ -295,23 +306,12 @@ extension ChatViewModel {
 
                 let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
                 let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
-                var completed = MessageRecord(
-                    id: assistantRecord.id,
-                    conversationId: assistantRecord.conversationId,
-                    role: assistantRecord.role,
+                let completedRecords = try await persistCompletedAssistantMessages(
+                    assistantRecord: assistantRecord,
                     content: finalContent,
-                    tokenCount: TokenCounter.count(finalContent),
-                    isCompressed: assistantRecord.isCompressed,
-                    originalContent: assistantRecord.originalContent,
-                    sortOrder: assistantRecord.sortOrder,
-                    createdAt: assistantRecord.createdAt,
-                    reasoningContent: finalReasoning
+                    reasoningContent: finalReasoning,
+                    stageTurnPlan: stageTurnPlan
                 )
-                completed.stageId = assistantRecord.stageId
-                completed.speakerKind = assistantRecord.speakerKind
-                completed.speakerId = assistantRecord.speakerId
-                completed.speakerName = assistantRecord.speakerName
-                try await databaseManager.saveMessage(completed)
 
                 // Compute streaming stats
                 let elapsed = ContinuousClock.now - streamStart
@@ -332,7 +332,9 @@ extension ChatViewModel {
                     contextRemainingPercent: remainingPercent,
                     totalBudget: capturedTokenUsage.totalBudget
                 )
-                setAssistantStats(stats, messageID: assistantRecord.id)
+                if let first = completedRecords.first {
+                    setAssistantStats(stats, messageID: first.id)
+                }
 
                 // Keep the local record aligned with extraction boundary updates.
                 if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
@@ -373,6 +375,85 @@ extension ChatViewModel {
     private func setAssistantStats(_ stats: StreamingStats, messageID: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
         messages[index].streamingStats = stats
+    }
+
+    private func persistCompletedAssistantMessages(
+        assistantRecord: MessageRecord,
+        content: String,
+        reasoningContent: String?,
+        stageTurnPlan: StageTurnPlan?
+    ) async throws -> [MessageRecord] {
+        let parser = StageSpeakerBlockParser()
+        let blocks = stageTurnPlan.map {
+            parser.parse(content, participants: $0.participants)
+        } ?? []
+        guard blocks.count > 1 else {
+            var completed = MessageRecord(
+                id: assistantRecord.id,
+                conversationId: assistantRecord.conversationId,
+                role: assistantRecord.role,
+                content: blocks.first?.content ?? content,
+                tokenCount: TokenCounter.count(blocks.first?.content ?? content),
+                isCompressed: assistantRecord.isCompressed,
+                originalContent: assistantRecord.originalContent,
+                sortOrder: assistantRecord.sortOrder,
+                createdAt: assistantRecord.createdAt,
+                reasoningContent: reasoningContent
+            )
+            if let participant = blocks.first?.participant {
+                completed.stageId = assistantRecord.stageId
+                completed.speakerKind = MessageSpeakerKind.participant.rawValue
+                completed.speakerId = participant.id
+                completed.speakerName = participant.displayName
+            } else {
+                completed.stageId = assistantRecord.stageId
+                completed.speakerKind = assistantRecord.speakerKind
+                completed.speakerId = assistantRecord.speakerId
+                completed.speakerName = assistantRecord.speakerName
+            }
+            replaceDisplayMessage(id: assistantRecord.id, with: completed)
+            try await databaseManager.saveMessage(completed)
+            return [completed]
+        }
+
+        var records: [MessageRecord] = []
+        for (offset, block) in blocks.enumerated() {
+            var record = MessageRecord(
+                id: offset == 0 ? assistantRecord.id : UUID().uuidString,
+                conversationId: assistantRecord.conversationId,
+                role: assistantRecord.role,
+                content: block.content,
+                tokenCount: TokenCounter.count(block.content),
+                isCompressed: assistantRecord.isCompressed,
+                originalContent: nil,
+                sortOrder: assistantRecord.sortOrder + offset,
+                createdAt: offset == 0 ? assistantRecord.createdAt : Date(),
+                reasoningContent: offset == 0 ? reasoningContent : nil
+            )
+            record.stageId = assistantRecord.stageId
+            record.speakerKind = MessageSpeakerKind.participant.rawValue
+            record.speakerId = block.participant.id
+            record.speakerName = block.participant.displayName
+            records.append(record)
+        }
+
+        messages.removeAll { $0.id == assistantRecord.id }
+        messages.append(contentsOf: records.map(MessageDisplayItem.init(record:)))
+        messages.sort { $0.sortOrder < $1.sortOrder }
+        for record in records {
+            try await databaseManager.saveMessage(record)
+        }
+        return records
+    }
+
+    private func replaceDisplayMessage(id: String, with record: MessageRecord) {
+        let item = MessageDisplayItem(record: record)
+        if let index = messages.firstIndex(where: { $0.id == id }) {
+            messages[index] = item
+        } else {
+            messages.append(item)
+            messages.sort { $0.sortOrder < $1.sortOrder }
+        }
     }
 
     private func shouldExtractMemories(for conversation: ConversationRecord) async throws -> Bool {

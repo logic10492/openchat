@@ -1,7 +1,47 @@
 import Foundation
 import GRDB
 
+struct StageListItem: Identifiable, Sendable {
+    let stage: StageRecord
+    let conversation: ConversationRecord
+    let participants: [StageParticipantRecord]
+    let instructions: [StageInstructionRecord]
+
+    var id: String { stage.id }
+}
+
 extension DatabaseManager {
+    func fetchStageListItems() async throws -> [StageListItem] {
+        try await read { db in
+            let stages = try StageRecord
+                .order(Column("updatedAt").desc)
+                .fetchAll(db)
+            var items: [StageListItem] = []
+            for stage in stages {
+                guard let conversation = try ConversationRecord.fetchOne(db, key: stage.conversationId) else {
+                    continue
+                }
+                let participants = try StageParticipantRecord
+                    .filter(Column("stageId") == stage.id)
+                    .order(Column("sortOrder").asc)
+                    .fetchAll(db)
+                let instructions = try StageInstructionRecord
+                    .filter(Column("stageId") == stage.id)
+                    .order(Column("createdAt").asc)
+                    .fetchAll(db)
+                items.append(
+                    StageListItem(
+                        stage: stage,
+                        conversation: conversation,
+                        participants: participants,
+                        instructions: instructions
+                    )
+                )
+            }
+            return items
+        }
+    }
+
     func fetchStage(conversationId: String) async throws -> StageRecord? {
         try await read { db in
             try StageRecord

@@ -7,7 +7,13 @@ struct OpenChatApp: App {
 
     init() {
         do {
-            _startupState = State(initialValue: .ready(try DependencyContainer.live()))
+            if UITestingSupport.isEnabled {
+                let testing = try UITestingSupport.makeContainer()
+                _startupState = State(initialValue: .ready(testing.0))
+                _appState = State(initialValue: testing.1)
+            } else {
+                _startupState = State(initialValue: .ready(try DependencyContainer.live()))
+            }
         } catch {
             _startupState = State(initialValue: .failed(error.localizedDescription))
         }

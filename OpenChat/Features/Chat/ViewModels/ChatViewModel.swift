@@ -16,7 +16,9 @@ final class ChatViewModel {
     let apiKeyStore: any APIKeyStore
     let appState: AppState
     @ObservationIgnored
-    let directorExecutor = DeterministicDirectorExecutor()
+    let directorExecutor: any DirectorExecuting
+    @ObservationIgnored
+    let directorAgentExecutor: any AgentExecutor
 
     var conversation: ConversationRecord
     var messages: [MessageDisplayItem] = []
@@ -98,6 +100,8 @@ final class ChatViewModel {
         backgroundManager: BackgroundManager? = nil,
         titleGenerator: TitleGenerator,
         apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
+        directorExecutor: any DirectorExecuting = DeterministicDirectorExecutor(),
+        directorAgentExecutor: any AgentExecutor = LLMAgentExecutor(),
         appState: AppState
     ) {
         self.conversation = conversation
@@ -110,6 +114,8 @@ final class ChatViewModel {
         self.backgroundManager = backgroundManager
         self.titleGenerator = titleGenerator
         self.apiKeyStore = apiKeyStore
+        self.directorExecutor = directorExecutor
+        self.directorAgentExecutor = directorAgentExecutor
         self.appState = appState
         selectedEndpointID = conversation.apiEndpointId
         selectedModelName = conversation.modelName

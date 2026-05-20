@@ -6,6 +6,7 @@ struct SidebarView: View {
     @State private var viewModel: ConversationListViewModel
     @State private var isShowingCharacters = false
     @State private var isShowingWorldBooks = false
+    @State private var isShowingStages = false
     @State private var renamingConversationID: String?
     @State private var renameText = ""
 
@@ -64,6 +65,16 @@ struct SidebarView: View {
                 )
             }
         }
+        .sheet(isPresented: $isShowingStages) {
+            NavigationStack {
+                StageManagementView(
+                    viewModel: StageManagementViewModel(
+                        databaseManager: container.databaseManager,
+                        appState: appState
+                    )
+                )
+            }
+        }
         .sheet(isPresented: settingsBinding) {
             NavigationStack {
                 SettingsView(
@@ -100,6 +111,7 @@ struct SidebarView: View {
             .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("sidebar.newChat")
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
@@ -124,6 +136,7 @@ struct SidebarView: View {
                         conversation: conversation,
                         isSelected: appState.selectedConversationID == conversation.id
                     )
+                    .accessibilityIdentifier("sidebar.conversation.\(conversation.id)")
                     .tag(conversation.id)
                     .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
                     .swipeActions(edge: .trailing) {
@@ -169,6 +182,13 @@ struct SidebarView: View {
             }
 
             sidebarActionButton(
+                title: String(localized: "Stages"),
+                systemImage: "theatermasks"
+            ) {
+                isShowingStages = true
+            }
+
+            sidebarActionButton(
                 title: String(localized: "Settings"),
                 systemImage: "gearshape"
             ) {
@@ -198,6 +218,7 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
+        .accessibilityIdentifier("sidebar.action.\(title)")
     }
 
     // MARK: - Bindings

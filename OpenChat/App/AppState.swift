@@ -8,6 +8,7 @@ final class AppState {
         case conversations
         case characters
         case worldBooks
+        case stages
     }
 
     var sidebarDestination: SidebarDestination = .conversations

@@ -34,6 +34,7 @@ struct MessageBubbleView: View {
         }
         .padding(.vertical, 4)
         .onHover { isHovering = $0 }
+        .accessibilityIdentifier("messageBubble.\(item.role).\(item.speakerName ?? roleName)")
     }
 
     // MARK: - Avatar
