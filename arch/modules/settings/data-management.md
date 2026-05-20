@@ -7,15 +7,26 @@
 - 导出所有应用数据
 - 从文件导入数据
 - 清除所有数据
+- 重建世界书语义索引：仅维护 `world_book_entry_embedding` / `world_book_entry_embedding_meta`，不得删除角色卡、世界书、世界书条目、对话或消息
 
 ## 2. 视图设计
 
 ```
-Section: 数据管理
+Section: 世界书语义索引
+  [重建世界书语义索引]  ← 非破坏性，只补建/刷新索引
+
+Section: 数据导出
   [导出所有数据]
   [导入数据]
+
+Section: 危险操作
   [清除所有数据]  ← 红色，二次确认
 ```
+
+实现证据：
+- `OpenChat/Features/Settings/Views/DataManagementView.swift`：索引维护、数据导出占位、危险操作拆成独立 `Section`；清除入口只打开 confirmation dialog。
+- `OpenChat/Features/Settings/ViewModels/SettingsViewModel.swift`：`rebuildWorldBookSemanticIndex()` 只调用 `WorldBookEmbeddingIndexer.rebuildAllMissingOrStale(limit: nil)`；`clearAllData()` 才调用 `DatabaseManager.eraseAllData()`。
+- `OpenChatTests/Features/SettingsTests/SettingsViewModelWorldBookIndexTests.swift`：覆盖手动 rebuild 会补建索引，并保持角色卡、世界书和世界书条目存在。
 
 ## 3. 导出格式
 
@@ -61,6 +72,8 @@ Section: 数据管理
 2. 清空所有数据库表
 3. 重置 UserDefaults 到默认值
 4. 不删除 API 端点配置（用户可能还需要）
+
+清除数据不得与“重建世界书语义索引”共用按钮、共用确认弹窗或共用同一 Form row。重建索引是可重复的维护操作；清除数据是不可逆危险操作。
 
 ## 7. 安全考虑
 

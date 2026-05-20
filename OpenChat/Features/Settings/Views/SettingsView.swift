@@ -71,9 +71,7 @@ struct SettingsView: View {
                 Toggle(String(localized: "Detailed Token Stats"), isOn: statsBinding)
             }
 
-            Section(String(localized: "Data")) {
-                DataManagementView(viewModel: viewModel)
-            }
+            DataManagementView(viewModel: viewModel)
         }
         .navigationTitle(String(localized: "Settings"))
         .task {

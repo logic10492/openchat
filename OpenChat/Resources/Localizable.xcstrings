@@ -321,6 +321,26 @@
         }
       }
     },
+    "Clear All Data?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除所有数据？"
+          }
+        }
+      }
+    },
+    "Clear Conversations, Characters, and World Books" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除对话、角色卡和世界书"
+          }
+        }
+      }
+    },
     "Rebuild World Book Semantic Index" : {
       "localizations" : {
         "zh-Hans" : {
@@ -530,6 +550,16 @@
         }
       }
     },
+    "Danger Zone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "危险操作"
+          }
+        }
+      }
+    },
     "Data" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -537,6 +567,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "数据"
+          }
+        }
+      }
+    },
+    "Data Export" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数据导出"
           }
         }
       }
@@ -1402,6 +1442,16 @@
         }
       }
     },
+    "World Book Semantic Index" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书语义索引"
+          }
+        }
+      }
+    },
     "World Books" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1659,6 +1709,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Summary"
+          }
+        }
+      }
+    },
+    "This will delete conversations, character cards, world books, world book entries, memories, and messages. API endpoints are kept. This action cannot be undone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将删除对话、角色卡、世界书、世界书条目、记忆和消息。API 端点会保留。此操作不可撤销。"
           }
         }
       }

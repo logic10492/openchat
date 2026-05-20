@@ -38,6 +38,34 @@ struct SettingsViewModelWorldBookIndexTests {
         #expect(try await fetchMeta(entryId: entry.id, in: manager)?.statusValue == .indexed)
     }
 
+    @Test func test_rebuild_world_book_semantic_index_preserves_content_records() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let worldBook = TestHelpers.makeWorldBook(id: "world-settings-preserve")
+        var character = TestHelpers.makeCharacterCard(id: "character-settings-preserve")
+        character.worldBookId = worldBook.id
+        let entry = TestHelpers.makeWorldBookEntry(
+            worldBookId: worldBook.id,
+            id: "entry-settings-preserve"
+        )
+        try await manager.saveWorldBook(worldBook)
+        try await manager.saveCharacterCard(character)
+        try await manager.saveWorldBookEntry(entry)
+        let viewModel = SettingsViewModel(
+            databaseManager: manager,
+            apiClient: APIClient(),
+            apiKeyStore: InMemoryAPIKeyStore(),
+            worldBookEmbeddingIndexer: makeIndexer(manager: manager),
+            appState: AppState()
+        )
+
+        await viewModel.rebuildWorldBookSemanticIndex()
+
+        #expect(try await manager.fetchCharacterCard(id: character.id)?.id == character.id)
+        #expect(try await manager.fetchWorldBook(id: worldBook.id)?.id == worldBook.id)
+        #expect(try await manager.fetchWorldBookEntries(worldBookId: worldBook.id).map(\.id) == [entry.id])
+        #expect(try await vectorRowCount(entryId: entry.id, in: manager) == 1)
+    }
+
     private func makeIndexer(manager: DatabaseManager) -> WorldBookEmbeddingIndexer {
         let store = WorldBookVectorStore(databaseManager: manager)
         return WorldBookEmbeddingIndexer(

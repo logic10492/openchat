@@ -2,9 +2,10 @@ import SwiftUI
 
 struct DataManagementView: View {
     @State var viewModel: SettingsViewModel
+    @State private var showClearDataConfirmation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        Section(String(localized: "World Book Semantic Index")) {
             Button {
                 Task { await viewModel.rebuildWorldBookSemanticIndex() }
             } label: {
@@ -22,14 +23,30 @@ struct DataManagementView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
 
-            Button(String(localized: "Clear Chats and Content"), role: .destructive) {
-                Task { await viewModel.clearAllData() }
-            }
-
+        Section(String(localized: "Data Export")) {
             Text(String(localized: "Export and import will be enabled after the full data snapshot pipeline is wired."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+
+        Section(String(localized: "Danger Zone")) {
+            Button(String(localized: "Clear Conversations, Characters, and World Books"), role: .destructive) {
+                showClearDataConfirmation = true
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Clear All Data?"),
+            isPresented: $showClearDataConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Clear Conversations, Characters, and World Books"), role: .destructive) {
+                Task { await viewModel.clearAllData() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "This will delete conversations, character cards, world books, world book entries, memories, and messages. API endpoints are kept. This action cannot be undone."))
         }
     }
 }

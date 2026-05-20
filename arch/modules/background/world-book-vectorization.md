@@ -52,7 +52,7 @@ world_book_entry_embedding_meta
 - `OpenChat/Core/WorldBook/WorldBookVectorStore.swift`：upsert/search/delete/deleteAll。
 - `OpenChat/Features/WorldBook/ViewModels/WorldBookEditorViewModel.swift`：save/import 后调用 indexer，index 失败保留 entry 并展示 warning。
 - `OpenChat/Core/Database/DatabaseManager+Content.swift` / `DatabaseManager.swift`：delete entry、delete worldBook、eraseAllData 显式清理 vector/meta。
-- `OpenChat/Features/Settings/ViewModels/SettingsViewModel.swift` / `DataManagementView.swift`：Data Management 手动 rebuild 世界书语义索引。
+- `OpenChat/Features/Settings/ViewModels/SettingsViewModel.swift` / `DataManagementView.swift`：Data Management 手动 rebuild 世界书语义索引；该入口独立于清除数据危险操作，rebuild 不删除角色卡、世界书、世界书条目、对话或消息。
 - `OpenChat/App/DependencyContainer.swift`：Memory 与 WorldBook 共用同一 `EmbeddingService` 实例。
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift`：v15/v16 schema、索引、cascade 和 migration 源码约束。
 - `OpenChatTests/Core/WorldBookTests/WorldBookEmbeddingTextBuilderTests.swift`、`WorldBookEntryHasherTests.swift`、`WorldBookEmbeddingIndexerTests.swift`：Phase B text/hash/indexer/backfill 行为。
