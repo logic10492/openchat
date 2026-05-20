@@ -39,7 +39,7 @@
 
 目标：
 
-- 已落地：输入栏在 Stage enabled 时支持 participant / director segmented picker。
+- 已落地：输入栏在 Stage enabled 时提供导演工具按钮；点击后输入区纵向展开可折叠 responder 面板，可选择谁回应并调整顺序。
 - 已落地：导演输入进入 `stage_instruction`，不作为角色台词。
 - 已落地：任意 DirectorMode 下用户都可以临时选择 `.director` 输入。
 

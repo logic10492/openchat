@@ -41,6 +41,8 @@ final class ChatViewModel {
 
     var inputText = ""
     var stageInputRole: StageInputRole = .participant
+    var stageResponderIds: [String] = []
+    private var isStageResponderSelectionCustomized = false
     var selectedEndpointID: String?
     var selectedModelName: String?
     var selectedCharacterCardID: String?
@@ -87,11 +89,13 @@ final class ChatViewModel {
     }
 
     var activeStageSpeakerName: String? {
+        activeStageParticipants.first?.displayName
+    }
+
+    var activeStageParticipants: [StageParticipantRecord] {
         stageParticipants
             .filter { $0.isActive && $0.visibilityValue == .present }
             .sorted { $0.sortOrder < $1.sortOrder }
-            .first?
-            .displayName
     }
 
     @ObservationIgnored
@@ -178,14 +182,49 @@ final class ChatViewModel {
                 stage = context.stage
                 stageParticipants = context.participants
                 stageInstructions = context.instructions
+                syncStageResponderSelection()
             } else {
                 stage = nil
                 stageParticipants = []
                 stageInstructions = []
+                stageResponderIds = []
             }
         } catch {
             appState.present(error: error.localizedDescription)
         }
+    }
+
+    func resolveStageResponders(from activeParticipants: [StageParticipantRecord]) -> [StageParticipantRecord] {
+        let resolvedIds = normalizedStageResponderIds(for: activeParticipants)
+        if stageResponderIds != resolvedIds {
+            stageResponderIds = resolvedIds
+        }
+        return resolvedIds.compactMap { id in
+            activeParticipants.first { $0.id == id }
+        }
+    }
+
+    private func normalizedStageResponderIds(for activeParticipants: [StageParticipantRecord]) -> [String] {
+        let activeIds = Set(activeParticipants.map(\.id))
+        var seen = Set<String>()
+        let selected = stageResponderIds.filter { id in
+            activeIds.contains(id) && seen.insert(id).inserted
+        }
+        if isStageResponderSelectionCustomized, !selected.isEmpty {
+            return selected
+        }
+        if isStageResponderSelectionCustomized {
+            isStageResponderSelectionCustomized = false
+        }
+        return Array(activeParticipants.prefix(2).map(\.id))
+    }
+
+    private func syncStageResponderSelection() {
+        stageResponderIds = normalizedStageResponderIds(for: activeStageParticipants)
+    }
+
+    func markStageResponderSelectionCustomized() {
+        isStageResponderSelectionCustomized = true
     }
 
     func loadModelsForEndpoint() async {

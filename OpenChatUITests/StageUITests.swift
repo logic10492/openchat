@@ -63,26 +63,32 @@ final class StageUITests: XCTestCase {
 
         app.buttons["chatSettings.doneButton"].tap()
 
-        let rolePicker = app.descendants(matching: .any)["chat.inputRolePicker"]
-        XCTAssertTrue(rolePicker.waitForExistence(timeout: 5))
-        tapRole("chat.inputRole.director", labels: ["Director", "导演"], rolePicker: rolePicker, app: app)
+        let directorTools = app.buttons["chat.directorToolsButton"]
+        XCTAssertTrue(directorTools.waitForExistence(timeout: 5))
+        directorTools.tap()
+
+        let directorPanel = app.descendants(matching: .any)["chat.directorToolsPanel"]
+        XCTAssertTrue(directorPanel.waitForExistence(timeout: 5))
+        let maraResponder = app.descendants(matching: .any)["chat.directorResponder.Mara"]
+        XCTAssertTrue(maraResponder.waitForExistence(timeout: 5))
+        maraResponder.tap()
+        let ioResponder = app.descendants(matching: .any)["chat.directorResponder.Io"]
+        XCTAssertTrue(ioResponder.waitForExistence(timeout: 5))
+
+        let collapse = app.buttons["chat.directorToolsCollapse"]
+        XCTAssertTrue(collapse.waitForExistence(timeout: 5))
+        collapse.tap()
+        XCTAssertFalse(directorPanel.waitForExistence(timeout: 1))
 
         let input = app.textFields["chat.inputText"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
-        input.tap()
-        input.typeText("Keep Io quiet.")
-        app.buttons["chat.sendButton"].tap()
-
-        XCTAssertFalse(app.staticTexts["Keep Io quiet."].waitForExistence(timeout: 1))
-
-        tapRole("chat.inputRole.participant", labels: ["Participant", "参与者"], rolePicker: rolePicker, app: app)
         input.tap()
         input.typeText("Mara, answer first.")
         app.buttons["chat.sendButton"].tap()
 
         XCTAssertTrue(app.staticTexts["Mara, answer first."].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["UI stage reply"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Mara"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Io"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -99,36 +105,6 @@ final class StageUITests: XCTestCase {
         }
         attachHierarchy(app: app, name: "missing-option-\(title)")
         XCTFail("Missing option \(title)")
-    }
-
-    @MainActor
-    private func tapRole(
-        _ identifier: String,
-        labels: [String],
-        rolePicker: XCUIElement,
-        app: XCUIApplication
-    ) {
-        let identified = app.buttons[identifier]
-        if identified.waitForExistence(timeout: 1) {
-            identified.tap()
-            return
-        }
-        for label in labels {
-            let button = rolePicker.buttons[label]
-            if button.waitForExistence(timeout: 1) {
-                button.tap()
-                return
-            }
-        }
-        for label in labels {
-            let button = app.buttons[label]
-            if button.waitForExistence(timeout: 1) {
-                button.tap()
-                return
-            }
-        }
-        attachHierarchy(app: app, name: "missing-role-\(identifier)")
-        XCTFail("Missing input role \(identifier)")
     }
 
     @MainActor

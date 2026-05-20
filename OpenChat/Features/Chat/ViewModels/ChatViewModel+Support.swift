@@ -125,6 +125,20 @@ extension ChatViewModel {
             prompt: prompt,
             persistedUserMessage: userMessageRecord
         )
+        if let stageContext {
+            let stageSpeakers = resolveStageResponders(from: stageContext.activeParticipants)
+            if !stageSpeakers.isEmpty {
+                try await generateStageResponses(
+                    prompt: prompt,
+                    endpoint: endpoint,
+                    stageTurnPlan: stageTurnPlan,
+                    speakers: stageSpeakers,
+                    promptHistoryMessages: promptHistoryMessages,
+                    userMessageRecord: userMessageRecord
+                )
+                return
+            }
+        }
 
         let preview: PromptAssemblyPreview
         let assembly: AssemblyResult
@@ -380,6 +394,302 @@ extension ChatViewModel {
         messages[index].streamingStats = stats
     }
 
+    private func generateStageResponses(
+        prompt: String,
+        endpoint: APIEndpointConfig,
+        stageTurnPlan: StageTurnPlan?,
+        speakers: [StageParticipantRecord],
+        promptHistoryMessages: [MessageRecord],
+        userMessageRecord: MessageRecord?
+    ) async throws {
+        var baseSortOrder = if let userMessageRecord {
+            userMessageRecord.sortOrder + 1
+        } else {
+            try await databaseManager.nextSortOrder(conversationId: conversation.id)
+        }
+
+        isGenerating = true
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            var generatedRecords: [MessageRecord] = []
+            defer {
+                isGenerating = false
+                streamTask = nil
+            }
+
+            do {
+                for speaker in speakers {
+                    let characterCard = try await databaseManager.fetchCharacterCard(id: speaker.characterCardId)
+                    let historyMessages = promptHistoryMessages + generatedRecords
+                    let assembly = try await prepareAssembly(
+                        prompt: prompt,
+                        endpoint: endpoint,
+                        characterCard: characterCard,
+                        stageTurnPlan: stageTurnPlan?.forSpeaker(speaker),
+                        promptHistoryMessages: historyMessages
+                    )
+                    tokenUsage = assembly.tokenUsage
+
+                    var assistantRecord = MessageRecord(
+                        id: UUID().uuidString,
+                        conversationId: conversation.id,
+                        role: "assistant",
+                        content: "",
+                        tokenCount: nil,
+                        isCompressed: false,
+                        originalContent: nil,
+                        sortOrder: baseSortOrder,
+                        createdAt: .now,
+                        reasoningContent: nil
+                    )
+                    assistantRecord.stageId = stageTurnPlan?.stage.id
+                    assistantRecord.speakerKind = MessageSpeakerKind.participant.rawValue
+                    assistantRecord.speakerId = speaker.id
+                    assistantRecord.speakerName = speaker.displayName
+                    messages.append(MessageDisplayItem(record: assistantRecord))
+
+                    let result = try await streamAssistantResponse(
+                        assistantRecord: assistantRecord,
+                        assembly: assembly,
+                        endpoint: endpoint
+                    )
+                    let completedRecords = try await persistCompletedAssistantMessages(
+                        assistantRecord: assistantRecord,
+                        content: result.content,
+                        reasoningContent: result.reasoningContent,
+                        stageTurnPlan: stageTurnPlan?.forSpeaker(speaker)
+                    )
+                    if let first = completedRecords.first {
+                        generatedRecords.append(first)
+                        setAssistantStats(
+                            makeStreamingStats(
+                                usage: result.usage,
+                                content: result.content,
+                                tokenUsage: assembly.tokenUsage,
+                                elapsedSeconds: result.elapsedSeconds
+                            ),
+                            messageID: first.id
+                        )
+                    }
+                    baseSortOrder += max(completedRecords.count, 1)
+                }
+
+                if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
+                    conversation = refreshed
+                }
+            } catch {
+                appState.present(error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func prepareAssembly(
+        prompt: String,
+        endpoint: APIEndpointConfig,
+        characterCard: CharacterCardRecord?,
+        stageTurnPlan: StageTurnPlan?,
+        promptHistoryMessages: [MessageRecord]
+    ) async throws -> AssemblyResult {
+        let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
+        let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
+
+        if let backgroundManager {
+            await rebuildWorldBookEmbeddingsIfNeeded(worldBook: worldBook)
+            let backgroundRequest = BackgroundRequest(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: worldBookEntries,
+                recentMessages: promptHistoryMessages,
+                stageContext: stageTurnPlan.map(StageBackgroundContext.init(stageTurnPlan:)),
+                currentInput: prompt,
+                tokenBudget: max(Int((Double(endpoint.maxContextTokens) * 0.15).rounded(.down)), 1),
+                memoryLimit: 10,
+                worldBookLimit: 10
+            )
+            let backgroundPacket = try await backgroundManager.prepare(
+                request: backgroundRequest,
+                policy: BackgroundPolicy.compatibilityDefault(tokenBudget: backgroundRequest.tokenBudget)
+            )
+            backgroundDiagnostics = backgroundPacket.diagnostics
+            let preview = PromptAssembler.preview(
+                conversation: conversation,
+                characterCard: characterCard,
+                backgroundPacket: backgroundPacket,
+                stageTurnPlan: stageTurnPlan,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+            let history = try await contextManager.prepareHistory(
+                messages: promptHistoryMessages,
+                conversation: conversation,
+                endpoint: endpoint,
+                fixedTokens: preview.fixedTokens
+            )
+            return PromptAssembler.assemble(
+                conversation: conversation,
+                characterCard: characterCard,
+                backgroundPacket: backgroundPacket,
+                stageTurnPlan: stageTurnPlan,
+                processedHistory: history,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        }
+
+        backgroundDiagnostics = nil
+        var memories: [MemoryEntryRecord] = []
+        if let characterCardId = characterCard?.id {
+            do {
+                memories = try await memoryManager.retrieveMemories(
+                    for: characterCardId,
+                    query: prompt,
+                    limit: 10
+                )
+            } catch {
+                logger.warning("Memory retrieval failed after fallback for character \(characterCardId): \(error.localizedDescription)")
+            }
+        }
+
+        let usesPreselectedWorldBookEntries = worldBookSource != nil
+        let recalledWorldBookEntries = await recallWorldBookEntries(
+            worldBook: worldBook,
+            entries: worldBookEntries,
+            recentMessages: promptHistoryMessages,
+            currentInput: prompt
+        )
+        let preview: PromptAssemblyPreview
+        if usesPreselectedWorldBookEntries {
+            preview = PromptAssembler.previewWithPreselectedWorldBookEntries(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                stageTurnPlan: stageTurnPlan,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        } else {
+            preview = PromptAssembler.preview(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                recentMessages: promptHistoryMessages,
+                stageTurnPlan: stageTurnPlan,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        }
+
+        let history = try await contextManager.prepareHistory(
+            messages: promptHistoryMessages,
+            conversation: conversation,
+            endpoint: endpoint,
+            fixedTokens: preview.fixedTokens
+        )
+        if usesPreselectedWorldBookEntries {
+            return PromptAssembler.assembleWithPreselectedWorldBookEntries(
+                conversation: conversation,
+                characterCard: characterCard,
+                worldBook: worldBook,
+                worldBookEntries: recalledWorldBookEntries,
+                memories: memories,
+                processedHistory: history,
+                stageTurnPlan: stageTurnPlan,
+                currentInput: prompt,
+                endpoint: endpoint
+            )
+        }
+        return PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: characterCard,
+            worldBook: worldBook,
+            worldBookEntries: recalledWorldBookEntries,
+            memories: memories,
+            recentMessages: promptHistoryMessages,
+            processedHistory: history,
+            stageTurnPlan: stageTurnPlan,
+            currentInput: prompt,
+            endpoint: endpoint
+        )
+    }
+
+    private struct StreamedAssistantResult {
+        let content: String
+        let reasoningContent: String?
+        let usage: StreamUsage?
+        let elapsedSeconds: Double
+    }
+
+    private func streamAssistantResponse(
+        assistantRecord: MessageRecord,
+        assembly: AssemblyResult,
+        endpoint: APIEndpointConfig
+    ) async throws -> StreamedAssistantResult {
+        var lastUsage: StreamUsage?
+        let streamStart = ContinuousClock.now
+        do {
+            for try await delta in apiClient.streamMessage(
+                messages: assembly.messages,
+                endpoint: endpoint,
+                parameters: currentParameters
+            ) {
+                if !delta.content.isEmpty {
+                    appendAssistantDelta(delta.content, messageID: assistantRecord.id)
+                }
+                if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
+                    appendReasoningDelta(reasoning, messageID: assistantRecord.id)
+                }
+                if let usage = delta.usage {
+                    lastUsage = usage
+                }
+                if delta.finishReason != nil {
+                    break
+                }
+            }
+
+            let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
+            let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
+            let elapsed = ContinuousClock.now - streamStart
+            let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            return StreamedAssistantResult(
+                content: finalContent,
+                reasoningContent: finalReasoning,
+                usage: lastUsage,
+                elapsedSeconds: elapsedSeconds
+            )
+        } catch {
+            try? await persistOrRemovePartialAssistant(assistantRecord)
+            throw error
+        }
+    }
+
+    private func makeStreamingStats(
+        usage: StreamUsage?,
+        content: String,
+        tokenUsage: TokenUsageReport,
+        elapsedSeconds: Double
+    ) -> StreamingStats {
+        let outputTokens = usage?.completionTokens ?? TokenCounter.count(content)
+        let inputTokens = usage?.promptTokens ?? tokenUsage.totalUsed
+        let tps = elapsedSeconds > 0 ? Double(outputTokens) / elapsedSeconds : 0
+        let remaining = tokenUsage.totalBudget - inputTokens - outputTokens
+        let remainingPercent = tokenUsage.totalBudget > 0
+            ? Double(max(remaining, 0)) / Double(tokenUsage.totalBudget)
+            : 1.0
+        return StreamingStats(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            reasoningTokens: usage?.reasoningTokens ?? 0,
+            tokensPerSecond: tps,
+            contextRemainingPercent: remainingPercent,
+            totalBudget: tokenUsage.totalBudget
+        )
+    }
+
     private func persistCompletedAssistantMessages(
         assistantRecord: MessageRecord,
         content: String,
@@ -387,9 +697,17 @@ extension ChatViewModel {
         stageTurnPlan: StageTurnPlan?
     ) async throws -> [MessageRecord] {
         let parser = StageSpeakerBlockParser()
-        let blocks = stageTurnPlan.map {
-            parser.parse(content, participants: $0.participants)
-        } ?? []
+        let blocks: [StageSpeakerBlock]
+        if let stageTurnPlan {
+            let participants = if stageTurnPlan.restrictParsedSpeakerToActive, let participant = stageTurnPlan.participant {
+                [participant]
+            } else {
+                stageTurnPlan.participants
+            }
+            blocks = parser.parse(content, participants: participants)
+        } else {
+            blocks = []
+        }
         guard blocks.count > 1 else {
             var completed = MessageRecord(
                 id: assistantRecord.id,

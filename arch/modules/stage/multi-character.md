@@ -1,10 +1,12 @@
 # 多角色 Stage
 
-> 状态：多角色同场 foundation 已落地；当前支持一轮默认 active speaker 输出，也支持完整输出后的多 speaker block parser 与多条 staged assistant message 拆分。
+> 状态：多角色同场 foundation 已落地；当前支持一轮两个 responder 独立输出、输入栏导演工具面板覆盖回应角色/顺序，也支持完整输出后的多 speaker block parser 与多条 staged assistant message 拆分。
 
 2026-05-19 closeout：`stage_participant` 表、`StageParticipantRecord`、`StageParticipantVisibility`、`MessageSpeakerKind`、`StageTurnPlan` 已落地。Chat Settings 可为当前 Stage 添加多个角色；`DirectorController` 当前默认策略为“输入点名优先，否则选择 sortOrder 最小的 active present participant”。assistant message 会保存 `stageId`、`speakerKind`、`speakerId`、`speakerName`。
 
 2026-05-20 closeout：`StageSpeakerBlockParser` 支持 `[Speaker: name-or-id]...[/Speaker]` 与 `Name:` 行首 block；`ChatViewModel+Support.persistCompletedAssistantMessages(...)` 会把多个 speaker blocks 拆成多条 `MessageRecord(role: "assistant")`，每条保存对应 `stageId` / `speakerKind` / `speakerId` / `speakerName`。`StageSpeakerBlockParserTests` 与 `ChatViewModelPromptAssemblyTests.test_stageSpeakerBlocksSplitIntoMultipleAssistantMessages` 覆盖 parser 与持久化拆分。
+
+2026-05-21 closeout：Stage participant 输入的默认最小策略改为前两个 active/present participant 都生成回复。`ChatViewModel+Support.generateResponse(...)` 默认按 sortOrder 取 `activeParticipants.prefix(2)`，并为每个 speaker 单独构造 `StageTurnPlan.forSpeaker(...)`、读取该 speaker 的 `CharacterCardRecord`、准备 prompt/context/background，然后分别调用 `APIClient.streamMessage(...)` 保存 assistant message。输入栏的导演工具按钮可展开/折叠回应顺序面板，用户可勾选本轮谁回应并用上下按钮调整顺序；生成链路优先使用 `ChatViewModel.stageResponderIds`。`ChatViewModelPromptAssemblyTests.test_stageTwoParticipantsUseSeparateCharacterPrompts` 覆盖两次请求分别注入 Mara / Io 的角色卡，且第二个角色的 prompt history 能看到第一个角色刚生成的回复；`test_stageResponderOrderOverridesDefaultSpeakers` 覆盖用户指定顺序覆盖默认前两个。
 
 ## 1. 角色边界
 
@@ -70,7 +72,7 @@ enum SpeakerIntent: String, Codable, Sendable {
 }
 ```
 
-默认策略仍选择一个主回复角色；当 LLM 输出多个 speaker blocks 时，runtime 会拆分保存。
+当前最小策略不依赖 Director agent：默认取前两个 active/present participant，各自独立生成一条回复；用户在输入栏导演工具面板中调整 responder 后，则按 `stageResponderIds` 的顺序生成。每条回复都使用对应 participant 的角色卡、世界书、记忆和 Background request，避免一个主模型同时扮演多张角色卡导致 persona 串线。当 LLM 仍输出多个 speaker blocks 时，runtime 兼容拆分保存，但这不是当前多角色主路径。
 
 ## 4. 多角色输出格式
 
@@ -96,13 +98,15 @@ var speakerName: String?
 
 没有 Director agent 或用户导演指令时：
 
-- 优先当前用户直接点名的角色。
-- 其次选择 sortOrder 最小的 active present participant。
-- 若多个角色都相关，选择一个主回复角色，其他角色保持 silent。
-- 不自动让所有 active 角色每轮都说话，避免输出臃肿。
+- 默认按 sortOrder 取前两个 active present participant。
+- 若用户在输入栏导演工具面板中选择 responder，则按用户选择的角色和顺序生成。
+- 每个 participant 各自用自己的 `CharacterCardRecord` 独立生成一条 assistant message。
+- 若只有一个 active present participant，则只生成一条回复。
+- 暂不让所有 active 角色每轮都说话，避免输出无限增长；超过两个角色的调度留给后续 Director speakerPlan。
 
 尚未实现：
 
 - 最近活跃角色选择。
+- Director speakerPlan 完整驱动多个角色发言。
 - 多角色 persona 摘要 block；当前 active speaker persona 仍通过既有 `CharacterCardRecord` 注入。
 - streaming 过程中按 speaker block 实时分流；当前是在完整 assistant 内容可用后拆分。

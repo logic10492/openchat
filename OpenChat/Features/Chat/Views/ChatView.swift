@@ -20,13 +20,18 @@ struct ChatView: View {
                 InputBarView(
                     text: binding(\.inputText),
                     inputRole: binding(\.stageInputRole),
-                    showsDirectorToggle: viewModel.isStageEnabled,
+                    responderIds: binding(\.stageResponderIds),
+                    stageParticipants: viewModel.stageParticipants,
+                    showsDirectorTools: viewModel.isStageEnabled,
                     isGenerating: viewModel.isGenerating,
                     onSend: {
                         Task { await viewModel.sendMessage() }
                     },
                     onStop: {
                         viewModel.stopGenerating()
+                    },
+                    onCustomizeResponders: {
+                        viewModel.markStageResponderSelectionCustomized()
                     }
                 )
                 .padding(.bottom, 8)

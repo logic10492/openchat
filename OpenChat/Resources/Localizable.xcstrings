@@ -333,6 +333,22 @@
         }
       }
     },
+    "Collapse Director Tools" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Collapse Director Tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折叠导演工具"
+          }
+        }
+      }
+    },
     "Chats" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -633,6 +649,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导演模式"
+          }
+        }
+      }
+    },
+    "Director Tools" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Director Tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导演工具"
           }
         }
       }
@@ -968,6 +1000,54 @@
         }
       }
     },
+    "Move responder down" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move responder down"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下移回应角色"
+          }
+        }
+      }
+    },
+    "Move responder up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move responder up"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上移回应角色"
+          }
+        }
+      }
+    },
+    "No active stage participants" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No active stage participants"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有在场角色"
+          }
+        }
+      }
+    },
     "Missing keywords, title used as fallback." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1183,6 +1263,22 @@
         }
       }
     },
+    "Order %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Order %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 位"
+          }
+        }
+      }
+    },
     "Participant" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1351,6 +1447,22 @@
     },
     "Responses" : {
 
+    },
+    "Response Order" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Response Order"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回应顺序"
+          }
+        }
+      }
     },
     "Restore Defaults" : {
       "extractionState" : "stale",

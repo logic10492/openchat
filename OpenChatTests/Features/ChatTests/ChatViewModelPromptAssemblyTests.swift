@@ -509,29 +509,32 @@ struct ChatViewModelPromptAssemblyTests {
             )
         )
 
-        let capture = RequestCapture()
+        let capture = RequestSequenceCapture()
         let session = MockURLProtocol.makeSession { request in
             let body = try request.openChatTestBodyData()
-            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let apiRequest = try JSONDecoder().decode(APIRequest.self, from: body)
+            let index = capture.store(apiRequest)
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "text/event-stream"]
             )!
+            let content = index == 0 ? "Mara stage reply" : "Io stage reply"
             let payload = """
-            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Stage reply"},"finish_reason":"stop"}]}
+            data: {"id":"\(index)","choices":[{"index":0,"delta":{"content":"\(content)"},"finish_reason":"stop"}]}
 
             data: [DONE]
             """
             return (response, Data(payload.utf8))
         }
+        let backgroundSpeakers = RequestStringCapture()
         let apiClient = APIClient(session: session)
         let backgroundManager = BackgroundManager { request, _ in
             let context = try #require(request.stageContext)
             #expect(context.stageId == stage.id)
             #expect(context.activeParticipants.map(\.characterCardId) == [mara.id, io.id])
-            #expect(context.activeSpeaker?.displayName == "Mara")
+            backgroundSpeakers.store(context.activeSpeaker?.displayName ?? "")
             #expect(context.directorInstructions.map(\.content) == ["Keep the scene quiet."])
             return BackgroundPacket(
                 entries: [],
@@ -578,22 +581,28 @@ struct ChatViewModelPromptAssemblyTests {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        let request = try #require(capture.load())
-        #expect(request.messages.contains {
+        let requests = capture.load()
+        #expect(requests.count == 2)
+        #expect(backgroundSpeakers.load() == ["Mara", "Io"])
+        #expect(requests[0].messages.contains {
             $0.role == "system" && $0.content.contains("[Stage]")
         })
-        #expect(request.messages.contains {
+        #expect(requests[0].messages.contains {
             $0.role == "system" && $0.content.contains("[Director Instructions]") && $0.content.contains("Keep the scene quiet.")
         })
-        #expect(request.messages.contains {
+        #expect(requests[0].messages.contains {
             $0.role == "system" && $0.content.contains("[Stage Participants]") && $0.content.contains("Active Speaker: Mara")
+        })
+        #expect(requests[1].messages.contains {
+            $0.role == "system" && $0.content.contains("[Stage Participants]") && $0.content.contains("Active Speaker: Io")
         })
 
         let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
-        let assistant = try #require(storedMessages.first { $0.role == "assistant" })
-        #expect(assistant.stageId == stage.id)
-        #expect(assistant.speakerKindValue == .participant)
-        #expect(assistant.speakerName == "Mara")
+        let assistants = storedMessages.filter { $0.role == "assistant" }
+        #expect(assistants.map(\.content) == ["Mara stage reply", "Io stage reply"])
+        #expect(assistants.allSatisfy { $0.stageId == stage.id })
+        #expect(assistants.allSatisfy { $0.speakerKindValue == .participant })
+        #expect(assistants.map(\.speakerName) == ["Mara", "Io"])
     }
 
     @Test func test_sendMessage_responsesMode_foldsStageBlocksIntoInstructionsInOrder() async throws {
@@ -708,7 +717,7 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(stageRange.lowerBound < participantsRange.lowerBound)
         #expect(participantsRange.lowerBound < directorRange.lowerBound)
         #expect(instructions.contains("Director Mode: userControlled"))
-        #expect(instructions.contains("Active Speaker: Mara"))
+        #expect(instructions.contains("Active Speaker: Io"))
         #expect(instructions.contains("Keep the scene quiet."))
         #expect(!request.input.contains { $0.content.contains("[Stage]") })
         #expect(!request.input.contains { $0.content.contains("[Director Instructions]") })
@@ -1787,5 +1796,267 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(assistantRecords.map(\.speakerName) == ["Mara", "Io"])
         #expect(assistantRecords.allSatisfy { $0.stageId == stage.id })
         #expect(viewModel.messages.filter { $0.role == "assistant" }.map(\.content) == ["The gate is sealed.", "Then we wait."])
+    }
+
+    @Test func test_stageTwoParticipantsUseSeparateCharacterPrompts() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        var conversation = TestHelpers.makeConversation(id: "stage-two-character-calls")
+        conversation.isTitleGenerated = true
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-stage-two-calls",
+            name: "Stage Two Calls Endpoint",
+            baseURL: "https://stage-two-calls.test/v1",
+            apiKey: "key",
+            isDefault: true,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let model = EndpointModelRecord(
+            id: "model-stage-two-calls",
+            endpointId: endpoint.id,
+            modelId: "stage-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: .now
+        )
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        let conversationRecord = conversation
+        let mara = TestHelpers.makeCharacterCard(
+            id: "card-stage-two-mara",
+            name: "Mara",
+            systemPrompt: "You are Mara. Speak with moonlit restraint."
+        )
+        let io = TestHelpers.makeCharacterCard(
+            id: "card-stage-two-io",
+            name: "Io",
+            systemPrompt: "You are Io. Speak with bright certainty."
+        )
+        try await databaseManager.write { db in
+            try endpoint.insert(db)
+            try model.insert(db)
+            try conversationRecord.insert(db)
+            try mara.insert(db)
+            try io.insert(db)
+        }
+        let stage = try await databaseManager.createStage(
+            conversationId: conversationRecord.id,
+            title: "Two Speaker Stage",
+            directorMode: .silent
+        )
+        let maraParticipant = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: mara)
+        let ioParticipant = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: io)
+
+        let capture = RequestSequenceCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            let apiRequest = try JSONDecoder().decode(APIRequest.self, from: body)
+            let index = capture.store(apiRequest)
+            let content = index == 0 ? "Mara answers." : "Io answers."
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"\(index)","choices":[{"index":0,"delta":{"content":"\(content)"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversationRecord,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Both respond."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let requests = capture.load()
+        #expect(requests.count == 2)
+        let firstMessages = requests[0].messages.map(\.content).joined(separator: "\n")
+        let secondMessages = requests[1].messages.map(\.content).joined(separator: "\n")
+        #expect(firstMessages.contains("You are Mara. Speak with moonlit restraint."))
+        #expect(firstMessages.contains("Active Speaker: Mara"))
+        #expect(!firstMessages.contains("You are Io. Speak with bright certainty."))
+        #expect(secondMessages.contains("You are Io. Speak with bright certainty."))
+        #expect(secondMessages.contains("Active Speaker: Io"))
+        #expect(!secondMessages.contains("You are Mara. Speak with moonlit restraint."))
+        #expect(secondMessages.contains("Mara answers."))
+
+        let assistantRecords = try await databaseManager.fetchMessages(conversationId: conversationRecord.id)
+            .filter { $0.role == "assistant" }
+        #expect(assistantRecords.map(\.content) == ["Mara answers.", "Io answers."])
+        #expect(assistantRecords.map(\.speakerId) == [maraParticipant.id, ioParticipant.id])
+        #expect(assistantRecords.map(\.speakerName) == ["Mara", "Io"])
+    }
+
+    @Test func test_stageResponderOrderOverridesDefaultSpeakers() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        var conversation = TestHelpers.makeConversation(id: "stage-responder-order")
+        conversation.isTitleGenerated = true
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-stage-responder-order",
+            name: "Stage Responder Endpoint",
+            baseURL: "https://stage-responder-order.test/v1",
+            apiKey: "key",
+            isDefault: true,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        let model = EndpointModelRecord(
+            id: "model-stage-responder-order",
+            endpointId: endpoint.id,
+            modelId: "stage-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: .now
+        )
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        let conversationRecord = conversation
+        let mara = TestHelpers.makeCharacterCard(id: "card-order-mara", name: "Mara")
+        let io = TestHelpers.makeCharacterCard(id: "card-order-io", name: "Io")
+        let ren = TestHelpers.makeCharacterCard(id: "card-order-ren", name: "Ren")
+        try await databaseManager.write { db in
+            try endpoint.insert(db)
+            try model.insert(db)
+            try conversationRecord.insert(db)
+            try mara.insert(db)
+            try io.insert(db)
+            try ren.insert(db)
+        }
+        let stage = try await databaseManager.createStage(
+            conversationId: conversationRecord.id,
+            title: "Responder Order Stage",
+            directorMode: .silent
+        )
+        _ = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: mara)
+        let ioParticipant = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: io)
+        let renParticipant = try await databaseManager.addStageParticipant(stageId: stage.id, characterCard: ren)
+
+        let capture = RequestSequenceCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            let apiRequest = try JSONDecoder().decode(APIRequest.self, from: body)
+            let index = capture.store(apiRequest)
+            let content = index == 0 ? "Ren answers." : "Io answers."
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"\(index)","choices":[{"index":0,"delta":{"content":"\(content)"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversationRecord,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadStage()
+        viewModel.markStageResponderSelectionCustomized()
+        viewModel.stageResponderIds = [renParticipant.id, ioParticipant.id]
+        viewModel.inputText = "Respond in the directed order."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let requests = capture.load()
+        #expect(requests.count == 2)
+        let firstMessages = requests[0].messages.map(\.content).joined(separator: "\n")
+        let secondMessages = requests[1].messages.map(\.content).joined(separator: "\n")
+        #expect(firstMessages.contains("Active Speaker: Ren"))
+        #expect(secondMessages.contains("Active Speaker: Io"))
+        #expect(!firstMessages.contains("Active Speaker: Mara"))
+
+        let assistantRecords = try await databaseManager.fetchMessages(conversationId: conversationRecord.id)
+            .filter { $0.role == "assistant" }
+        #expect(assistantRecords.map(\.content) == ["Ren answers.", "Io answers."])
+        #expect(assistantRecords.map(\.speakerId) == [renParticipant.id, ioParticipant.id])
+        #expect(assistantRecords.map(\.speakerName) == ["Ren", "Io"])
+    }
+}
+
+private final class RequestSequenceCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [APIRequest] = []
+
+    func store(_ request: APIRequest) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        let index = requests.count
+        requests.append(request)
+        return index
+    }
+
+    func load() -> [APIRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests
+    }
+}
+
+private final class RequestStringCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func store(_ value: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        values.append(value)
+    }
+
+    func load() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
     }
 }

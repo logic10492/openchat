@@ -66,6 +66,25 @@ struct StageTurnPlan: Sendable, Equatable {
     let participant: StageParticipantRecord?
     let directorPlan: DirectorPlan
     let visibleInstructions: [StageInstruction]
+    let restrictParsedSpeakerToActive: Bool
+
+    init(
+        stage: StageRecord,
+        participants: [StageParticipantRecord],
+        inputRole: StageInputRole,
+        participant: StageParticipantRecord?,
+        directorPlan: DirectorPlan,
+        visibleInstructions: [StageInstruction],
+        restrictParsedSpeakerToActive: Bool = false
+    ) {
+        self.stage = stage
+        self.participants = participants
+        self.inputRole = inputRole
+        self.participant = participant
+        self.directorPlan = directorPlan
+        self.visibleInstructions = visibleInstructions
+        self.restrictParsedSpeakerToActive = restrictParsedSpeakerToActive
+    }
 
     var isDirectorOnlyTurn: Bool {
         inputRole.isDirectorInstructionInput
@@ -103,5 +122,29 @@ struct StageTurnPlan: Sendable, Equatable {
         \(lines.joined(separator: "\n"))
         [/Director Instructions]
         """
+    }
+
+    func forSpeaker(_ speaker: StageParticipantRecord) -> StageTurnPlan {
+        let speakerTurn = SpeakerTurn(
+            participantId: speaker.id,
+            characterCardId: speaker.characterCardId,
+            intent: .respondToUser,
+            maxTokens: nil
+        )
+        let speakerPlan = DirectorPlan(
+            mode: directorPlan.mode,
+            stageInstructions: directorPlan.stageInstructions,
+            speakerPlan: [speakerTurn],
+            diagnostics: directorPlan.diagnostics
+        )
+        return StageTurnPlan(
+            stage: stage,
+            participants: participants,
+            inputRole: inputRole,
+            participant: speaker,
+            directorPlan: speakerPlan,
+            visibleInstructions: visibleInstructions,
+            restrictParsedSpeakerToActive: true
+        )
     }
 }

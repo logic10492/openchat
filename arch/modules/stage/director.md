@@ -82,7 +82,7 @@ enum StageInputRole: String, Codable, Sendable {
 }
 ```
 
-当前 source 已落地 `StageInputRole` 作为输入语义 contract；`StageInputRole.director` 不等于 `MessageRecord.role == "user"`。`InputBarView` 在 Stage enabled 时显示 segmented picker；`ChatViewModel.sendMessage()` 在 `.director` 下调用 `saveDirectorInstruction(_:)`，写入 `stage_instruction` 并清空输入，不保存普通 `message`。
+当前 source 已落地 `StageInputRole` 作为输入语义 contract；`StageInputRole.director` 不等于 `MessageRecord.role == "user"`。当前主输入栏不再显示 participant/director segmented picker；Stage enabled 时 `InputBarView` 显示导演工具按钮，点击后输入区纵向展开可折叠的 responder 面板，用户可勾选本轮谁回应并调整顺序。`ChatViewModel.sendMessage()` 仍保留 `.director` 下调用 `saveDirectorInstruction(_:)` 的后端能力，用于后续恢复显式导演指令输入或其他入口；当前输入栏发送路径保持 participant message。
 
 当用户切换为 `director`：
 
