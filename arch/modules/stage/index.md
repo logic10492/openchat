@@ -9,7 +9,7 @@
 
 2026-05-20 UI closeout：Stage enabled 后，`ChatSettingsSheet` 不再显示单会话 `Character` picker / World Book 显示项；角色入口只保留 Stage 区域的 `Add Participant`。`ChatViewModel.saveConversationSettings()` 在 Stage 模式下不会通过旧的 `selectedCharacterCardID` 覆盖 `conversation.characterCardId`。`OpenChatUITests/StageUITests.swift` 追加断言防止 `chat.characterPicker` 在 Stage 设置页回归出现。
 
-2026-05-21 serial responder closeout：Stage participant 输入的运行策略收敛为“按用户决定的 responder 顺序串行生成”。`ChatViewModel+Support.generateResponse(...)` 会为每个 responder 单独准备 prompt、单独调用 `APIClient.streamMessage(...)`，每次只注入该 responder 对应的 `CharacterCardRecord`。默认 responder 顺序来自当前 active/present participants 的 `sortOrder`；用户可在输入栏导演工具按钮展开的面板中勾选回应角色并调整顺序，状态由 `ChatViewModel.stageResponderIds` 驱动。后一位 responder 的请求会把本轮已生成的前序 responder 输出以 `Name:\ncontent` 形式的 `user` message 追加到 API messages 末尾，因此顺序是 `user -> A -> B -> ...`，同时不会让 B 把 A 的输出误认成自己的 assistant 历史。
+2026-05-21 serial responder closeout：Stage participant 输入的运行策略收敛为“按用户决定的 responder 顺序串行生成”。`ChatViewModel+Support.generateResponse(...)` 会为每个 responder 单独准备 prompt、单独调用 `APIClient.streamMessage(...)`，每次只注入该 responder 对应的 `CharacterCardRecord`。默认 responder 顺序来自当前 active/present participants 的 `sortOrder`；用户可在输入栏导演工具按钮展开的面板中勾选回应角色并调整顺序，状态由 `ChatViewModel.stageResponderIds` 驱动。后一位 responder 的请求会把本轮已生成的前序 responder 输出以带 speaker 前缀的 `user` message 追加到 API messages 末尾，因此顺序是 `user -> A -> B -> ...`，同时不会让 B 把 A 的输出误认成自己的 assistant 历史。
 
 Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍然是 persona；Stage 负责多角色参与、发言顺序、导演介入和舞台级状态管理。
 

@@ -1011,6 +1011,6 @@ private extension MessageRecord {
             return chatMessage
         }
         let promptRole = speakerId == activeSpeakerId ? role : "user"
-        return ChatMessage(role: promptRole, content: "\(trimmedSpeaker):\n\(content)")
+        return ChatMessage(role: promptRole, content: "\(trimmedSpeaker): \(content)")
     }
 }
