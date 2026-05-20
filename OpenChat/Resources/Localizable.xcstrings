@@ -27,6 +27,16 @@
         }
       }
     },
+    "%@: %@ candidates, %@ selected, %@ omitted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ candidates, %3$@ selected, %4$@ omitted"
+          }
+        }
+      }
+    },
     "%@/%@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -80,6 +90,7 @@
       }
     },
     "Add Participant" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -105,6 +116,23 @@
         }
       }
     },
+    "Agent" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent"
+          }
+        }
+      }
+    },
     "API Endpoints" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -123,22 +151,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "API 密钥"
-          }
-        }
-      }
-    },
-    "Agent" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Agent"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agent"
           }
         }
       }
@@ -252,6 +264,28 @@
         }
       }
     },
+    "Character card format is not supported." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持此角色卡格式。"
+          }
+        }
+      }
+    },
+    "Character card JSON is invalid." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色卡 JSON 无效。"
+          }
+        }
+      }
+    },
     "Character Thinking" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -310,6 +344,17 @@
         }
       }
     },
+    "Clear All Data?" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除所有数据？"
+          }
+        }
+      }
+    },
     "Clear Chats and Content" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -321,62 +366,13 @@
         }
       }
     },
-    "Clear All Data?" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除所有数据？"
-          }
-        }
-      }
-    },
     "Clear Conversations, Characters, and World Books" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除对话、角色卡和世界书"
-          }
-        }
-      }
-    },
-    "Rebuild World Book Semantic Index" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重建世界书语义索引"
-          }
-        }
-      }
-    },
-    "Rebuilding World Book Semantic Index..." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在重建世界书语义索引..."
-          }
-        }
-      }
-    },
-    "World book index warning: %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "世界书索引警告：%@"
-          }
-        }
-      }
-    },
-    "World book semantic index rebuilt: %lld indexed, %lld skipped, %lld failed." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "世界书语义索引已重建：%lld 个已索引，%lld 个已跳过，%lld 个失败。"
           }
         }
       }
@@ -447,54 +443,6 @@
         }
       }
     },
-    "Director" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Director"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导演"
-          }
-        }
-      }
-    },
-    "Director instruction" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Director instruction"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导演指令"
-          }
-        }
-      }
-    },
-    "Director Mode" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Director Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导演模式"
-          }
-        }
-      }
-    },
     "Copy" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -551,6 +499,7 @@
       }
     },
     "Danger Zone" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -572,6 +521,7 @@
       }
     },
     "Data Export" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -632,6 +582,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "描述"
+          }
+        }
+      }
+    },
+    "Director" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Director"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导演"
+          }
+        }
+      }
+    },
+    "Director instruction" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Director instruction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导演指令"
+          }
+        }
+      }
+    },
+    "Director Mode" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Director Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导演模式"
           }
         }
       }
@@ -698,6 +699,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑世界书"
+          }
+        }
+      }
+    },
+    "Enable Stage" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Enable Stage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用舞台"
           }
         }
       }
@@ -801,6 +819,17 @@
         }
       }
     },
+    "Import Character" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入角色"
+          }
+        }
+      }
+    },
     "Import Markdown" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -819,6 +848,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入世界书"
+          }
+        }
+      }
+    },
+    "Imported character card is missing a name." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入的角色卡缺少名称。"
+          }
+        }
+      }
+    },
+    "Input Role" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Input Role"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入身份"
           }
         }
       }
@@ -896,6 +953,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息"
+          }
+        }
+      }
+    },
+    "Message examples were imported as raw text." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "示例对话中有内容已按原始文本导入。"
           }
         }
       }
@@ -1043,6 +1111,23 @@
         }
       }
     },
+    "No stage participants" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No stage participants"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无舞台参与角色"
+          }
+        }
+      }
+    },
     "No World Books" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1083,6 +1168,45 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OpenChat"
+          }
+        }
+      }
+    },
+    "OpenChat and SillyTavern V2 character cards are supported." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "支持 OpenChat 与 SillyTavern V2 角色卡。"
+          }
+        }
+      }
+    },
+    "Participant" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Participant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "参与者"
+          }
+        }
+      }
+    },
+    "Paste Character JSON" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴角色 JSON"
           }
         }
       }
@@ -1153,6 +1277,17 @@
         }
       }
     },
+    "Ready to import" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可以导入"
+          }
+        }
+      }
+    },
     "Reasoning Effort" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1164,6 +1299,28 @@
         }
       }
     },
+    "Rebuild World Book Semantic Index" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重建世界书语义索引"
+          }
+        }
+      }
+    },
+    "Rebuilding World Book Semantic Index..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重建世界书语义索引..."
+          }
+        }
+      }
+    },
     "Regenerate" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1171,6 +1328,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新生成"
+          }
+        }
+      }
+    },
+    "Remove participant" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove participant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除参与角色"
           }
         }
       }
@@ -1222,6 +1396,23 @@
         }
       }
     },
+    "Select Character" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select Character"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择角色"
+          }
+        }
+      }
+    },
     "Send a message to start the conversation." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1266,6 +1457,23 @@
         }
       }
     },
+    "Silent" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Silent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静默"
+          }
+        }
+      }
+    },
     "Speech Style" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1273,6 +1481,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话风格"
+          }
+        }
+      }
+    },
+    "Stage" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Stage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "舞台"
           }
         }
       }
@@ -1376,6 +1601,17 @@
         }
       }
     },
+    "This will delete conversations, character cards, world books, world book entries, memories, and messages. API endpoints are kept. This action cannot be undone." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将删除对话、角色卡、世界书、世界书条目、记忆和消息。API 端点会保留。此操作不可撤销。"
+          }
+        }
+      }
+    },
     "Title" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1431,437 +1667,8 @@
         }
       }
     },
-    "World Book" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "世界书"
-          }
-        }
-      }
-    },
-    "World Book Semantic Index" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "世界书语义索引"
-          }
-        }
-      }
-    },
-    "World Books" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "世界书"
-          }
-        }
-      }
-    },
-    "%lld selected" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%lld selected"
-          }
-        }
-      }
-    },
-    "Apply" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Apply"
-          }
-        }
-      }
-    },
-    "Applying" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Applying"
-          }
-        }
-      }
-    },
-    "Based on %lld memories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Based on %lld memories"
-          }
-        }
-      }
-    },
-    "Clear All" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Clear All"
-          }
-        }
-      }
-    },
-    "Confidence %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Confidence %@"
-          }
-        }
-      }
-    },
-    "Default endpoint has no default model." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Default endpoint has no default model."
-          }
-        }
-      }
-    },
-    "Default endpoint is missing an API key." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Default endpoint is missing an API key."
-          }
-        }
-      }
-    },
-    "Delete All" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Delete All"
-          }
-        }
-      }
-    },
-    "Delete All Memories?" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Delete All Memories?"
-          }
-        }
-      }
-    },
-    "Draft Observation" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Draft Observation"
-          }
-        }
-      }
-    },
-    "Event" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Event"
-          }
-        }
-      }
-    },
-    "Fact" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Fact"
-          }
-        }
-      }
-    },
-    "Generating Draft" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Generating Draft"
-          }
-        }
-      }
-    },
-    "Memories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Memories"
-          }
-        }
-      }
-    },
-    "Memories are created automatically from conversations." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Memories are created automatically from conversations."
-          }
-        }
-      }
-    },
-    "No Memories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No Memories"
-          }
-        }
-      }
-    },
-    "No default API endpoint configured." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No default API endpoint configured."
-          }
-        }
-      }
-    },
-    "No reflect draft is available to apply." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No reflect draft is available to apply."
-          }
-        }
-      }
-    },
-    "Only insert observations can be applied automatically." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Only insert observations can be applied automatically."
-          }
-        }
-      }
-    },
-    "Organize Memories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Organize Memories"
-          }
-        }
-      }
-    },
-    "Relationship" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Relationship"
-          }
-        }
-      }
-    },
-    "Select 2 to 5 memories before organizing." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Select 2 to 5 memories before organizing."
-          }
-        }
-      }
-    },
-    "Select Memory" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Select Memory"
-          }
-        }
-      }
-    },
-    "Summary" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Summary"
-          }
-        }
-      }
-    },
-    "This will delete conversations, character cards, world books, world book entries, memories, and messages. API endpoints are kept. This action cannot be undone." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这将删除对话、角色卡、世界书、世界书条目、记忆和消息。API 端点会保留。此操作不可撤销。"
-          }
-        }
-      }
-    },
-    "This action cannot be undone." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "This action cannot be undone."
-          }
-        }
-      }
-    },
-    "Enable Stage" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Enable Stage"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用舞台"
-          }
-        }
-      }
-    },
-    "Input Role" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Input Role"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入身份"
-          }
-        }
-      }
-    },
-    "No stage participants" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No stage participants"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无舞台参与角色"
-          }
-        }
-      }
-    },
-    "Participant" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Participant"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "参与者"
-          }
-        }
-      }
-    },
-    "Remove participant" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove participant"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "移除参与角色"
-          }
-        }
-      }
-    },
-    "Select Character" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Select Character"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择角色"
-          }
-        }
-      }
-    },
-    "Silent" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Silent"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "静默"
-          }
-        }
-      }
-    },
-    "Stage" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Stage"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "舞台"
-          }
-        }
-      }
-    },
     "User Controlled" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1873,6 +1680,61 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户接管"
+          }
+        }
+      }
+    },
+    "World Book" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书"
+          }
+        }
+      }
+    },
+    "World book index warning: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书索引警告：%@"
+          }
+        }
+      }
+    },
+    "World Book Semantic Index" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书语义索引"
+          }
+        }
+      }
+    },
+    "World book semantic index check complete: %lld indexed, %lld newly indexed, %lld failed." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书语义索引检查完成：已索引 %lld 条，新索引 %lld 条，失败 %lld 条。"
+          }
+        }
+      }
+    },
+    "World Books" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书"
           }
         }
       }

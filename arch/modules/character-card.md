@@ -21,6 +21,8 @@
 | `CharacterCardListViewModel.swift` | 列表数据加载、搜索、排序、删除 |
 | `CharacterCardEditorViewModel.swift` | 编辑/创建的表单状态管理、校验、保存 |
 | `CharacterCardField.swift` | 编辑器字段定义与校验规则 |
+| `CharacterCardImportFormat.swift` | OpenChat JSON / SillyTavern V2 角色卡导入解析与字段映射 |
+| `CharacterCardImportView.swift` | 粘贴 JSON 导入界面、解析预览与导入错误展示 |
 
 ## 3. 数据结构
 
@@ -73,7 +75,7 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│ 角色卡                             [+]  │  ← 导航栏：标题 + 新建按钮
+│ 角色卡                         [↓] [+] │  ← 导航栏：标题 + 导入/新建按钮
 │─────────────────────────────────────────│
 │ [🔍 搜索角色卡...]                       │  ← 搜索栏
 │ [全部] [奇幻] [科幻] [日常] ...          │  ← 标签筛选（横向滚动）
@@ -92,7 +94,7 @@
 - 长按/左滑：删除、复制
 - 点击：进入详情预览
 
-> **实现证据**: `CharacterCardListView.swift` — 仅保留 List 模式，已移除 Grid 模式及视图切换 Picker
+> **实现证据**: `CharacterCardListView.swift` — 仅保留 List 模式，已移除 Grid 模式及视图切换 Picker；工具栏提供导入按钮并弹出 `CharacterCardImportView`
 
 ### 4.2 CharacterCardEditorView
 
@@ -155,8 +157,11 @@ final class CharacterCardListViewModel {
     func loadCards() async
     func deleteCard(_ card: CharacterCardRecord) async throws
     func duplicateCard(_ card: CharacterCardRecord) async throws
+    func importCard(_ parsedCard: CharacterCardImportFormat.ParsedCard) async throws -> CharacterCardRecord
 }
 ```
+
+> **实现证据**: `CharacterCardListViewModel.importCard(_:)` 将解析后的角色卡转换为 `CharacterCardRecord`，通过 `RecordCoders.encode` 写入 `exampleDialogs` 与 `tags`，保存后刷新列表头部。
 
 ### 5.2 CharacterCardEditorViewModel
 
@@ -220,12 +225,18 @@ final class CharacterCardEditorViewModel {
   - 映射 `mes_example` → `exampleDialogs`
   - 映射 `personality` → `personality`（追加）
   - 映射 `scenario` → `scenario`
-- 通过 `Share Sheet` 或 `Files.app` 打开 `.json` 文件触发导入
+- 当前实现提供粘贴 JSON 导入；通过 `Share Sheet` 或 `Files.app` 打开 `.json` 文件仍属后续计划
 
 ### 6.3 导入/导出入口
 
 - 列表页工具栏：导入按钮（选择文件 / 粘贴 JSON）
-- 详情页操作栏：导出按钮 → ShareSheet / 保存到文件
+- 详情页导出按钮 → ShareSheet / 保存到文件仍属后续计划
+
+> **实现证据**:
+> - `CharacterCardImportFormat.swift` 解析 `type: "openchat_character_card"` 与 `spec: "chara_card_v2"`，并规范化标签、空白字段和示例对话。
+> - `CharacterCardImportView.swift` 支持粘贴 JSON、预览名称/标签/解析警告，并通过列表页 ViewModel 持久化。
+> - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 OpenChat 格式、SillyTavern V2 字段映射、原始示例行警告、缺名错误以及 ViewModel 持久化。
+> - `character_cards/shiroko-terror-openchat.json` 提供可直接粘贴导入的“砂狼白子*恐怖”示例角色卡。
 
 ## 7. 与其他模块的交互
 

@@ -34,6 +34,8 @@ struct SettingsViewModelWorldBookIndexTests {
 
         #expect(viewModel.isRebuildingWorldBookIndex == false)
         #expect(viewModel.worldBookIndexStatusMessage?.isEmpty == false)
+        #expect(viewModel.worldBookIndexStatusMessage?.contains("skipped") == false)
+        #expect(viewModel.worldBookIndexStatusMessage?.contains("跳过") == false)
         #expect(try await vectorRowCount(entryId: entry.id, in: manager) == 1)
         #expect(try await fetchMeta(entryId: entry.id, in: manager)?.statusValue == .indexed)
     }

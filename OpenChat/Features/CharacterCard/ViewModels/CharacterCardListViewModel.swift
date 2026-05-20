@@ -79,4 +79,35 @@ final class CharacterCardListViewModel {
             appState.present(error: error.localizedDescription)
         }
     }
+
+    func importCard(_ parsedCard: CharacterCardImportFormat.ParsedCard) async throws -> CharacterCardRecord {
+        let now = Date()
+        let record = CharacterCardRecord(
+            id: UUID().uuidString,
+            name: parsedCard.name,
+            avatar: nil,
+            personality: parsedCard.personality,
+            appearance: parsedCard.appearance,
+            physique: parsedCard.physique,
+            speechStyle: parsedCard.speechStyle,
+            backstory: parsedCard.backstory,
+            systemPrompt: parsedCard.systemPrompt,
+            scenario: parsedCard.scenario,
+            exampleDialogs: RecordCoders.encode(parsedCard.exampleDialogs),
+            creatorNotes: parsedCard.creatorNotes,
+            tags: RecordCoders.encode(parsedCard.tags),
+            worldBookId: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        do {
+            try await databaseManager.saveCharacterCard(record)
+            cards.insert(record, at: 0)
+            return record
+        } catch {
+            appState.present(error: error.localizedDescription)
+            throw error
+        }
+    }
 }

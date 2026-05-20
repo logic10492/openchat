@@ -115,9 +115,9 @@ final class SettingsViewModel {
         do {
             let result = try await worldBookEmbeddingIndexer.rebuildAllMissingOrStale(limit: nil)
             worldBookIndexStatusMessage = String.localizedStringWithFormat(
-                String(localized: "World book semantic index rebuilt: %lld indexed, %lld skipped, %lld failed."),
-                result.indexedCount,
+                String(localized: "World book semantic index check complete: %lld indexed, %lld newly indexed, %lld failed."),
                 result.skippedFreshCount,
+                result.indexedCount,
                 result.failed.count
             )
         } catch {

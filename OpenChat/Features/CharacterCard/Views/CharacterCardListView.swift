@@ -6,6 +6,7 @@ struct CharacterCardListView: View {
     @State private var viewModel: CharacterCardListViewModel
     @State private var editingCard: CharacterCardRecord?
     @State private var selectedCard: CharacterCardRecord?
+    @State private var isShowingImport = false
 
     init(viewModel: CharacterCardListViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -27,6 +28,13 @@ struct CharacterCardListView: View {
         .searchable(text: searchBinding)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    isShowingImport = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .accessibilityLabel(String(localized: "Import Character"))
+
                 Button {
                     editingCard = CharacterCardRecord(
                         id: "",
@@ -61,6 +69,11 @@ struct CharacterCardListView: View {
                     editingCard: card.id.isEmpty ? nil : card
                 )
             )
+        }
+        .sheet(isPresented: $isShowingImport, onDismiss: reloadCards) {
+            CharacterCardImportView { parsedCard in
+                _ = try await viewModel.importCard(parsedCard)
+            }
         }
         .sheet(item: $selectedCard, onDismiss: reloadCards) { card in
             CharacterCardDetailView(

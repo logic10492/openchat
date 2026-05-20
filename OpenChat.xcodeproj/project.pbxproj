@@ -190,6 +190,9 @@
 		B740AC8FF3AEABEDA0B94633 /* CharacterCardListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77DF3207690A9F43CA1B5506 /* CharacterCardListViewModel.swift */; };
 		B75387F16CB3D39C96B9983F /* WorldBookVectorStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535FBE6E05AD290A57676A4F /* WorldBookVectorStoreTests.swift */; };
 		B7B288E4B1DC19BE343BC65F /* SchemaValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89BED12BB52F70E04EAF2074 /* SchemaValidation.swift */; };
+		B8F104A17FE04E189901AA01 /* CharacterCardImportFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F104B17FE04E189901AB01 /* CharacterCardImportFormat.swift */; };
+		B8F104A27FE04E189901AA02 /* CharacterCardImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F104B27FE04E189901AB02 /* CharacterCardImportView.swift */; };
+		B8F104A37FE04E189901AA03 /* CharacterCardImportFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F104B37FE04E189901AB03 /* CharacterCardImportFormatTests.swift */; };
 		BA2150DF341832D0A8B5340A /* DirectorMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E023F8597F29B18AA3EA996 /* DirectorMode.swift */; };
 		BA4D928B19CC9585366D9D0B /* TestJSONFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81528C24B5815436C2C82388 /* TestJSONFactory.swift */; };
 		BA58A5DCF579B8471CB1FBD4 /* MemoryRecallToolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAEB54001E18E3A19CE59D6 /* MemoryRecallToolTests.swift */; };
@@ -445,6 +448,9 @@
 		B3CF6D0C1737AEFFFD9AEB41 /* MemoryReflectModelsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryReflectModelsTests.swift; sourceTree = "<group>"; };
 		B51EF28FCDAF2A928BA5FB49 /* MigrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MigrationTests.swift; sourceTree = "<group>"; };
 		B6F7136335E117E1E1CCAF74 /* APIEndpointRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIEndpointRecord.swift; sourceTree = "<group>"; };
+		B8F104B17FE04E189901AB01 /* CharacterCardImportFormat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CharacterCardImportFormat.swift; sourceTree = "<group>"; };
+		B8F104B27FE04E189901AB02 /* CharacterCardImportView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CharacterCardImportView.swift; sourceTree = "<group>"; };
+		B8F104B37FE04E189901AB03 /* CharacterCardImportFormatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CharacterCardImportFormatTests.swift; sourceTree = "<group>"; };
 		BA1BA2EB1365FEB2F103E298 /* MemoryDependencies.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryDependencies.swift; sourceTree = "<group>"; };
 		BAC72F84FBA5CA8F4CD0FD64 /* AgentPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentPolicy.swift; sourceTree = "<group>"; };
 		BACCEFE08EC2F41623FD3616 /* BackgroundManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackgroundManager.swift; sourceTree = "<group>"; };
@@ -667,6 +673,7 @@
 			isa = PBXGroup;
 			children = (
 				6209A220767FE79C6DF4FFB8 /* CharacterCardField.swift */,
+				B8F104B17FE04E189901AB01 /* CharacterCardImportFormat.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -809,6 +816,7 @@
 		64F5C6AA9070881F7C5E0E2E /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				B8F104C17FE04E189901AC01 /* CharacterCardTests */,
 				A3E37F8D746F4845E01384C9 /* ChatTests */,
 				939011CD33003517D717B8B4 /* SettingsTests */,
 				33387AC24ECE9C930251B7D8 /* StageTests */,
@@ -1021,6 +1029,14 @@
 			path = ChatTests;
 			sourceTree = "<group>";
 		};
+		B8F104C17FE04E189901AC01 /* CharacterCardTests */ = {
+			isa = PBXGroup;
+			children = (
+				B8F104B37FE04E189901AB03 /* CharacterCardImportFormatTests.swift */,
+			);
+			path = CharacterCardTests;
+			sourceTree = "<group>";
+		};
 		ACC7496CD1432AF50914465A /* OpenChat */ = {
 			isa = PBXGroup;
 			children = (
@@ -1145,6 +1161,7 @@
 			children = (
 				4150CB7568F881A217DA368C /* CharacterCardDetailView.swift */,
 				0618FB8D571E53394519E6C0 /* CharacterCardEditorView.swift */,
+				B8F104B27FE04E189901AB02 /* CharacterCardImportView.swift */,
 				0CE1131EC3BBC95A6803B6B6 /* CharacterCardListView.swift */,
 				A6411EEEB07B82F4AC10CB8B /* MemoryListView.swift */,
 			);
@@ -1541,11 +1558,13 @@
 				85FF2E7495396367F1235B0B /* WorldBookSource.swift in Sources */,
 				D749A793723AF28F63225B53 /* WorldBookVectorStore.swift in Sources */,
 				98AD780FE5B2366998E485C2 /* CharacterCardField.swift in Sources */,
+				B8F104A17FE04E189901AA01 /* CharacterCardImportFormat.swift in Sources */,
 				DF3376E8DA2AD30268B379C9 /* CharacterCardEditorViewModel.swift in Sources */,
 				B740AC8FF3AEABEDA0B94633 /* CharacterCardListViewModel.swift in Sources */,
 				A06D3F6918223F9C131183AC /* MemoryListViewModel.swift in Sources */,
 				3A73362C3B327989EEE4AF57 /* CharacterCardDetailView.swift in Sources */,
 				00D3A10BCBF28E0903451E78 /* CharacterCardEditorView.swift in Sources */,
+				B8F104A27FE04E189901AA02 /* CharacterCardImportView.swift in Sources */,
 				6B446485E2775093D783FA99 /* CharacterCardListView.swift in Sources */,
 				3CEDFC556FB5047A456B4AA9 /* MemoryListView.swift in Sources */,
 				A849A3B387F26DF9308B1132 /* MemoryExtractionPhase.swift in Sources */,
@@ -1666,6 +1685,7 @@
 				B5D13E81D3631B0C5B2B4EF5 /* SettingsViewModelWorldBookIndexTests.swift in Sources */,
 				AEAD5ADA2700CD9139E3E177 /* StageManagementViewModelTests.swift in Sources */,
 				0BE39C0CA9E527E0DCD4DAF7 /* WorldBookEditorViewModelTests.swift in Sources */,
+				B8F104A37FE04E189901AA03 /* CharacterCardImportFormatTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
