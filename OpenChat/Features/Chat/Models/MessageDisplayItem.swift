@@ -22,7 +22,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
         id = record.id
         role = record.role
         content = record.content
-        contentBlocks = TextContentBlock.makeBlocks(from: record.content)
+        contentBlocks = TextContentBlock.makeDisplayBlocks(from: record.content)
         contentRenderRevision = record.content.hashValue
         reasoningContent = record.reasoningContent
         tokenCount = record.tokenCount
@@ -40,7 +40,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
     mutating func appendContentDelta(_ delta: String) {
         guard !delta.isEmpty else { return }
         content += delta
-        contentBlocks = TextContentBlock.appending(delta, to: contentBlocks)
+        contentBlocks = TextContentBlock.appendingDisplay(delta, to: contentBlocks)
         contentRenderRevision &+= 1
     }
 

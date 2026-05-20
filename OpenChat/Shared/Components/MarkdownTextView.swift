@@ -21,6 +21,10 @@ struct TextContentBlock: Identifiable, Hashable, Sendable {
         }
     }
 
+    static func makeDisplayBlocks(from text: String) -> [TextContentBlock] {
+        makeBlocks(from: compactExcessBlankLines(in: text))
+    }
+
     static func appending(_ delta: String, to blocks: [TextContentBlock]) -> [TextContentBlock] {
         guard !delta.isEmpty else { return blocks }
 
@@ -43,6 +47,36 @@ struct TextContentBlock: Identifiable, Hashable, Sendable {
         }
 
         return result
+    }
+
+    static func appendingDisplay(_ delta: String, to blocks: [TextContentBlock]) -> [TextContentBlock] {
+        guard !delta.isEmpty else { return blocks }
+
+        var result = blocks
+        var tail = ""
+        while let last = result.last, last.text.allSatisfy({ $0 == "\n" }) {
+            tail = result.removeLast().text + tail
+        }
+        if let existingTail = result.popLast() {
+            tail = existingTail.text + tail
+        }
+
+        let baseID = result.last.map { $0.id + 1 } ?? 0
+        let tailPieces = split(compactExcessBlankLines(in: tail + delta))
+
+        for (offset, piece) in tailPieces.enumerated() {
+            result.append(TextContentBlock(id: baseID + offset, text: piece))
+        }
+
+        return result
+    }
+
+    private static func compactExcessBlankLines(in text: String) -> String {
+        text.replacingOccurrences(
+            of: #"(?:\r?\n[ \t]*){3,}"#,
+            with: "\n\n",
+            options: .regularExpression
+        )
     }
 
     private static func split(_ text: String) -> [String] {

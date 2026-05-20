@@ -46,6 +46,30 @@ struct StreamingRenderSegmentationTests {
         #expect(item.contentRenderRevision != originalRevision)
     }
 
+    @Test func test_messageDisplayItem_compactsExcessBlankLinesOnlyForRendering() {
+        let record = MessageRecord(
+            id: "assistant-blank-lines",
+            conversationId: "conversation-1",
+            role: "assistant",
+            content: "动作一\n\n\n\n台词一",
+            tokenCount: nil,
+            isCompressed: false,
+            originalContent: nil,
+            sortOrder: 1,
+            createdAt: .now,
+            reasoningContent: nil
+        )
+        var item = MessageDisplayItem(record: record)
+
+        #expect(item.content == "动作一\n\n\n\n台词一")
+        #expect(item.contentBlocks.map(\.text).joined() == "动作一\n\n台词一")
+
+        item.appendContentDelta("\n\n\n动作二")
+
+        #expect(item.content == "动作一\n\n\n\n台词一\n\n\n动作二")
+        #expect(item.contentBlocks.map(\.text).joined() == "动作一\n\n台词一\n\n动作二")
+    }
+
     @Test func test_markdownRefreshDelay_getsLazierForLongerText() {
         #expect(MarkdownRenderPolicy.refreshDelay(forCharacterCount: 100) == .milliseconds(30))
         #expect(MarkdownRenderPolicy.refreshDelay(forCharacterCount: 800) == .milliseconds(50))
