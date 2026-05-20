@@ -87,4 +87,4 @@
 - UI 按角色拆分 staged assistant messages。
 - DB 保存 speaker metadata。
 
-当前备注：v18 已为 `message` 追加 `stageId` / `speakerKind` / `speakerId` / `speakerName`；`ChatViewModel+Support.generateResponse(...)` 已按 `stageResponderIds` 或 active participant sortOrder 串行请求，每个请求只注入当前 responder 的 `CharacterCardRecord`，后一位 responder 的请求历史包含前一位 responder 刚生成的输出。前序 responder 输出在下一次 API request 中使用 `user` role 加 speaker 前缀，表达为舞台上其他角色已经说出的话；DB 内仍保存为 `assistant` message + speaker metadata。`StageSpeakerBlockParser` 与 `persistCompletedAssistantMessages(...)` 仍支持完整输出后的多 speaker parser 和一轮多 message 拆分作为兼容路径。
+当前备注：v18 已为 `message` 追加 `stageId` / `speakerKind` / `speakerId` / `speakerName`；`ChatViewModel+Support.generateResponse(...)` 已按 `stageResponderIds` 或 active participant sortOrder 串行请求，每个请求只注入当前 responder 的 `CharacterCardRecord`，后一位 responder 的请求历史包含前一位 responder 刚生成的输出。前序 responder 输出在下一次 API request 中使用 `user` role 加 speaker 标签，格式为 `Name:\ncontent`，表达为舞台上其他角色已经说出的话；DB 内仍保存为 `assistant` message + speaker metadata。`StageSpeakerBlockParser` 与 `persistCompletedAssistantMessages(...)` 仍支持完整输出后的多 speaker parser 和一轮多 message 拆分作为兼容路径。

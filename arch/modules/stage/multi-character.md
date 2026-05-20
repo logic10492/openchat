@@ -72,7 +72,7 @@ enum SpeakerIntent: String, Codable, Sendable {
 }
 ```
 
-当前最小策略不依赖 Director agent：默认按 active/present participant 的 sortOrder 串行生成；用户在输入栏导演工具面板中调整 responder 后，则按 `stageResponderIds` 的顺序生成。每条回复都使用对应 participant 的角色卡、世界书、记忆和 Background request，避免一个主模型同时扮演多张角色卡导致 persona 串线。后一位 participant 的 prompt 会包含前一位 participant 在本轮刚生成的输出；这些前序输出在 prompt 中使用 `user` role 和 `Name: content` 前缀表达为舞台上其他角色已经说出的话，而不是当前 responder 自己的 assistant 历史。当 LLM 仍输出多个 speaker blocks 时，runtime 兼容拆分保存，但这不是当前多角色主路径。
+当前最小策略不依赖 Director agent：默认按 active/present participant 的 sortOrder 串行生成；用户在输入栏导演工具面板中调整 responder 后，则按 `stageResponderIds` 的顺序生成。每条回复都使用对应 participant 的角色卡、世界书、记忆和 Background request，避免一个主模型同时扮演多张角色卡导致 persona 串线。后一位 participant 的 prompt 会包含前一位 participant 在本轮刚生成的输出；这些前序输出在 prompt 中使用 `user` role 和 `Name:\ncontent` 两行标签表达为舞台上其他角色已经说出的话，而不是当前 responder 自己的 assistant 历史。当 LLM 仍输出多个 speaker blocks 时，runtime 兼容拆分保存，但这不是当前多角色主路径。
 
 ## 4. 多角色输出格式
 
@@ -102,7 +102,7 @@ var speakerName: String?
 - 若用户在输入栏导演工具面板中选择 responder，则按用户选择的角色和顺序生成。
 - 每个 participant 各自用自己的 `CharacterCardRecord` 独立生成一条 assistant message。
 - 若只有一个 active present participant，则只生成一条回复。
-- 后一位 participant 的请求历史包含前一位 participant 的输出，即 `user -> A -> B -> ...`；prompt role 使用 `user`，内容保留 speaker 前缀。
+- 后一位 participant 的请求历史包含前一位 participant 的输出，即 `user -> A -> B -> ...`；prompt role 使用 `user`，内容保留两行 speaker 标签：`Name:\ncontent`。
 
 尚未实现：
 
