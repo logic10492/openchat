@@ -9,6 +9,7 @@ final class DependencyContainer {
     let contextManager: ContextManager
     let memoryManager: MemoryManager
     let memoryReflectExecutor: MemoryReflectExecutor
+    let memoryReflectBackgroundWorker: MemoryReflectBackgroundWorker
     let worldBookVectorStore: WorldBookVectorStore
     let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer
     let worldBookSource: WorldBookSource
@@ -42,6 +43,10 @@ final class DependencyContainer {
             databaseManager: databaseManager,
             apiClient: resolvedClient
         )
+        self.memoryReflectBackgroundWorker = MemoryReflectBackgroundWorker(
+            databaseManager: databaseManager,
+            reflectExecutor: memoryReflectExecutor
+        )
         self.worldBookVectorStore = worldBookVectorStore
         self.worldBookEmbeddingIndexer = WorldBookEmbeddingIndexer(
             databaseManager: databaseManager,
@@ -55,6 +60,8 @@ final class DependencyContainer {
         self.worldBookSource = worldBookSource
         self.backgroundManager = BackgroundManager(
             sources: [
+                CharacterStateBackgroundSource(),
+                ConversationStateBackgroundSource(),
                 MemoryBackgroundSource(tool: MemoryRecallTool(memoryManager: memoryManager)),
                 WorldBookBackgroundSource(tool: WorldBookRecallTool(source: worldBookSource)),
             ]

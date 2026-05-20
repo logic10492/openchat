@@ -104,6 +104,7 @@ struct PromptAssembler {
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
             exampleDialogs: exampleDialogs,
+            stateItems: [],
             worldBookItems: worldBookItems,
             memoryItems: memoryItems,
             currentInput: currentInput,
@@ -134,6 +135,7 @@ struct PromptAssembler {
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
             exampleDialogs: exampleDialogs,
+            stateItems: BackgroundAssembler.stateItems(from: backgroundPacket),
             worldBookItems: BackgroundAssembler.worldBookItems(from: backgroundPacket),
             memoryItems: BackgroundAssembler.memoryItems(from: backgroundPacket),
             currentInput: currentInput,
@@ -166,6 +168,7 @@ struct PromptAssembler {
         scenario: String?,
         slowPlotMode: Bool,
         exampleDialogs: [ChatMessage],
+        stateItems: [BackgroundPromptItem],
         worldBookItems: [BackgroundPromptItem],
         memoryItems: [BackgroundPromptItem],
         currentInput: String,
@@ -197,6 +200,7 @@ struct PromptAssembler {
         let fixedTokens =
             stableIdentityMessages.reduce(0) { $0 + TokenCounter.count(message: $1) } +
             TokenCounter.count(message: currentTurnMessage)
+        let stateTokens = stateItems.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeStateMessageContent($1))) }
         let worldBookTokens = worldBookItems.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeWorldBookMessageContent($1))) }
         let memoryTokens = memoryItems.reduce(0) { $0 + TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent($1))) }
         let exampleTokens = exampleDialogs.reduce(0) { $0 + TokenCounter.count(message: $1) }
@@ -209,10 +213,12 @@ struct PromptAssembler {
         )
 
         let trimmedExampleDialogs = trim(messages: exampleDialogs, within: tokenBudget.exampleDialogsBudget)
+        let trimmedStateItems = trim(stateItems: stateItems, within: stateTokens)
         let trimmedWorldBookItems = trim(worldBookItems: worldBookItems, within: tokenBudget.worldBookBudget)
         let trimmedMemoryItems = trim(memoryItems: memoryItems, within: tokenBudget.memoryBudget)
 
         let exampleDialogsBlock = makeExampleDialogsBlock(trimmedExampleDialogs)
+        let backgroundBlock = makeBackgroundBlock(trimmedStateItems)
         let worldBookBlock = makeWorldBookBlock(trimmedWorldBookItems)
         let memoryBlock = makeMemoryBlock(trimmedMemoryItems)
         let directorInstructionBlock = stageTurnPlan?.directorInstructionPrompt.map {
@@ -220,6 +226,7 @@ struct PromptAssembler {
         }
         let currentTurnContextMessages = [
             exampleDialogsBlock,
+            backgroundBlock,
             worldBookBlock,
             memoryBlock,
             directorInstructionBlock,
@@ -238,6 +245,7 @@ struct PromptAssembler {
             scenario: scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0,
             slowPlotDirective: slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0,
             timeContext: TokenCounter.count(timeContext),
+            background: backgroundBlock.map { TokenCounter.count(message: $0) } ?? 0,
             worldBookEntries: worldBookBlock.map { TokenCounter.count(message: $0) } ?? 0,
             memories: memoryBlock.map { TokenCounter.count(message: $0) } ?? 0,
             exampleDialogs: exampleDialogsBlock.map { TokenCounter.count(message: $0) } ?? 0,
@@ -365,6 +373,7 @@ struct PromptAssembler {
             scenario: context.tokenUsage.scenario,
             slowPlotDirective: context.tokenUsage.slowPlotDirective,
             timeContext: context.tokenUsage.timeContext,
+            background: context.tokenUsage.background,
             worldBookEntries: context.tokenUsage.worldBookEntries,
             memories: context.tokenUsage.memories,
             exampleDialogs: context.tokenUsage.exampleDialogs,
@@ -417,6 +426,10 @@ struct PromptAssembler {
         BackgroundAssembler.makeMemoryMessageContent(item)
     }
 
+    static func makeStateMessageContent(_ item: BackgroundPromptItem) -> String {
+        BackgroundAssembler.makeStateMessageContent(item)
+    }
+
     private static func makeExampleDialogsBlock(_ messages: [ChatMessage]) -> ChatMessage? {
         guard !messages.isEmpty else { return nil }
         let bodyLines: [String] = messages.map { message in
@@ -431,6 +444,12 @@ struct PromptAssembler {
         guard !items.isEmpty else { return nil }
         let body = items.map { makeWorldBookMessageContent($0) }.joined(separator: "\n\n")
         return ChatMessage(role: "system", content: "[World Book Entries]\n\(body)\n[/World Book Entries]")
+    }
+
+    private static func makeBackgroundBlock(_ items: [BackgroundPromptItem]) -> ChatMessage? {
+        guard !items.isEmpty else { return nil }
+        let body = items.map { makeStateMessageContent($0) }.joined(separator: "\n\n")
+        return ChatMessage(role: "system", content: "[Background]\n\(body)\n[/Background]")
     }
 
     private static func makeMemoryBlock(_ items: [BackgroundPromptItem]) -> ChatMessage? {
@@ -540,6 +559,19 @@ struct PromptAssembler {
         var used = 0
         for item in memoryItems {
             let tokens = TokenCounter.count(message: ChatMessage(role: "system", content: makeMemoryMessageContent(item)))
+            guard used + tokens <= budget || result.isEmpty else { break }
+            result.append(item)
+            used += tokens
+        }
+        return result
+    }
+
+    private static func trim(stateItems: [BackgroundPromptItem], within budget: Int) -> [BackgroundPromptItem] {
+        guard !stateItems.isEmpty else { return [] }
+        var result: [BackgroundPromptItem] = []
+        var used = 0
+        for item in stateItems {
+            let tokens = TokenCounter.count(message: ChatMessage(role: "system", content: makeStateMessageContent(item)))
             guard used + tokens <= budget || result.isEmpty else { break }
             result.append(item)
             used += tokens

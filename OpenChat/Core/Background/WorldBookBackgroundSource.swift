@@ -36,13 +36,16 @@ struct WorldBookBackgroundSource: BackgroundSource {
             request.worldBook,
             request.worldBookEntries,
             request.recentMessages,
-            request.currentInput,
+            Self.enrichedQuery(for: request),
             max(request.worldBookLimit, 0)
         )
-        return Self.candidates(from: result)
+        return Self.candidates(from: result, stageContext: request.stageContext)
     }
 
-    static func candidates(from result: WorldBookRecallResult) -> [BackgroundCandidate] {
+    static func candidates(
+        from result: WorldBookRecallResult,
+        stageContext: StageBackgroundContext? = nil
+    ) -> [BackgroundCandidate] {
         result.entries.map { entry in
             let record = entry.entry
             return BackgroundCandidate(
@@ -54,14 +57,15 @@ struct WorldBookBackgroundSource: BackgroundSource {
                 basePriority: record.priority,
                 relevance: relevance(semanticRank: entry.semanticRank, semanticDistance: entry.semanticDistance),
                 recency: record.updatedAt,
-                metadata: makeMetadata(entry: entry, trace: result.trace)
+                metadata: makeMetadata(entry: entry, trace: result.trace, stageContext: stageContext)
             )
         }
     }
 
     private static func makeMetadata(
         entry: WorldBookRecallEntry,
-        trace: WorldBookRecallTrace
+        trace: WorldBookRecallTrace,
+        stageContext: StageBackgroundContext?
     ) -> [String: String] {
         var metadata: [String: String] = [
             "sourceTable": WorldBookEntryRecord.databaseTableName,
@@ -86,7 +90,21 @@ struct WorldBookBackgroundSource: BackgroundSource {
         if trace.omissions.contains(where: { $0.reason == .semanticUnavailable }) {
             metadata["fallback"] = WorldBookRecallOmissionReason.semanticUnavailable.rawValue
         }
+        metadata["stageId"] = stageContext?.stageId
+        metadata["stageActiveSpeakerId"] = stageContext?.activeSpeaker?.id
+        metadata["stageParticipantIds"] = stageContext?.activeParticipants.map(\.id).joined(separator: ",")
         return metadata
+    }
+
+    private static func enrichedQuery(for request: BackgroundRequest) -> String {
+        guard let stageQuery = request.stageContext?.queryText,
+              !stageQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return request.currentInput
+        }
+        return [request.currentInput, stageQuery]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
     }
 
     private static func relevance(

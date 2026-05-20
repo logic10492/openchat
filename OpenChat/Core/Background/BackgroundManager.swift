@@ -89,7 +89,11 @@ struct BackgroundManager: Sendable {
         let contextText = [
             request.recentMessages.suffix(5).map(\.content).joined(separator: "\n"),
             request.currentInput,
-        ].filter { !$0.isEmpty }.joined(separator: "\n")
+            request.stageContext?.queryText,
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
 
         return KeywordMatcher.triggeredEntries(request.worldBookEntries, contextText: contextText).map { entry in
             BackgroundCandidate(

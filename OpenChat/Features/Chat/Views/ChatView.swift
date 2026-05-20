@@ -58,6 +58,8 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
+                .accessibilityLabel(String(localized: "Chat Settings"))
+                .accessibilityIdentifier("chat.settingsButton")
             }
         }
         .task {
@@ -103,6 +105,7 @@ struct ChatView: View {
                                 }
                             )
                             .id(item.id)
+                            .accessibilityIdentifier("chat.message.\(item.role).\(item.id)")
                         }
 
                         if viewModel.extractionPhase.isActive {
@@ -115,6 +118,11 @@ struct ChatView: View {
                                 }
                             )
                             .id("extraction-indicator")
+                        }
+
+                        if viewModel.showDetailedStats, let diagnostics = viewModel.backgroundDiagnostics {
+                            RetrievalTraceView(diagnostics: diagnostics)
+                                .id("retrieval-trace")
                         }
                     }
                     .padding(.horizontal, 16)
@@ -164,6 +172,7 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.top, 80)
+        .accessibilityIdentifier("chat.emptyState")
     }
 
     // MARK: - Helpers
@@ -240,6 +249,7 @@ struct ChatView: View {
                 apiClient: DependencyContainer.preview().apiClient,
                 contextManager: DependencyContainer.preview().contextManager,
                 memoryManager: DependencyContainer.preview().memoryManager,
+                memoryReflectBackgroundWorker: DependencyContainer.preview().memoryReflectBackgroundWorker,
                 worldBookEmbeddingIndexer: DependencyContainer.preview().worldBookEmbeddingIndexer,
                 worldBookSource: DependencyContainer.preview().worldBookSource,
                 backgroundManager: DependencyContainer.preview().backgroundManager,

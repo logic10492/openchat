@@ -120,6 +120,30 @@ extension AgentPolicy {
         )
     }
 
+    static func librarianDraftOfflineDefault() -> AgentPolicy {
+        AgentPolicy(
+            allowedCapabilities: [.llm, .userVisibleDraft, .internalDiagnostics],
+            tokenBudget: AgentTokenBudget(
+                maxInputTokens: 12_000,
+                maxOutputTokens: 2_000,
+                maxTotalTokens: 14_000
+            ),
+            timeoutSeconds: 20,
+            retryPolicy: AgentRetryPolicy(maxAttempts: 1, retryDelaySeconds: 0),
+            schemaRepairPolicy: SchemaRepairPolicy(allowRepair: true, maxRepairAttempts: 1),
+            visibilityPolicy: AgentVisibilityPolicy(
+                exposeDiagnosticsToUser: true,
+                exposeDraftToUser: true
+            ),
+            toolUsePolicy: .disabled,
+            sideEffectPolicy: .readOnly,
+            confirmationPolicy: ConfirmationPolicy(
+                requiredForDraftApply: true,
+                requiredForPersistentWrite: true
+            )
+        )
+    }
+
     static func reflectDefault() -> AgentPolicy {
         AgentPolicy(
             allowedCapabilities: [.llm, .databaseRead, .internalDiagnostics],

@@ -485,6 +485,31 @@ struct ChatViewModelPromptAssemblyTests {
             return (response, Data(payload.utf8))
         }
         let apiClient = APIClient(session: session)
+        let backgroundManager = BackgroundManager { request, _ in
+            let context = try #require(request.stageContext)
+            #expect(context.stageId == stage.id)
+            #expect(context.activeParticipants.map(\.characterCardId) == [mara.id, io.id])
+            #expect(context.activeSpeaker?.displayName == "Mara")
+            #expect(context.directorInstructions.map(\.content) == ["Keep the scene quiet."])
+            return BackgroundPacket(
+                entries: [],
+                omitted: [],
+                diagnostics: BackgroundDiagnostics(
+                    requestId: request.conversation.id,
+                    startedAt: now,
+                    endedAt: now,
+                    elapsedMilliseconds: 0,
+                    policyProfile: [:],
+                    agentPolicySummary: [:],
+                    sourceSummaries: [],
+                    inputCandidateCount: 0,
+                    selectedIds: [],
+                    omitted: [],
+                    fallbacks: [],
+                    warnings: []
+                )
+            )
+        }
         let viewModel = ChatViewModel(
             conversation: conversation,
             databaseManager: databaseManager,
@@ -496,6 +521,7 @@ struct ChatViewModelPromptAssemblyTests {
                 vectorStore: ChatEmptyVectorStore(),
                 apiClient: apiClient
             ),
+            backgroundManager: backgroundManager,
             titleGenerator: TitleGenerator(apiClient: apiClient),
             appState: AppState()
         )

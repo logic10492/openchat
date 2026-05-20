@@ -9,6 +9,7 @@ final class ChatViewModel {
     let apiClient: APIClient
     let contextManager: ContextManager
     let memoryManager: MemoryManager
+    let memoryReflectBackgroundWorker: MemoryReflectBackgroundWorker?
     let worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer?
     let worldBookSource: WorldBookSource?
     let backgroundManager: BackgroundManager?
@@ -26,6 +27,10 @@ final class ChatViewModel {
     var isGeneratingTitle = false
     var extractionPhase: MemoryExtractionPhase = .idle
     var tokenUsage: TokenUsageReport?
+    var backgroundDiagnostics: BackgroundDiagnostics?
+    var idleReflectDraft: MemoryReflectObservation?
+    var idleReflectDiagnostics: MemoryReflectDiagnostics?
+    var idleReflectSkippedReason: MemoryReflectBackgroundSkipReason?
     private(set) var availableEndpoints: [APIEndpointRecord] = []
     private(set) var availableCharacterCards: [CharacterCardRecord] = []
     private(set) var availableWorldBooks: [WorldBookRecord] = []
@@ -95,6 +100,7 @@ final class ChatViewModel {
         apiClient: APIClient,
         contextManager: ContextManager,
         memoryManager: MemoryManager,
+        memoryReflectBackgroundWorker: MemoryReflectBackgroundWorker? = nil,
         worldBookEmbeddingIndexer: WorldBookEmbeddingIndexer? = nil,
         worldBookSource: WorldBookSource? = nil,
         backgroundManager: BackgroundManager? = nil,
@@ -109,6 +115,7 @@ final class ChatViewModel {
         self.apiClient = apiClient
         self.contextManager = contextManager
         self.memoryManager = memoryManager
+        self.memoryReflectBackgroundWorker = memoryReflectBackgroundWorker
         self.worldBookEmbeddingIndexer = worldBookEmbeddingIndexer
         self.worldBookSource = worldBookSource
         self.backgroundManager = backgroundManager

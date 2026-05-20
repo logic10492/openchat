@@ -537,6 +537,42 @@ struct PromptAssemblerTests {
         #expect(enabledPreview.historyBudget < disabledPreview.historyBudget)
     }
 
+    @Test func test_backgroundPacketStateEntriesAreAssembledIntoBackgroundBlock() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard(id: "card-state", name: "Mara")
+        let packet = Self.makePacket(entries: [
+            Self.makeBackgroundEntry(
+                id: "characterState:card-state",
+                sourceType: .characterState,
+                sourceId: "card-state",
+                title: "Mara",
+                content: "Character: Mara\nPersonality: Focused."
+            ),
+            Self.makeBackgroundEntry(
+                id: "conversationState:\(conversation.id)",
+                sourceType: .conversationState,
+                sourceId: conversation.id,
+                title: conversation.title,
+                content: "Recent Turns:\nuser: Hold position."
+            ),
+        ])
+
+        let preview = PromptAssembler.preview(
+            conversation: conversation,
+            characterCard: card,
+            backgroundPacket: packet,
+            stageTurnPlan: nil,
+            currentInput: "continue",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 2000)
+        )
+
+        let block = try #require(preview.currentTurnContextMessages.first { $0.content.contains("[Background]") })
+        #expect(block.content.contains("[Character State: Mara]"))
+        #expect(block.content.contains("[Conversation State: \(conversation.title)]"))
+        #expect(block.content.contains("Hold position."))
+        #expect(preview.tokenUsage.background > 0)
+    }
+
     private static func makePacket(entries: [BackgroundEntry]) -> BackgroundPacket {
         BackgroundPacket(
             entries: entries,
@@ -555,6 +591,27 @@ struct PromptAssemblerTests {
                 fallbacks: [],
                 warnings: []
             )
+        )
+    }
+
+    private static func makeBackgroundEntry(
+        id: String,
+        sourceType: BackgroundSourceType,
+        sourceId: String,
+        title: String?,
+        content: String
+    ) -> BackgroundEntry {
+        BackgroundEntry(
+            id: id,
+            sourceType: sourceType,
+            sourceId: sourceId,
+            title: title,
+            content: content,
+            rank: 1,
+            score: 1,
+            estimatedTokens: TokenCounter.count(content),
+            reason: "test",
+            metadata: [:]
         )
     }
 }

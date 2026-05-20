@@ -23,6 +23,7 @@ struct TokenUsageReport: Sendable {
     let scenario: Int
     let slowPlotDirective: Int
     let timeContext: Int
+    let background: Int
     let worldBookEntries: Int
     let memories: Int
     let exampleDialogs: Int

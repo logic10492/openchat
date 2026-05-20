@@ -136,6 +136,7 @@ extension ChatViewModel {
                 worldBook: worldBook,
                 worldBookEntries: worldBookEntries,
                 recentMessages: promptHistoryMessages,
+                stageContext: stageTurnPlan.map(StageBackgroundContext.init(stageTurnPlan:)),
                 currentInput: prompt,
                 tokenBudget: max(Int((Double(endpoint.maxContextTokens) * 0.15).rounded(.down)), 1),
                 memoryLimit: 10,
@@ -145,6 +146,7 @@ extension ChatViewModel {
                 request: backgroundRequest,
                 policy: BackgroundPolicy.compatibilityDefault(tokenBudget: backgroundRequest.tokenBudget)
             )
+            backgroundDiagnostics = backgroundPacket.diagnostics
             preview = PromptAssembler.preview(
                 conversation: conversation,
                 characterCard: characterCard,
@@ -169,6 +171,7 @@ extension ChatViewModel {
                 endpoint: endpoint
             )
         } else {
+            backgroundDiagnostics = nil
             var memories: [MemoryEntryRecord] = []
             if let characterCardId = characterCard?.id {
                 do {
@@ -592,6 +595,25 @@ extension ChatViewModel {
             } catch {
                 logger.error("Memory extraction on disappear failed for conversation \(self.conversation.id): \(error.localizedDescription)")
             }
+
+            await prepareIdleReflectDraftIfNeeded()
+        }
+    }
+
+    private func prepareIdleReflectDraftIfNeeded() async {
+        guard let worker = memoryReflectBackgroundWorker else { return }
+
+        do {
+            let endpoint = try await resolveEndpointConfig()
+            let result = try await worker.prepareIdleDraft(
+                characterCardId: selectedCharacterCardID ?? conversation.characterCardId,
+                endpoint: endpoint
+            )
+            idleReflectDraft = result.observation
+            idleReflectDiagnostics = result.diagnostics
+            idleReflectSkippedReason = result.skippedReason
+        } catch {
+            logger.error("Idle memory reflect draft failed for conversation \(self.conversation.id): \(error.localizedDescription)")
         }
     }
 

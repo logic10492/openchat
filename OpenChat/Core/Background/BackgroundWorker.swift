@@ -237,10 +237,14 @@ struct BackgroundWorker: Sendable {
 
     private func sourceRank(_ sourceType: BackgroundSourceType) -> Int {
         switch sourceType {
-        case .worldBook:
+        case .characterState:
             return 0
-        case .memory:
+        case .conversationState:
             return 1
+        case .worldBook:
+            return 2
+        case .memory:
+            return 3
         }
     }
 
@@ -284,6 +288,6 @@ private struct ScoredCandidate: Sendable {
 
 private extension BackgroundSourceType {
     static var allCasesForBackground: [BackgroundSourceType] {
-        [.worldBook, .memory]
+        [.characterState, .conversationState, .worldBook, .memory]
     }
 }

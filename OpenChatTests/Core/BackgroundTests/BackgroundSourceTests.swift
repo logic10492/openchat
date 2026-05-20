@@ -192,6 +192,53 @@ struct BackgroundSourceTests {
         #expect(candidates.map { $0.id } == ["memory:mem-1", "memory:mem-2"])
     }
 
+    @Test func test_memorySource_usesStageParticipantsAndDirectorInstructions() async throws {
+        let result = MemoryRecallResult(
+            entries: [
+                MemoryRecallEntry(
+                    memory: Self.makeMemory(id: "mem-stage", importance: 5),
+                    finalRank: 1,
+                    semanticRank: nil,
+                    semanticDistance: nil,
+                    keywordRank: 1,
+                    recencyRank: nil,
+                    reasons: [.keyword]
+                ),
+            ],
+            trace: MemoryRecallTrace(
+                query: "stage query",
+                semanticCandidateCount: 0,
+                keywordCandidateCount: 1,
+                recentCandidateCount: 0,
+                selectedIds: ["mem-stage"],
+                omitted: [],
+                fallback: nil
+            )
+        )
+        let recorder = BackgroundMemoryRecallRecorder(result: result)
+        let source = MemoryBackgroundSource { characterCardId, query, limit in
+            try await recorder.recall(characterCardId: characterCardId, query: query, limit: limit)
+        }
+        let request = Self.makeRequest(
+            characterCard: TestHelpers.makeCharacterCard(id: "fallback-character"),
+            stageContext: Self.makeStageContext(),
+            memoryLimit: 3
+        )
+
+        let candidates = try await source.candidates(for: request)
+        let calls = await recorder.calls
+
+        #expect(calls.map(\.characterCardId) == ["card-mara", "card-io"])
+        #expect(calls.map(\.limit) == [3, 3])
+        #expect(calls.allSatisfy { $0.query.contains("current input") })
+        #expect(calls.allSatisfy { $0.query.contains("Stage participants: Mara, Io") })
+        #expect(calls.allSatisfy { $0.query.contains("Active speaker: Mara") })
+        #expect(calls.allSatisfy { $0.query.contains("Keep the scene quiet.") })
+        #expect(candidates.first?.metadata["stageId"] == "stage-1")
+        #expect(candidates.first?.metadata["stageCharacterCardId"] == "card-mara")
+        #expect(candidates.first?.metadata["stageParticipantIds"] == "participant-mara,participant-io")
+    }
+
     @Test func test_memorySource_withoutCharacterDoesNotCallRecall() async throws {
         let flag = BackgroundCallFlag()
         let source = MemoryBackgroundSource { _, _, _ in
@@ -340,6 +387,56 @@ struct BackgroundSourceTests {
         #expect(candidates.map { $0.id } == ["worldBook:wb-1", "worldBook:wb-2"])
     }
 
+    @Test func test_worldBookSource_enrichesQueryWithStageContext() async throws {
+        let recorder = BackgroundWorldBookRecallRecorder { _, entries, _, currentInput, _ in
+            WorldBookRecallResult(
+                entries: entries.enumerated().map { index, entry in
+                    WorldBookRecallEntry(
+                        entry: entry,
+                        finalRank: index + 1,
+                        keywordRank: 1,
+                        semanticRank: nil,
+                        semanticDistance: nil,
+                        keywordHits: ["stage"],
+                        reasons: [.keyword]
+                    )
+                },
+                trace: WorldBookRecallTrace(
+                    querySummary: currentInput,
+                    keywordCandidateCount: entries.count,
+                    semanticCandidateCount: 0,
+                    selectedIds: entries.map { $0.id },
+                    omissions: []
+                )
+            )
+        }
+        let source = WorldBookBackgroundSource { worldBook, entries, recentMessages, currentInput, limit in
+            try await recorder.recall(
+                worldBook: worldBook,
+                entries: entries,
+                recentMessages: recentMessages,
+                currentInput: currentInput,
+                limit: limit
+            )
+        }
+        let request = Self.makeRequest(
+            worldBookEntries: [Self.makeWorldBookEntry(id: "wb-stage")],
+            stageContext: Self.makeStageContext(),
+            worldBookLimit: 1
+        )
+
+        let candidates = try await source.candidates(for: request)
+        let call = try #require(await recorder.calls.first)
+
+        #expect(call.currentInput.contains("current input"))
+        #expect(call.currentInput.contains("Stage participants: Mara, Io"))
+        #expect(call.currentInput.contains("Active speaker: Mara"))
+        #expect(call.currentInput.contains("Keep the scene quiet."))
+        #expect(call.limit == 1)
+        #expect(candidates.first?.metadata["stageId"] == "stage-1")
+        #expect(candidates.first?.metadata["stageParticipantIds"] == "participant-mara,participant-io")
+    }
+
     @Test func test_sourceTypeContract_exposesReadOnlySourceKinds() {
         let diagnostics = BackgroundToolDiagnostics(
             sourceType: .memory,
@@ -351,15 +448,72 @@ struct BackgroundSourceTests {
 
         #expect(BackgroundSourceType.memory.rawValue == "memory")
         #expect(BackgroundSourceType.worldBook.rawValue == "worldBook")
+        #expect(BackgroundSourceType.characterState.rawValue == "characterState")
+        #expect(BackgroundSourceType.conversationState.rawValue == "conversationState")
         #expect(diagnostics.sourceType == .memory)
         #expect(diagnostics.durationMilliseconds == nil)
         #expect(diagnostics.fallback == MemoryRecallFallback.noSemanticHit.rawValue)
+    }
+
+    @Test func test_characterStateSourceBuildsReadonlyCandidateFromActiveCharacter() async throws {
+        let card = TestHelpers.makeCharacterCard(id: "card-mara", name: "Mara")
+        let source = CharacterStateBackgroundSource()
+
+        let candidates = try await source.candidates(
+            for: Self.makeRequest(
+                characterCard: card,
+                stageContext: Self.makeStageContext()
+            )
+        )
+
+        let candidate = try #require(candidates.first)
+        #expect(candidate.sourceType == .characterState)
+        #expect(candidate.sourceId == "card-mara")
+        #expect(candidate.content.contains("Character: Mara"))
+        #expect(candidate.content.contains("Personality: Kind and observant"))
+        #expect(candidate.content.contains("Stage Role: Active speaker: Mara"))
+        #expect(candidate.metadata["sourceTable"] == CharacterCardRecord.databaseTableName)
+        #expect(candidate.metadata["stageId"] == "stage-1")
+    }
+
+    @Test func test_conversationStateSourceBuildsRecentTurnAndStageCandidate() async throws {
+        let source = ConversationStateBackgroundSource()
+        let request = Self.makeRequest(
+            stageContext: Self.makeStageContext(),
+            recentMessages: [
+                TestHelpers.makeMessage(
+                    conversationId: "conversation-1",
+                    role: "user",
+                    content: "Open the gate.",
+                    sortOrder: 1
+                ),
+                TestHelpers.makeMessage(
+                    conversationId: "conversation-1",
+                    role: "assistant",
+                    content: "Mara waits.",
+                    sortOrder: 2
+                ),
+            ]
+        )
+
+        let candidates = try await source.candidates(for: request)
+        let candidate = try #require(candidates.first)
+        #expect(candidate.sourceType == .conversationState)
+        #expect(candidate.sourceId == "conversation-1")
+        #expect(candidate.content.contains("Conversation: Test Conversation"))
+        #expect(candidate.content.contains("Participants: Mara, Io"))
+        #expect(candidate.content.contains("Director Instructions:"))
+        #expect(candidate.content.contains("Keep the scene quiet."))
+        #expect(candidate.content.contains("user: Open the gate."))
+        #expect(candidate.metadata["sourceTable"] == ConversationRecord.databaseTableName)
     }
 
     private static func makeRequest(
         characterCard: CharacterCardRecord? = TestHelpers.makeCharacterCard(id: "character-1"),
         worldBook: WorldBookRecord? = TestHelpers.makeWorldBook(id: "world-book-1"),
         worldBookEntries: [WorldBookEntryRecord] = [],
+        stageContext: StageBackgroundContext? = nil,
+        recentMessages: [MessageRecord]? = nil,
         tokenBudget: Int = 1024,
         memoryLimit: Int = 10,
         worldBookLimit: Int = 10
@@ -369,7 +523,7 @@ struct BackgroundSourceTests {
             characterCard: characterCard,
             worldBook: worldBook,
             worldBookEntries: worldBookEntries,
-            recentMessages: [
+            recentMessages: recentMessages ?? [
                 TestHelpers.makeMessage(
                     conversationId: "conversation-1",
                     role: "user",
@@ -377,6 +531,7 @@ struct BackgroundSourceTests {
                     sortOrder: 1
                 ),
             ],
+            stageContext: stageContext,
             currentInput: "current input",
             tokenBudget: tokenBudget,
             memoryLimit: memoryLimit,
@@ -425,5 +580,43 @@ struct BackgroundSourceTests {
 
     private static func date(_ seconds: TimeInterval) -> Date {
         Date(timeIntervalSince1970: seconds)
+    }
+
+    private static func makeStageContext() -> StageBackgroundContext {
+        let now = Self.date(1)
+        let mara = StageParticipantRecord(
+            id: "participant-mara",
+            stageId: "stage-1",
+            characterCardId: "card-mara",
+            displayName: "Mara",
+            visibility: StageParticipantVisibility.present.rawValue,
+            isActive: true,
+            sortOrder: 1,
+            createdAt: now,
+            updatedAt: now
+        )
+        let io = StageParticipantRecord(
+            id: "participant-io",
+            stageId: "stage-1",
+            characterCardId: "card-io",
+            displayName: "Io",
+            visibility: StageParticipantVisibility.present.rawValue,
+            isActive: true,
+            sortOrder: 2,
+            createdAt: now,
+            updatedAt: now
+        )
+        return StageBackgroundContext(
+            stageId: "stage-1",
+            activeParticipants: [mara, io],
+            activeSpeaker: mara,
+            directorInstructions: [
+                try! StageInstruction.userDirected(
+                    id: "instruction-1",
+                    content: "Keep the scene quiet.",
+                    createdAt: now
+                ),
+            ]
+        )
     }
 }
