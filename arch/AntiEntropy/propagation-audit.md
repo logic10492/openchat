@@ -1338,7 +1338,7 @@ Whitespace check：`git diff --check` 通过。
 
 ### 当时未完成边界
 
-以下是 Director contract foundation closeout 当时的边界；其中 Stage runtime / DB / UI / prompt 接入已由下一节 `Stage Runtime Foundation 增量传播审计（2026-05-19）` 关闭，LLM Director agent、多 speaker parser、Responses Stage snapshot 和 XCUITest 仍保留为后续计划。
+以下是 Director contract foundation closeout 当时的边界；其中 Stage runtime / DB / UI / prompt 接入已由下一节 `Stage Runtime Foundation 增量传播审计（2026-05-19）` 关闭，LLM Director agent、多 speaker parser、Responses Stage snapshot 和 XCUITest 已由 `Stage / Background Midstage Completion 增量传播审计（2026-05-20）` 关闭。
 
 - Director executor/controller/runtime 未实现。
 - Stage runtime、Stage DB schema、Stage persistence、Stage UI 未实现。
@@ -1354,7 +1354,7 @@ Whitespace check：`git diff --check` 通过。
 
 范围：Stage DB schema、Director deterministic runtime、Chat/Prompt 主链路接入、Stage Chat UI、speaker metadata、director input history isolation、Stage arch / harness 写回。
 
-审计模式：窄范围增量审计。该轮把上一节未完成的 Stage runtime / DB / UI foundation 补齐，但仍不实现 LLM Director agent、多 speaker parser、Responses API Stage snapshot 或独立 Stage 列表页。
+审计模式：窄范围增量审计。该轮把上一节未完成的 Stage runtime / DB / UI foundation 补齐；LLM Director agent、多 speaker parser、Responses API Stage snapshot、Stage -> Background filter、XCUITest 和独立 Stage 列表页由后续 `Stage / Background Midstage Completion 增量传播审计（2026-05-20）` 关闭。
 
 ### 静态传播面
 
@@ -1436,6 +1436,8 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ### 未完成边界
 
+以下是 2026-05-19 Stage runtime foundation closeout 当时的边界；其中 LLM Director agent、多 speaker parser、Responses Stage snapshot、Stage XCUITest、Stage -> Background filter 和独立 Stage 管理页已由 2026-05-20 后续增量关闭。
+
 - LLM Director agent / AgentCore executor wiring 未实现。
 - `agent` mode 未生成 LLM `DirectorPlan`。
 - 多 speaker output parser、speaker block schema、parser diagnostics 和一轮多 assistant message 拆分未实现。
@@ -1443,3 +1445,115 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 - Stage 创建/participant/director UI 尚无 XCUITest 自动化。
 - Stage participant / director instruction 尚未传入 `BackgroundManager` source request。
 - 角色仍不是 AgentCore agent，也没有 tool call 权限。
+
+## Stage / Background Midstage Completion 增量传播审计（2026-05-20）
+
+范围：Stage UI automation baseline、Responses API Stage snapshot、Stage -> Background filter、LLM Director agent、multi-speaker output parser、CharacterState / ConversationState Background sources、LibMan offline draft runtime、idle/background reflect draft worker、retrieval trace UI、独立 Stage management page。
+
+审计模式：窄范围增量审计。该轮关闭上一节 Stage runtime foundation 的后续项，并补齐 Background / Memory 中期 source 与 diagnostics surface；仍不实现普通角色 tool call、Exa ToolBroker、统一 `[Background]` block、LibMan apply UI、自动 synthesis 写入、duplicate/conflict review 或完整 Stage CRUD editor。
+
+### 静态传播面
+
+新增 production surface：
+
+- `OpenChat/App/UITestingSupport.swift`
+- `OpenChat/Core/AgentCore/LLMAgentExecutor.swift`
+- `OpenChat/Core/Background/CharacterStateBackgroundSource.swift`
+- `OpenChat/Core/Background/ConversationStateBackgroundSource.swift`
+- `OpenChat/Core/Background/LibrarianDraftTask.swift`
+- `OpenChat/Core/Memory/MemoryReflectBackgroundWorker.swift`
+- `OpenChat/Core/Stage/LLMDirectorTask.swift`
+- `OpenChat/Core/Stage/StageSpeakerBlockParser.swift`
+- `OpenChat/Features/Chat/Views/RetrievalTraceView.swift`
+- `OpenChat/Features/Stage/StageManagementView.swift`
+- `OpenChat/Features/Stage/StageManagementViewModel.swift`
+- `OpenChatUITests/StageUITests.swift`
+
+修改 production surface：
+
+- `OpenChat/App/DependencyContainer.swift` 装配 CharacterState / ConversationState sources 与 idle reflect worker。
+- `OpenChat/Core/AgentCore/AgentPolicy.swift` 追加 offline LibMan policy。
+- `OpenChat/Core/Background/BackgroundSourceTool.swift` 扩展 source type、`StageBackgroundContext` 和 `BackgroundRequest.stageContext`。
+- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 用 Stage participants、active speaker 和 director instructions enrich query 并写入 metadata。
+- `OpenChat/Core/Background/BackgroundAssembler.swift` / `BackgroundPolicy.swift` 支持 characterState / conversationState entries。
+- `OpenChat/Core/Stage/DirectorExecutor.swift` 追加 `LLMDirectorExecutor`。
+- `OpenChat/Core/Database/DatabaseManager+Stage.swift` 追加 Stage list item 查询。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` 在 `DirectorMode.agent` 下调用 LLM Director，构造 `StageBackgroundContext` 传入 BackgroundManager，并在 assistant 完整输出后执行 multi-speaker split。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` 暴露 `backgroundDiagnostics`。
+- `OpenChat/Features/Chat/Views/ChatView.swift` 在 detailed stats 下展示 `RetrievalTraceView`。
+- `OpenChat/Features/Support/SidebarView.swift` 增加独立 Stage management sheet 入口。
+
+测试传播面：
+
+- `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift`
+- `OpenChatTests/Core/BackgroundTests/LibrarianDraftTaskTests.swift`
+- `OpenChatTests/Core/MemoryTests/MemoryReflectBackgroundWorkerTests.swift`
+- `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`
+- `OpenChatTests/Core/StageTests/LLMDirectorExecutorTests.swift`
+- `OpenChatTests/Core/StageTests/StageSpeakerBlockParserTests.swift`
+- `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift`
+- `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`
+- `OpenChatTests/Features/StageTests/StageManagementViewModelTests.swift`
+- `OpenChatUITests/StageUITests.swift`
+
+### 行为传播结论
+
+- Stage UI automation baseline 已有 `OpenChatUITests/StageUITests.swift`，配套 `UITestingSupport`、mock API、seed data 和 accessibility identifiers，覆盖 Stage 创建、DirectorMode、participant add/remove 和 director input 隔离。
+- Responses API Stage snapshot 已覆盖 `[Stage]` / `[Director Instructions]` 在 Responses mode 下 folding 到 `instructions`，且不进入 user input。
+- Stage -> Background filter 已把 active participants、active speaker 和 director instructions 传入 `BackgroundRequest.stageContext`；Memory / WorldBook source 使用 enriched query，Character / ConversationState source 产出 stage-aware candidates。
+- `DirectorMode.agent` 已走 `LLMDirectorExecutor -> LLMAgentExecutor -> LLMDirectorTask`，LLM 输出非法时 fallback 到 deterministic plan；Director 不替角色写最终台词、不写数据库、不启用 tool。
+- Multi-speaker parser 当前在 assistant 完整输出后解析 `[Speaker: ...]` / `Name:` / `<speaker name="">` blocks，并拆成多条 staged assistant messages；尚不是 streaming parser。
+- LibMan 当前是 offline cited draft runtime：使用用户提供 source materials + LLM，产出用户可见草稿，不联网、不写 DB；Exa ToolBroker / apply UI 仍是后续范围。
+- Idle/background reflect 当前是 draft-only worker，不自动 apply/write memory；duplicate/conflict 自动 review / merge / delete 仍是后续范围。
+- Retrieval trace UI 当前只在 Chat detailed stats 下展示 Background diagnostics。
+- Stage management page 当前是独立列表 / 打开 conversation 入口，不是完整 CRUD Stage editor。
+
+### 验证
+
+已通过的 focused 增量：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/LLMDirectorExecutorTests' '-only-testing:OpenChatTests/StageSpeakerBlockParserTests' '-only-testing:OpenChatTests/ResponsesAPITests'
+```
+
+结果：54 tests / 6 suites passed，`** TEST SUCCEEDED **`。
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/LibrarianDraftTaskTests' '-only-testing:OpenChatTests/MemoryReflectBackgroundWorkerTests' '-only-testing:OpenChatTests/StageManagementViewModelTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：13 tests / 4 suites passed，`** TEST SUCCEEDED **`。
+
+最终验证：
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/BackgroundManagerTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/LLMDirectorExecutorTests' '-only-testing:OpenChatTests/StageSpeakerBlockParserTests' '-only-testing:OpenChatTests/ResponsesAPITests' '-only-testing:OpenChatTests/LibrarianDraftTaskTests' '-only-testing:OpenChatTests/MemoryReflectBackgroundWorkerTests' '-only-testing:OpenChatTests/StageManagementViewModelTests' '-only-testing:OpenChatTests/AgentPolicyTests'
+```
+
+结果：67 tests / 10 suites passed，`** TEST SUCCEEDED **`。
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatUITests/StageUITests'
+```
+
+结果：1 UI test passed，`** TEST SUCCEEDED **`。
+
+```bash
+xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
+结果：Swift Testing 397 tests / 72 suites passed；`OpenChatUITests/StageUITests` 1 XCTest passed；`** TEST SUCCEEDED **`。xcresult：`/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.20_12-23-59-+0800.xcresult`。
+
+Other checks：
+
+- `git diff --check` passed。
+- `python3 -m json.tool OpenChat/Resources/Localizable.xcstrings` passed。
+
+### 当前未完成边界
+
+- 统一 `[Background]` block 未默认启用。
+- Exa ToolBroker / ToolExecutor、LibMan web search、UI preview/apply 和 confirmed persistent write 未实现。
+- Idle reflect 不自动 apply/write；duplicate/conflict review、自动合并 / 删除 / 覆盖策略未实现。
+- Multi-speaker parser 非流式，parser diagnostics / schema repair 仍是基础版。
+- Stage management page 不是完整 CRUD editor。
+- 普通角色仍不是 AgentCore agent，也没有 tool call 权限。

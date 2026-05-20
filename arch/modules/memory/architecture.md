@@ -83,7 +83,7 @@ Core/PromptEngine
 - embedding 在本地执行，长期记忆检索不需要额外网络请求。
 - LLM 只参与自动提取；正常 recall 不走生成式 LLM。
 - 检索失败不阻断聊天；semantic 不可用时 fallback 到 keyword + recent high-value，提取失败不推进 cutoff。
-- 当前记忆条目主表仍较扁平；source range/provenance 已由 `memory_entry_provenance` 建模，manual reflect observation 的 based-on 关系已由 `memory_entry_link` 建模。dedupe/reinforce 自动应用、冲突解决和 idle/background reflect 仍未实现。
+- 当前记忆条目主表仍较扁平；source range/provenance 已由 `memory_entry_provenance` 建模，manual reflect observation 的 based-on 关系已由 `memory_entry_link` 建模。idle/background reflect 已有 draft-only worker；dedupe/reinforce 自动应用、冲突解决、自动 apply/write 仍未实现。
 
 ## 6. Background 目标边界
 

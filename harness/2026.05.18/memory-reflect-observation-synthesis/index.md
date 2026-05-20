@@ -125,7 +125,7 @@ xcresult：
 
 ## 9. 未完成边界
 
-- 未启用 idle/background 自动 reflect。
+- 2026-05-20 后续增量已启用 idle/background draft-only reflect worker；当前不自动 apply / write memory。
 - 未实现 duplicate 自动删除、旧记忆覆盖或 conflict 自动解决。
 - 未实现 duplicate/conflict 专用 review UI。
 - 未启用统一 `[Background]` block。

@@ -26,7 +26,7 @@ Hindsight-lite 的目标不是增加一个远端 memory daemon，而是在现有
 - 不把同会话 compression checkpoint 替换成长期记忆。
 - 不让 `PromptAssembler` 承担 recall rerank。
 - 不为 provider 没有返回的字段伪造“模型置信分数”。
-- 不把统一 `[Background]` block、Character / ConversationState sources 或 synthesis worker 写成当前已实现能力。
+- 不把统一 `[Background]` block、自动 synthesis 写入或 duplicate/conflict review 写成当前已实现能力；Character / ConversationState sources 已在 Background 层落地，不属于 Memory 模块内部职责。
 - 不在 Memory 模块内实现世界书向量化、Background source orchestration 或 `BackgroundWorker`。
 
 ## 3. 与当前问题的对应关系
@@ -343,7 +343,7 @@ Reflect 是唯一明确需要 LLM 参与的 Hindsight-lite 子流程。retain �
 允许：
 
 - 用户在记忆管理页选择 2-5 条记忆后点击“整理记忆”（已实现）。
-- App 空闲或后台低频触发（未实现）。
+- App 空闲或后台低频触发 draft-only observation（已实现；不自动 apply / write memory）。
 - 后续 BackgroundWorker 若发现重复/冲突 cluster，可生成整理任务。
 
 禁止：
@@ -455,7 +455,7 @@ MemoryRecallResult
 3. `MemoryRecallTool` / `MemoryBackgroundSource` 把 `MemoryRecallResult` 包装成 `BackgroundCandidate`。
 4. `BackgroundWorker` / `BackgroundPacket` / packet-aware `PromptAssembler` 接入 Chat 主链路，保持 `[Memories]` 兼容 block。
 
-后续迁移只剩统一 `[Background]` block、Character / ConversationState sources、diagnostics UI、idle/background reflect 自动触发和 duplicate/conflict review policy。
+后续迁移只剩统一 `[Background]` block、自动 apply/write、duplicate/conflict review policy 和更完整 UI 自动化。
 
 ### 9.2 Responses API system folding
 
@@ -471,8 +471,8 @@ MemoryRecallResult
 仍留给后续：
 
 - 统一 `[Background]` block 的稳定 label 与 request-shape audit。
-- Character / ConversationState sources 与 synthesis worker。
-- packet diagnostics 的 debug UI 展示。
+- 自动 synthesis 写入与 duplicate/conflict review。
+- packet diagnostics 已有 detailed stats debug UI，仍缺少 UI 自动化覆盖。
 
 ## 10. 可观测性
 
@@ -526,4 +526,4 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | E | reflect executor / `memory_entry_link` / basedOn 表 | 是（v17，手动入口已实现） |
 | F | MemoryBackgroundSource 接入 Background | 已完成 Phase 4-6 compatible switch；统一 `[Background]` block 未启用 |
 
-Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。2026-05-17 后续 Phase 4-6 已完成 Memory source tool / adapter、BackgroundWorker / packet 和 Chat-Prompt compatible switch。2026-05-18 Phase 5 focused closeout 已通过 84 tests / 5 suites。剩余工作是统一 `[Background]` block、Character / ConversationState sources、packet diagnostics UI、idle/background reflect 自动触发、duplicate/conflict review policy 和 UI 自动化。
+Phase A/B/C/D 与 Lead closeout 已依次完成；2026-05-16 full suite 251 tests / 46 suites passed。2026-05-17 后续 Phase 4-6 已完成 Memory source tool / adapter、BackgroundWorker / packet 和 Chat-Prompt compatible switch。2026-05-18 Phase 5 focused closeout 已通过 84 tests / 5 suites。2026-05-20 后续增量已完成 Character / ConversationState sources、packet diagnostics UI 和 idle/background reflect draft trigger。剩余工作是统一 `[Background]` block、自动 apply/write、duplicate/conflict review policy 和 UI 自动化。

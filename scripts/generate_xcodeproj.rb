@@ -8,6 +8,7 @@ PROJECT_NAME = 'OpenChat'
 PROJECT_PATH = "#{PROJECT_NAME}.xcodeproj"
 APP_DIR = Pathname('OpenChat')
 TEST_DIR = Pathname('OpenChatTests')
+UI_TEST_DIR = Pathname('OpenChatUITests')
 IOS_DEPLOYMENT_TARGET = '17.0'
 TOOLS_VERSION = '26.4'
 GRDB_REVISION = '36e30a6f1ef10e4194f6af0cff90888526f0c115'
@@ -68,13 +69,19 @@ project = Xcodeproj::Project.new(PROJECT_PATH)
 
 app_target = project.new_target(:application, PROJECT_NAME, :ios, IOS_DEPLOYMENT_TARGET)
 test_target = project.new_target(:unit_test_bundle, "#{PROJECT_NAME}Tests", :ios, IOS_DEPLOYMENT_TARGET)
+ui_test_target = project.new_target(:ui_test_bundle, "#{PROJECT_NAME}UITests", :ios, IOS_DEPLOYMENT_TARGET)
 test_target.add_dependency(app_target)
+ui_test_target.add_dependency(app_target)
 
 project.root_object.attributes['TargetAttributes'] ||= {}
 project.root_object.attributes['TargetAttributes'][app_target.uuid] = {
   'CreatedOnToolsVersion' => TOOLS_VERSION,
 }
 project.root_object.attributes['TargetAttributes'][test_target.uuid] = {
+  'CreatedOnToolsVersion' => TOOLS_VERSION,
+  'TestTargetID' => app_target.uuid,
+}
+project.root_object.attributes['TargetAttributes'][ui_test_target.uuid] = {
   'CreatedOnToolsVersion' => TOOLS_VERSION,
   'TestTargetID' => app_target.uuid,
 }
@@ -117,6 +124,7 @@ app_target.frameworks_build_phase.files << sqlitevec_build_file
 
 app_group = project.main_group.new_group(PROJECT_NAME, APP_DIR.to_s)
 tests_group = project.main_group.new_group("#{PROJECT_NAME}Tests", TEST_DIR.to_s)
+ui_tests_group = project.main_group.new_group("#{PROJECT_NAME}UITests", UI_TEST_DIR.to_s)
 
 add_directory(
   group: app_group,
@@ -132,7 +140,17 @@ add_directory(
   is_test_root: true
 )
 
-[app_target, test_target].each do |target|
+if UI_TEST_DIR.exist?
+  add_directory(
+    group: ui_tests_group,
+    directory: UI_TEST_DIR,
+    source_target: app_target,
+    test_target: ui_test_target,
+    is_test_root: true
+  )
+end
+
+[app_target, test_target, ui_test_target].each do |target|
   target.build_configurations.each do |config|
     config.build_settings['SWIFT_VERSION'] = '6.0'
     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = IOS_DEPLOYMENT_TARGET
@@ -168,8 +186,15 @@ test_target.build_configurations.each do |config|
   config.build_settings['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks'
 end
 
+ui_test_target.build_configurations.each do |config|
+  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.openchat.app.uitests'
+  config.build_settings['TEST_TARGET_NAME'] = PROJECT_NAME
+  config.build_settings['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @loader_path/Frameworks @loader_path/../../Frameworks'
+end
+
 scheme = Xcodeproj::XCScheme.new
 scheme.configure_with_targets(app_target, test_target, launch_target: true)
+scheme.test_action.add_testable(Xcodeproj::XCScheme::TestAction::TestableReference.new(ui_test_target))
 scheme.save_as(PROJECT_PATH, PROJECT_NAME, true)
 
 project.save

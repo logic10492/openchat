@@ -1,8 +1,10 @@
 # 多角色 Stage
 
-> 状态：多角色同场 foundation 已落地；当前只支持一轮一个 active speaker 输出，不支持多 speaker 连续输出 parser。
+> 状态：多角色同场 foundation 已落地；当前支持一轮默认 active speaker 输出，也支持完整输出后的多 speaker block parser 与多条 staged assistant message 拆分。
 
 2026-05-19 closeout：`stage_participant` 表、`StageParticipantRecord`、`StageParticipantVisibility`、`MessageSpeakerKind`、`StageTurnPlan` 已落地。Chat Settings 可为当前 Stage 添加多个角色；`DirectorController` 当前默认策略为“输入点名优先，否则选择 sortOrder 最小的 active present participant”。assistant message 会保存 `stageId`、`speakerKind`、`speakerId`、`speakerName`。
+
+2026-05-20 closeout：`StageSpeakerBlockParser` 支持 `[Speaker: name-or-id]...[/Speaker]` 与 `Name:` 行首 block；`ChatViewModel+Support.persistCompletedAssistantMessages(...)` 会把多个 speaker blocks 拆成多条 `MessageRecord(role: "assistant")`，每条保存对应 `stageId` / `speakerKind` / `speakerId` / `speakerName`。`StageSpeakerBlockParserTests` 与 `ChatViewModelPromptAssemblyTests.test_stageSpeakerBlocksSplitIntoMultipleAssistantMessages` 覆盖 parser 与持久化拆分。
 
 ## 1. 角色边界
 
@@ -68,7 +70,7 @@ enum SpeakerIntent: String, Codable, Sendable {
 }
 ```
 
-第一阶段可以只允许一轮一个角色回复；后续再扩展为多角色连续输出。
+默认策略仍选择一个主回复角色；当 LLM 输出多个 speaker blocks 时，runtime 会拆分保存。
 
 ## 4. 多角色输出格式
 
@@ -103,4 +105,4 @@ var speakerName: String?
 
 - 最近活跃角色选择。
 - 多角色 persona 摘要 block；当前 active speaker persona 仍通过既有 `CharacterCardRecord` 注入。
-- 多 speaker output parser 和一轮多 assistant message 拆分。
+- streaming 过程中按 speaker block 实时分流；当前是在完整 assistant 内容可用后拆分。

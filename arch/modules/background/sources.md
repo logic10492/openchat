@@ -1,6 +1,6 @@
 # BackgroundSource 统一候选来源
 
-> 状态：Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地；2026-05-17 Phase 5/6 已由 `BackgroundWorker` / `BackgroundManager` 消费这些 candidates 并切入 Chat/Prompt 兼容链路。Character / ConversationState sources 尚未实现。
+> 状态：Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地；2026-05-17 Phase 5/6 已由 `BackgroundWorker` / `BackgroundManager` 消费这些 candidates 并切入 Chat/Prompt 兼容链路。2026-05-20 已追加 `CharacterStateBackgroundSource`、`ConversationStateBackgroundSource` 和 Stage context filter。
 
 ## 1. Source 类型
 
@@ -8,10 +8,12 @@
 enum BackgroundSourceType: String, Codable, Sendable {
     case memory
     case worldBook
+    case characterState
+    case conversationState
 }
 ```
 
-当前源码只包含 `.memory` / `.worldBook`；`character` / `conversationState` 是后续目标 source，不是 live enum case。
+当前源码包含 `.memory` / `.worldBook` / `.characterState` / `.conversationState`。Character / ConversationState 第一版是 deterministic read-only source，不写库、不调用 LLM、不替代长期 Memory 或 compression checkpoint。
 
 ## 1.1 Source tool 前置边界
 
@@ -28,7 +30,8 @@ enum BackgroundSourceType: String, Codable, Sendable {
 
 - `OpenChat/Core/Memory/MemoryRecallTool.swift` 已实现并进入 target；`MemoryRecallToolTests` 覆盖 input forwarding、result order、rank/reason/trace/fallback 透传和 `limit == 0` 透传。
 - `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已实现并进入 target；`WorldBookRecallToolTests` 覆盖 keyword-only、semantic-only、hybrid、disabled、semanticUnavailable、staleEmbedding、limit/duplicate omission 透传和无 indexer/rebuild dependency。
-- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖 candidate id prefix、顺序、metadata、request 边界和不按 token budget 裁剪。
+- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖 candidate id prefix、顺序、metadata、request 边界、Stage context query enrichment 和不按 token budget 裁剪。
+- `OpenChat/Core/Background/CharacterStateBackgroundSource.swift` / `ConversationStateBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖角色卡派生状态、recent turn / stage state candidate 和 source type raw value。
 - `OpenChat/Core/Background/BackgroundWorker.swift` / `BackgroundManager.swift` 已消费这两个 source adapters；`BackgroundManagerTests` 覆盖 source merge 与 worldBook source failure keyword fallback。
 
 ## 2. MemoryBackgroundSource
@@ -102,37 +105,37 @@ Phase C 实现证据：
 - `OpenChat/Core/PromptEngine/PromptAssembler.swift`：保留 keyword fallback，同时新增 preselected world book entry path，避免 semantic-only entries 被二次 keyword 过滤。
 - `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`、`OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`、`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`。
 
-## 4. CharacterBackgroundSource
+## 4. CharacterStateBackgroundSource
 
 来源：`CharacterCardRecord`。
 
 职责：
 
-- 输出少量与当前输入相关的角色卡派生背景，例如关键身份、说话风格、长期目标。
+- 输出少量角色卡派生背景，例如关键身份、人格、外貌、说话风格、背景和场景。
 - 不替代 Stable Identity。
-- 不重复注入完整角色卡。
+- 第一版按 active character 生成一个 read-only candidate，由 `BackgroundWorker` 通过 `.characterState` source limit 控制是否进入 prompt。
 
 适用场景：
 
 - 用户提到外貌、职业、背景故事中的具体细节。
 - 当前 prompt budget 不允许注入完整角色描述，但允许注入一条短背景提醒。
+- Stage 已启用且 active speaker 对应当前角色时，candidate metadata / content 记录 active speaker。
 
 ## 5. ConversationStateBackgroundSource
 
 来源：当前 conversation 的派生状态。
 
-目标状态可能包括：
+当前第一版来源包括：
 
-- 当前场景。
-- 未完成事件。
-- 近期情绪余波。
-- 角色与用户之间的短期互动状态。
+- conversation title / custom scenario。
+- 最近若干 turn 的 speaker + content。
+- Stage participants、active speaker 和 director instructions。
 
 注意：
 
 - 这不是长期 memory。
 - 这也不是 compression checkpoint。
-- 它是本轮对话中需要稳定保留的短期 state。
+- 它是本轮对话中需要稳定保留的短期 state；当前不做 LLM synthesis、不写 conversation-state 表。
 
 ## 6. Candidate metadata
 

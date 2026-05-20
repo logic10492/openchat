@@ -1,6 +1,6 @@
 # AgentCore 基座设计
 
-> 状态：AgentCore foundation 已落地并完成 closeout；BackgroundWorker / BackgroundPacket / BackgroundManager 已作为第一个 consumer 落地；Director / LibMan runtime 仍未实现。
+> 状态：AgentCore foundation 已落地并完成 closeout；BackgroundWorker / BackgroundPacket / BackgroundManager、LLM Director 和 LibMan offline draft 已作为 consumers 落地。ToolBroker / Exa broker、LibMan apply UI 和写库型 relationship / conversation-state updater 仍未实现。
 > 目标：为 BackgroundWorker、Director、LibMan、reflect / state updater 等后台能力提供共享的任务执行、权限和诊断骨架，避免每个 agent/worker 各自重复实现运行时约束。
 
 AgentCore 是后续后台能力的基座，不是临时最小实现，也不是“把角色 agent 化”的入口。OpenChat 的对话角色仍是 persona；角色回复由主聊天模型根据角色卡、历史、Background 和当前输入生成。角色回复的展示适配不属于 AgentCore 范围。
@@ -29,17 +29,17 @@ AgentCore 是后续后台能力的基座，不是临时最小实现，也不是�
 - Full suite：303 tests / 58 suites passed。
 - `ruby scripts/generate_xcodeproj.rb` 已重新生成 Xcode project；AgentCore source/test 已进入 target，签名配置仍来自脚本中的既有值。
 
-本页把 AgentCore foundation contract 记为已实现，并记录 BackgroundWorker 作为第一个受限 consumer 已落地。Director、LibMan、LLM executor 和 ToolBroker 仍保持未实现边界。
+本页把 AgentCore foundation contract 记为已实现，并记录 BackgroundWorker、LLM Director 和 LibMan offline draft 作为当前 consumers。
 
 仍未实现：
 
-- `LLMAgentExecutor`
 - `ToolBroker` / `ToolExecutor`
-- Director runtime
-- LibMan runtime / Exa broker
-- reflect executor / relationship updater / conversation state tracker runtime
+- Exa broker
+- LibMan UI preview/apply 和 confirmed persistent write
+- relationship updater / conversation state tracker 持久运行时
+- idle reflect draft 的自动 apply / duplicate/conflict review
 
-已实现的 Background consumer：
+已实现的 consumer：
 
 - `OpenChat/Core/Background/BackgroundPolicy.swift`
 - `OpenChat/Core/Background/BackgroundPacket.swift`
@@ -47,8 +47,12 @@ AgentCore 是后续后台能力的基座，不是临时最小实现，也不是�
 - `OpenChat/Core/Background/BackgroundWorker.swift`
 - `OpenChat/Core/Background/BackgroundManager.swift`
 - `OpenChat/Core/Background/BackgroundAssembler.swift`
+- `OpenChat/Core/AgentCore/LLMAgentExecutor.swift`
+- `OpenChat/Core/Stage/LLMDirectorTask.swift`
+- `OpenChat/Core/Stage/DirectorExecutor.swift` 中的 `LLMDirectorExecutor`
+- `OpenChat/Core/Background/LibrarianDraftTask.swift`
 
-Background Worker / Prompt Switch Phase 5/6 closeout 已证明 deterministic worker、packet diagnostics、manager orchestration 和 Chat / Prompt packet-compatible switch；统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 仍为后续范围。
+Background Worker / Prompt Switch Phase 5/6 closeout 已证明 deterministic worker、packet diagnostics、manager orchestration 和 Chat / Prompt packet-compatible switch。2026-05-20 追加证明 `LLMAgentExecutor` 可执行 read-only LLM tasks，`DirectorMode.agent` 可生成 `DirectorPlan` 并 fallback 到 deterministic plan，LibMan offline draft 可生成带 citations 的用户可见草稿且不写 DB。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI 和自动 synthesis 写入仍为后续范围。
 
 ## 1. 核心原则
 

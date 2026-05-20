@@ -1,16 +1,18 @@
 # Director / 导演
 
-> 状态：Director contract foundation 与 deterministic controller/executor runtime 已落地；LLM Director agent、AgentCore executor 接入、多角色输出 parser 和导演调试 UI 仍未实现。AgentCore foundation source 已存在，后续 LLM Director runtime 复用该 policy boundary。
+> 状态：Director contract foundation、deterministic controller/executor runtime 与 LLM Director agent runtime 已落地；导演调试 UI 仍未实现。
 
 Director 是 Stage 的舞台调度者。它可以影响场景节奏、参与角色和发言计划，但不能替角色成为用户正在对话的 persona。
 
-Director agent 模式后续应复用 `AgentCore`，但只输出结构化 `DirectorPlan`。它不能替角色写台词，也不能把内部分析作为主聊天 assistant message。
+Director agent 模式复用 `AgentCore`，只输出结构化 `DirectorPlan`。它不能替角色写台词，也不能把内部分析作为主聊天 assistant message。
 
 2026-05-17 closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.directorDefault(allowsLLM:)`，默认不开放 web / database write；AgentCore focused tests 12 tests / 4 suites passed，full suite 303 tests / 58 suites passed。这只是后续 Director 的 policy contract，不代表 Stage / Director runtime 已接入。
 
 2026-05-19 closeout：Director contract foundation 已新增 `OpenChat/Core/Stage/DirectorMode.swift`、`StageInstruction.swift`、`DirectorPlan.swift`、`DirectorDiagnostics.swift`，并由 `OpenChatTests/Core/StageTests/DirectorContractTests.swift` 与 `AgentPolicyTests.swift` 覆盖三种 mode、stage instruction validation、speaker plan hint、diagnostics、prompt-order contract helper 和 Director policy 红线。该 closeout 仍未实现 Director executor/controller、Chat 主链路接入、Stage DB/UI、输入栏导演切换、多角色 participant 绑定或多 speaker output parser。
 
 2026-05-19 runtime closeout：`OpenChat/Core/Stage/DirectorController.swift` 与 `DirectorExecutor.swift` 已接入 `ChatViewModel+Support.generateResponse(...)`。当前 executor 是 deterministic：participant 输入时优先选择被输入文本点名的 active participant，否则选择 sortOrder 最小的 active participant；director 输入时生成隐藏 `StageInstruction`，作为 instruction-only turn，不生成普通 user message、不生成 title、不调用 API。`OpenChatTests/Core/StageTests/DirectorContractTests.swift` 覆盖 controller 选择和 director-only turn；`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 覆盖 director input history 隔离与 Stage prompt request shape。
+
+2026-05-20 closeout：`OpenChat/Core/Stage/LLMDirectorTask.swift` 与 `LLMDirectorExecutor` 已接入 `DirectorMode.agent`。Chat 主链路在 stage mode 为 `.agent` 时使用 `LLMDirectorExecutor(agentExecutor: directorAgentExecutor, apiClient: endpoint: parameters:)`，并由 `LLMAgentExecutor` 执行 typed `AgentTask`。`LLMDirectorExecutorTests` 覆盖 agent mode 使用 LLM plan、invalid output fallback deterministic plan、policy 不联网不写库。
 
 ## 1. 三种工作模式
 
@@ -122,15 +124,14 @@ enum DirectorMode: String, Codable, Sendable {
 
 - `DirectorController.planTurn(...)` deterministic speaker selection。
 - `DeterministicDirectorExecutor.execute(...)`。
+- `LLMDirectorExecutor.execute(...)` 与 `LLMDirectorTask`，在 `DirectorMode.agent` 下通过 AgentCore/LLM 生成 `DirectorPlan`。
 - `ChatViewModel+Support.generateResponse(...)` 读取 `fetchStageContext(...)`，执行 Director，解析 active speaker 对应 `CharacterCardRecord`，并把 `StageTurnPlan` 传入 `PromptAssembler.preview(...)` / `assemble(...)`。
 - user/assistant message 会保存 `stageId`、`speakerKind`、`speakerId`、`speakerName`。
 
-未实现：
+仍未实现：
 
-- `agent` mode 仍不调用 LLM Director；当前只是保存 mode 并走 deterministic policy。
 - Director diagnostics 不进入 UI。
-- Director 不修改 Background request，也不写角色卡、世界书或长期记忆。
-- 没有多 speaker parser；一轮仍只保存一个 assistant message。
+- Director 不写角色卡、世界书或长期记忆。
 
 ## 4. 与 BackgroundWorker 的区别
 

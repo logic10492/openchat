@@ -58,6 +58,7 @@ xcrun simctl list devices available | rg 'iPhone'
 
 Sandboxed result:
 - Failed because CoreSimulatorService/log access was unavailable.
+- Historical note from 2026-05-19 only; 2026-05-20 verification below reran successfully on the named simulator.
 
 Escalated result:
 - iPhone 17 Pro (F8D0D88B-71FD-471F-855A-B2B5D8267117) available.
@@ -97,10 +98,24 @@ Contract summary:
 - PromptAssembler emits Stage blocks only when stageTurnPlan is present.
 - Stage UI is currently embedded in Chat Settings.
 
+2026-05-20 follow-up closures:
+- LLM Director agent exists via LLMDirectorExecutor / LLMDirectorTask / LLMAgentExecutor, with deterministic fallback.
+- DirectorMode.agent now generates an LLM DirectorPlan when endpoint execution succeeds.
+- Multi-speaker output parser exists via StageSpeakerBlockParser and one-turn multi-message split in ChatViewModel support.
+- Responses API Stage request-shape snapshot exists in ChatViewModelPromptAssemblyTests.
+- Stage UI automation baseline exists in OpenChatUITests/StageUITests.swift.
+- Stage participant/instruction context is passed into BackgroundManager via StageBackgroundContext.
+
 Remaining boundaries:
-- No LLM Director agent.
-- DirectorMode.agent is stored but still uses deterministic controller behavior.
-- No multi-speaker output parser or one-turn multi-message split.
-- No Responses API Stage request-shape snapshot.
-- No XCUITest for Stage UI.
-- Stage participant/instruction are not yet passed into BackgroundManager request filtering.
+- Stage management page is not a full CRUD editor.
+- Multi-speaker parser is not a streaming parser.
+- Advanced parser diagnostics / schema repair are not implemented.
+- Ordinary characters are still not AgentCore agents and have no tool-call rights.
+
+2026-05-20 refreshed verification:
+- Focused midstage command passed: 67 tests / 10 suites, `** TEST SUCCEEDED **`.
+- Stage UI command passed: 1 UI test, `** TEST SUCCEEDED **`.
+- Full scheme passed: Swift Testing 397 tests / 72 suites plus Stage UI XCTest 1 test, `** TEST SUCCEEDED **`.
+- Full scheme xcresult: `/Users/fukujusou/Library/Developer/Xcode/DerivedData/OpenChat-fiicdnsnwoygvnahvbxvezbhtsfy/Logs/Test/Test-OpenChat-2026.05.20_12-23-59-+0800.xcresult`.
+- `git diff --check`: passed.
+- `python3 -m json.tool OpenChat/Resources/Localizable.xcstrings`: passed.

@@ -1,24 +1,35 @@
 # LibMan / 图书管理员
 
-> 状态：目标架构规划，尚未实现。AgentCore foundation source 已存在；LibMan runtime / Exa tool broker 尚未实现。
+> 状态：LibMan offline draft runtime 已实现；Exa ToolBroker、web search、UI preview/apply 和 confirmed persistent write 尚未实现。
 > 依赖规划：`arch/modules/exa.md` 中的 Exa web search 能力。
 
 LibMan 是素材构建 agent，不是聊天 agent。它帮助用户查资料、整理引用、生成角色卡和世界书草稿，但不参与主 RP 回复。
 
-实现上，LibMan 应复用 `AgentCore`：显式启用 `llm`、`webSearch`、`userVisibleDraft` capability；数据库写入仍必须由用户确认流程触发，不由 LibMan 静默执行。
+实现上，LibMan 复用 `AgentCore`：当前 `LibrarianDraftTask` 使用 `AgentPolicy.librarianDraftOfflineDefault()`，显式启用 `llm` / `userVisibleDraft` / `internalDiagnostics`，禁用 tool / network / database write。目标架构的 Exa 版本可使用 `AgentPolicy.librarianDraftDefault()` 启用 `webSearch`，数据库写入仍必须由用户确认流程触发，不由 LibMan 静默执行。
 
-2026-05-17 AgentCore closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.librarianDraftDefault()`，允许 `llm` / `webSearch` / `userVisibleDraft`，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。AgentCore focused tests 12 tests / 4 suites passed，当时 full suite 303 tests / 58 suites passed；Background Source Tools Phase 4A-4D 后当前全局 full-suite 基线为 319 tests / 61 suites passed。该实现只证明 AgentCore policy profile 已可用，不代表 LibMan、Exa broker 或写入流程已实现。
+2026-05-17 AgentCore closeout：`OpenChat/Core/AgentCore/AgentPolicy.swift` 已提供 `AgentPolicy.librarianDraftDefault()`，允许 `llm` / `webSearch` / `userVisibleDraft`，tool policy 限定 `exa`，并要求 draft apply / persistent write confirmation。
+
+2026-05-20 当前实现证据：
+
+- `OpenChat/Core/Background/LibrarianDraftTask.swift`：定义 `LibrarianDraftRequest`、`LibrarianDraft`、`CharacterCardPatch`、`WorldBookEntryDraft`、`SourceCitation`、parser、task 和 `LibrarianDraftExecutor`。
+- `LLMAgentExecutor` 执行 offline task，并拒绝 network / database write capability。
+- `LibrarianDraftTask` 只调用 `APIClient.sendMessage(...)` 生成 JSON 草稿；parser 要求 character patch 或 world book entries 至少一个存在，并要求顶层或 entry citations 非空。
+- `OpenChatTests/Core/BackgroundTests/LibrarianDraftTaskTests.swift` 覆盖 cited draft、request shape、diagnostics policy、无 DB write 和无 citations reject。
+
+仍未实现：Exa ToolBroker / ToolExecutor、网页检索、UI preview/apply、confirmed write、写入世界书后的 embedding rebuild enqueue。
 
 ## 1. 职责
 
-LibMan 可以：
+当前 LibMan 可以：
 
-- 使用 Exa 搜索公开网页。
+- 使用用户提供的 source materials。
 - 根据用户目标整理角色卡草稿。
 - 根据资料生成世界书条目草稿。
 - 给出 source citations 和 grounding。
 - 标记不确定、冲突或来源不足的内容。
 - 把结果交给用户审阅确认。
+
+目标架构中，LibMan 还可以通过 Exa 搜索公开网页；这依赖尚未实现的 ToolBroker。
 
 LibMan 不可以：
 
@@ -31,7 +42,7 @@ LibMan 不可以：
 
 ## 2. 与 Exa 的关系
 
-`arch/modules/exa.md` 记录 Exa `/search` 能力，适合 LibMan 的素材构建任务：
+`arch/modules/exa.md` 记录 Exa `/search` 能力，适合 LibMan 的素材构建任务，但当前 runtime 尚未接入 ToolBroker / Exa：
 
 - `deep` / `deep-lite`：构建角色设定、世界背景、作品资料整理。
 - `outputSchema`：直接产出结构化 draft。
@@ -76,8 +87,8 @@ struct WorldBookEntryDraft: Sendable {
 
 ```text
 User request
-  -> LibMan search plan
-  -> Exa search
+  -> source materials / future LibMan search plan
+  -> current offline LLM draft / future Exa search
   -> structured draft + citations
   -> user preview
   -> user edits/accepts

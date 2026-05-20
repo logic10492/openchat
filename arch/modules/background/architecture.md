@@ -1,6 +1,6 @@
 # Background 架构
 
-> 状态：已实现 Phase 4A-4D source tool contract、Memory/WorldBook adapters、Phase 5 deterministic BackgroundWorker / BackgroundPacket / diagnostics、Phase 6 BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch。统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 尚未实现。
+> 状态：已实现 Phase 4A-4D source tool contract、Memory/WorldBook adapters、Phase 5 deterministic BackgroundWorker / BackgroundPacket / diagnostics、Phase 6 BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch，并已追加 CharacterState / ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
 
 ## 1. 模块定位
 
@@ -41,14 +41,12 @@ Core/WorldBook/
   WorldBookBackgroundSource
   WorldBookEmbeddingIndexer
 
-Core/Character/
-  CharacterBackgroundSource        // 目标边界，当前未实现
-
-Core/ConversationState/
-  ConversationStateBackgroundSource // 目标边界，当前未实现
+Core/Background/
+  CharacterStateBackgroundSource
+  ConversationStateBackgroundSource
 ```
 
-`Core/Character` 与 `Core/ConversationState` 是目标边界名，不代表当前已有对应源码目录。
+CharacterState / ConversationState 第一版位于 `Core/Background`，作为 read-only deterministic source；后续若出现独立 `Core/ConversationState` 模型，再迁移其内部状态生成逻辑。
 
 顺序要求：
 
@@ -80,18 +78,28 @@ AgentCore foundation
 - `OpenChat/Core/Background/BackgroundWorker.swift`：只消费 `[BackgroundCandidate]`，做 deterministic score/sort/dedupe/budget/per-source limit selection；policy gate 拒绝非 deterministic、network、DB write 等能力。
 - `OpenChat/Core/Background/BackgroundManager.swift`：组合 `BackgroundSource` 与 worker；单 source 失败时记录 warning，worldBook source failure 使用旧 keyword fallback 生成 `.worldBook` candidates。
 - `OpenChat/Core/Background/BackgroundAssembler.swift`：把 packet entries 转成兼容 `[World Book Entries]` / `[Memories]` prompt items，diagnostics 不进入 prompt。
-- `OpenChat/App/DependencyContainer.swift`：装配 `MemoryRecallTool`、`WorldBookRecallTool`、`MemoryBackgroundSource`、`WorldBookBackgroundSource`、`BackgroundWorker` 和 `BackgroundManager`。
+- `OpenChat/App/DependencyContainer.swift`：装配 `CharacterStateBackgroundSource`、`ConversationStateBackgroundSource`、`MemoryRecallTool`、`WorldBookRecallTool`、`MemoryBackgroundSource`、`WorldBookBackgroundSource`、`BackgroundWorker` 和 `BackgroundManager`。
 - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：主链路调用 `BackgroundManager.prepare(...)` 后交给 packet-aware `PromptAssembler`；bounded worldBook rebuild 仍保留在 Chat 侧、执行于 manager prepare 前。
 - `OpenChat/Core/PromptEngine/PromptAssembler.swift`：新增 packet-aware preview/assemble overload，保留旧 direct overload 作为兼容 / rollback；输出格式仍为 `[World Book Entries]` 在前、`[Memories]` 在后。
 - Tests：`BackgroundPacketTests`、`BackgroundWorkerTests`、`BackgroundDiagnosticsTests`、`BackgroundManagerTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests` 覆盖 DTO、worker selection/denial/diagnostics、manager fallback、packet compatible prompt blocks、budget trim、current input dedupe 和 request-shape switch。
+
+2026-05-20 当前实现证据：
+
+- `OpenChat/Core/Background/BackgroundSourceTool.swift`：`BackgroundSourceType` 已包含 `.characterState` / `.conversationState`，`BackgroundRequest` 已包含 `stageContext`。
+- `OpenChat/Core/Background/CharacterStateBackgroundSource.swift`：从当前角色卡生成 read-only character-state candidate，Stage active speaker 会进入内容 / metadata。
+- `OpenChat/Core/Background/ConversationStateBackgroundSource.swift`：从 conversation title、custom scenario、recent turns 和 Stage state 生成 read-only conversation-state candidate。
+- `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift`：使用 `StageBackgroundContext.queryText` enrich query，并把 stage id / active speaker / participant ids 写入 metadata。
+- `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：由 `StageTurnPlan` 构造 `StageBackgroundContext` 后传入 `BackgroundRequest`。
+- `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift`、`PromptAssemblerTests.swift`、`ChatViewModelPromptAssemblyTests.swift` 覆盖 Stage -> Background filter、state source 和 request-shape。
 
 ## 2. 当前实现与目标差异
 
 | 领域 | 当前源码 | Background 目标 |
 |---|---|---|
-| WorldBook | `WorldBookRecallTool` / `WorldBookBackgroundSource` 包装 `WorldBookSource.recallEntries(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[World Book Entries]` | 后续可迁移为统一 `[Background]` block 或新增 Character/ConversationState source |
-| Memory | `MemoryRecallTool` / `MemoryBackgroundSource` 包装 `MemoryManager.recallMemories(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[Memories]` | 后续可迁移为统一 `[Background]` block 或新增 Character/ConversationState source |
-| 角色卡 | Stable Identity 直接进入 prompt | 稳定身份仍保持独立；可额外产生 character-state candidates |
+| WorldBook | `WorldBookRecallTool` / `WorldBookBackgroundSource` 包装 `WorldBookSource.recallEntries(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[World Book Entries]` | 后续可迁移为统一 `[Background]` block |
+| Memory | `MemoryRecallTool` / `MemoryBackgroundSource` 包装 `MemoryManager.recallMemories(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[Memories]` | 后续可迁移为统一 `[Background]` block |
+| 角色卡 | Stable Identity 直接进入 prompt；`CharacterStateBackgroundSource` 额外产生 character-state candidate | 稳定身份仍保持独立；后续可压缩 / 差分注入 character-state |
+| Conversation state | `ConversationStateBackgroundSource` 生成 recent turn / stage state candidate | 后续可引入持久 conversation-state tracker |
 | Prompt | BackgroundAssembler 生成兼容 `[World Book Entries]` / `[Memories]` blocks | 后续可迁移为统一 `[Background]` block |
 | 检索排序 | WorldBook priority / Memory semantic order 分离 | 统一 fusion：relevance、priority、recency、source policy |
 

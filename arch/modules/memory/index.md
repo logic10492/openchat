@@ -94,14 +94,14 @@ MemoryManager.recallMemories
 1. **聊天主流程优先**：检索失败应降级为 keyword / recent high-value 记忆或空记忆，不阻断用户发送；提取失败通过 UI 和日志可观测。
 2. **写入原子性优先**：自动提取生成的 `memory_entry` 必须和 `memory_embedding` 同事务写入，避免半索引记忆。
 3. **角色隔离**：KNN 检索必须限定 `characterCardId`，避免跨角色污染。
-4. **事实与计划分离**：当前实现承诺扁平 `event/fact/relationship/summary` 条目、recall trace、fallback tiers、retain v2 provenance、同批 dedupe、reflect parser/executor、手动 review/apply 和 `memory_entry_link` 持久化；idle/background 自动整理、duplicate 自动删除、跨批自动合并和冲突自动解决仍是规划。
+4. **事实与计划分离**：当前实现承诺扁平 `event/fact/relationship/summary` 条目、recall trace、fallback tiers、retain v2 provenance、同批 dedupe、reflect parser/executor、手动 review/apply、`memory_entry_link` 持久化和 idle/background reflect draft worker；duplicate 自动删除、跨批自动合并、自动写入和冲突自动解决仍是规划。
 5. **文档与源码同步**：涉及触发时机、迁移、prompt 注入顺序、错误处理和测试结论的变更必须同步更新本目录及相关 `arch/AntiEntropy/*` 文档。
 
 ## 5. Background 目标关系
 
 当前生产 Chat 主链路不再直接把 `MemoryManager.retrieveMemories(...)` 的数组交给 `PromptAssembler`。2026-05-17 Phase 4B 已新增内部 read-only `MemoryRecallTool`，包装 `MemoryManager.recallMemories(...)` / `MemoryRecallResult`，并通过 focused tests 验证顺序和 trace metadata 透传。2026-05-17 Phase 4D 已新增 target-backed `MemoryBackgroundSource`，把 `MemoryRecallResult.entries` 映射为 `BackgroundCandidate(sourceType: .memory)`，并通过 focused tests 验证顺序、metadata、character boundary 和不按 token budget 裁剪。2026-05-17 Phase 5/6 已由 `BackgroundManager.prepare(...) -> BackgroundWorker -> BackgroundPacket -> PromptAssembler(... backgroundPacket:)` 接入 Chat / Prompt 兼容链路，最终仍输出 `[Memories]` block。
 
-边界：Memory retain / recall 仍属于 `Core/Memory`；世界书向量化和 bounded rebuild 不属于 Memory。`BackgroundPolicy.tokenBudget` 只控制跨 source candidate selection，最终 request body 内 `[Memories]` 是否被裁剪仍由 `PromptAssembler` 的 token budget 负责。统一 `[Background]` block、Character / ConversationState sources 和 synthesis worker 仍是后续计划。
+边界：Memory retain / recall 仍属于 `Core/Memory`；世界书向量化和 bounded rebuild 不属于 Memory。`BackgroundPolicy.tokenBudget` 只控制跨 source candidate selection，最终 request body 内 `[Memories]` 是否被裁剪仍由 `PromptAssembler` 的 token budget 负责。Character / ConversationState sources 已在 Background 层落地；统一 `[Background]` block、自动 synthesis 写入和 duplicate/conflict review 仍是后续计划。
 
 迁移要求：
 
@@ -111,9 +111,10 @@ MemoryManager.recallMemories
 - 已完成 Phase D 最小 contract / request-shape：`MemoryReflectModels` 锁定 based-on 约束；Responses API folding 已测试当前 `[Memories]` 不丢失且不进入 user message。
 - 已完成：memory recall 输出暴露为 read-only `MemoryRecallTool`；该 tool 不写 DB、不联网、不拼 prompt，也不重新实现 Memory rank fusion。
 - 已完成：`MemoryBackgroundSource` 进入 target，并以 focused tests 验证 tool result 到 `BackgroundCandidate(sourceType: .memory)` 的顺序和 metadata 映射。
-- 已完成：`BackgroundWorker` 统一与 WorldBook 候选做 deterministic selection，并生成 `BackgroundPacket` diagnostics；CharacterState / ConversationState 尚未实现。
+- 已完成：`BackgroundWorker` 统一与 WorldBook / CharacterState / ConversationState 候选做 deterministic selection，并生成 `BackgroundPacket` diagnostics。
 - 已完成：`PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 消费 packet-selected memory entries，并通过 `BackgroundAssembler` 保持 `[Memories]` 兼容输出。
-- 已完成：Phase 5 手动 reflect 整理入口、LLM executor、structured parser、`v17_create_memory_entry_link`、confirmed observation apply；未启用 idle/background 自动整理。
+- 已完成：Phase 5 手动 reflect 整理入口、LLM executor、structured parser、`v17_create_memory_entry_link`、confirmed observation apply。
+- 已完成：`MemoryReflectBackgroundWorker` 可在空闲/后台时机准备 draft-only observation，受 minimum memories / interval 限制；当前不自动 apply / write memory。
 
 ## 6. 实现证据
 

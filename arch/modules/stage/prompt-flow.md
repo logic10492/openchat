@@ -1,8 +1,10 @@
 # Stage Prompt Flow
 
-> 状态：Stage prompt 最小 runtime 已接入 production `PromptAssembler` / Chat request shape；Responses API Stage snapshot、LLM Director agent prompt 和多 speaker parser 仍未实现。
+> 状态：Stage prompt runtime 已接入 production `PromptAssembler` / Chat request shape；Responses API Stage snapshot、LLM Director agent prompt 和多 speaker parser 已有基础实现与测试。
 
 2026-05-19 runtime closeout：`PromptAssembler.preview(...)` / `assemble(...)` 新增 `stageTurnPlan: StageTurnPlan?` 兼容参数。Stage enabled 时，`ChatViewModel+Support.generateResponse(...)` 会先执行 `DeterministicDirectorExecutor`，再把 `StageTurnPlan` 传入 Preview / Context / Assemble 链路。Stage blocks 保持现有四层 prompt 结构：Stage Identity 与 participants 属于 Stable Identity；Director Instructions 属于 Current-Turn Context，位于 BackgroundPacket 输出后、Current Turn 前。
+
+2026-05-20 closeout：Stage enabled + Responses API 的 request snapshot 已由 `ChatViewModelPromptAssemblyTests.test_sendMessage_responsesMode_foldsStageBlocksIntoInstructionsInOrder` 覆盖，验证 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` folding 到 `instructions` 后保持顺序，且 director instructions 不进入 `input` user messages。
 
 ## 1. 目标 Prompt 层次
 
@@ -54,7 +56,7 @@ BackgroundManager 可用这些字段筛选：
 
 ## 4. 输出解析
 
-第一阶段建议要求模型输出单角色回复，避免解析复杂度。
+当前默认仍要求模型优先输出单角色回复；当模型输出 speaker blocks 时，完成后会解析并拆分为多条 staged assistant messages。
 
 单角色回复第一阶段保持自然流式文本，不强制动作/台词 schema。模型可以自然使用 Markdown 斜体表现动作：
 
@@ -68,7 +70,7 @@ UI 可在完整消息可用后做轻量展示适配，例如把独立斜体段�
 
 强制 `[ACTION]` / `[SPEECH]`、JSON schema 或半包 parser repair 暂不进入 Stage 第一阶段；如果后续需要，应作为单独的 streaming parser 计划。
 
-后续支持多角色输出时，应要求结构化边界，例如：
+多角色输出支持以下结构化边界：
 
 ```text
 [Speaker: character-id-a]
@@ -96,4 +98,4 @@ Responses API 会把 system messages 合并到 `instructions`。Stage 的多层 
 - Background block 是否仍在 Current Turn 之前表达。
 - Director Instructions 是否不会被误当作普通用户台词。
 
-2026-05-19 runtime closeout 已通过 Chat Completions request capture 覆盖 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 的生产 request shape。Responses API 下 Stage Identity / Director Instructions 的 folding snapshot 仍未实现，必须在启用 Stage + Responses 组合前补充。
+2026-05-19 runtime closeout 已通过 Chat Completions request capture 覆盖 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 的生产 request shape。2026-05-20 已补充 Responses API folding snapshot，验证 Stage blocks 不乱序、不变成 user message。

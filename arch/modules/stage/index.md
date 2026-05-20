@@ -1,9 +1,11 @@
 # Stage 系统
 
-> 状态：Stage / Director 最小运行时已落地；多 speaker 输出 parser、LLM Director agent、独立 Stage 列表页和 UI 自动化仍未实现。
+> 状态：Stage / Director runtime 已落地；LLM Director agent、Responses API Stage snapshot、多 speaker 输出 parser、Stage XCUITest、Stage -> Background filter、retrieval trace UI 与独立 Stage 管理页已完成基础实现。
 > 目标：把当前单角色 Chat 扩展为支持多角色共同参与的 Stage，同时引入可控的导演 agent。
 
 2026-05-19 closeout：Stage foundation 已追加 `stage`、`stage_participant`、`stage_instruction` 三张表和 `message` speaker metadata；`ChatViewModel` 已能在 Chat Settings 中启用 Stage、绑定多个角色、切换 DirectorMode，并在输入栏切换 participant / director。正常 participant 输入会经 `DeterministicDirectorExecutor -> DirectorController` 选择一个 active speaker，把 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 注入当前 `PromptAssembler` 主链路；director 输入保存为隐藏 stage instruction，不保存为普通 user message，也不触发 API 请求。
+
+2026-05-20 closeout：`DirectorMode.agent` 已经在 `ChatViewModel+Support.generateResponse(...)` 中走 `LLMDirectorExecutor -> LLMAgentExecutor -> LLMDirectorTask`，由 LLM 生成结构化 `DirectorPlan`，失败时 fallback 到 deterministic plan。`StageSpeakerBlockParser` 已接入 assistant 完成保存路径，可解析 `[Speaker: ...]` / `Name:` blocks 并拆成多条 staged assistant messages。`OpenChatUITests/StageUITests.swift` 覆盖 Stage 创建、DirectorMode、participant add/remove、director input 隔离。`StageManagementView` / `StageManagementViewModel` 提供独立 Stage 管理入口。
 
 Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍然是 persona；Stage 负责多角色参与、发言顺序、导演介入和舞台级状态管理。
 
@@ -42,8 +44,8 @@ Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍�
 ```text
 User input
   -> ChatViewModel
-  -> DirectorController
-       -> deterministic speaker plan
+  -> DirectorExecutor
+       -> deterministic speaker plan, or LLM DirectorPlan in agent mode
        -> optional hidden stage instruction
   -> BackgroundManager.prepare(...)
   -> PromptAssembler
@@ -55,10 +57,10 @@ User input
        -> [Director Instructions]
        -> current turn
   -> APIClient.streamMessage(...)
-  -> one staged assistant message with speaker metadata
+  -> one or more staged assistant messages with speaker metadata
 ```
 
-当前仍只输出一个 assistant message；多角色连续输出、speaker block parser、schema repair 和多 message 拆分属于后续阶段。
+当前支持在完整 assistant 输出后解析 speaker blocks 并拆成多条 message；streaming 过程中仍先显示原始增量，schema repair/复杂 parser diagnostics 仍属于后续增强。
 
 ## 5. 与 Background 的关系
 
@@ -71,4 +73,4 @@ Stage 负责“谁在场、谁发言、导演是否介入”。Background 负责
 - Director 可以给 BackgroundManager 提供 stage-level request，例如当前场景重点、参与角色、导演指令。
 - BackgroundWorker 仍无发言权。
 
-当前实现边界：Stage prompt 已接入 `BackgroundPacket` 后的 `PromptAssembler`，但还没有把 active participant / director instruction 作为 `BackgroundManager` source request 参数传入；背景检索仍沿用既有 Memory / WorldBook / BackgroundSource 规则。
+当前实现边界：Stage prompt 已接入 `BackgroundPacket` 后的 `PromptAssembler`；`StageBackgroundContext` 会把 active participant 与 director instructions 传给 `BackgroundManager`，`MemoryBackgroundSource` / `WorldBookBackgroundSource` 会把舞台上下文并入检索 query。Background 仍不决定最终发言内容。

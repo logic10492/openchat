@@ -1,6 +1,6 @@
 # Background 系统
 
-> 状态：已实现 Phase 4A-4D source tools/adapters 与 2026-05-17 Phase 5/6 deterministic BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch。统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 仍未实现。
+> 状态：已实现 Phase 4A-4D source tools/adapters、2026-05-17 Phase 5/6 deterministic BackgroundWorker / BackgroundPacket / BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch，并已追加 CharacterState / ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 仍未实现。
 > 目标：把 WorldBook、Memory、角色卡派生状态和会话状态统一整理为主聊天模型可消费的 background prompt。
 
 Background 系统不是新的对话角色，也不是让多个 agent 轮流发言。它把后台劳动拆给无发言权的 worker：它们只能选择、整理、排序和返回条目，最终回复仍由主聊天模型根据角色卡和当前输入生成。
@@ -13,10 +13,10 @@ BackgroundWorker 复用 `AgentCore` 的 identity、policy、diagnostics 和 exec
 
 1. **角色不是 agent**：对话角色是由角色卡、关系状态、长期记忆、世界背景和当前会话状态共同渲染出的 persona，不拥有工具权、任务队列或自治输出权。
 2. **后台员工无发言权**：`BackgroundWorker` 只能返回结构化 background 条目，不能产生 assistant message，不能改写用户输入。
-3. **图书管理员不参与 RP 输出**：`LibMan` 可用 Exa 搜索帮助用户创建角色卡/世界书素材，但输出是可审阅草稿，不进入主聊天实时链路。
+3. **图书管理员不参与 RP 输出**：`LibMan` 当前可用 LLM + 用户提供素材生成带引用的可审阅草稿；目标架构可再接 Exa 搜索，但无论是否联网都不进入主聊天实时链路。
 4. **Prompt 文本确定性生成**：worker 返回 `BackgroundPacket`，当前 `BackgroundAssembler` 先生成兼容 `[World Book Entries]` / `[Memories]` block；统一 `[Background]` block 是后续可选迁移。
 5. **AgentCore 不等于角色 agent 化**：`AgentCore` 是后台能力共享运行时基座；角色回复第一阶段保持自然流式文本，不给普通角色回复开放 tool call。
-6. **事实与计划分离**：当前源码已具备 source tools/adapters、deterministic worker、manager、assembler 与 Chat/Prompt compatible switch；Character/ConversationState sources、统一 `[Background]`、LibMan 和 synthesis 仍是后续计划。
+6. **事实与计划分离**：当前源码已具备 source tools/adapters、deterministic worker、manager、assembler、Chat/Prompt compatible switch、Character/ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker；统一 `[Background]`、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 仍是后续计划。
 
 ## 2. 目标数据流
 
@@ -24,9 +24,11 @@ BackgroundWorker 复用 `AgentCore` 的 identity、policy、diagnostics 和 exec
 User input
   -> ChatViewModel
   -> BackgroundManager.prepare(...)
-       -> MemoryRecallTool / MemoryBackgroundSource.candidates(...)
-       -> WorldBookRecallTool / WorldBookBackgroundSource.candidates(...)
-       -> BackgroundWorker.select(...)
+	       -> MemoryRecallTool / MemoryBackgroundSource.candidates(...)
+	       -> WorldBookRecallTool / WorldBookBackgroundSource.candidates(...)
+	       -> CharacterStateBackgroundSource.candidates(...)
+	       -> ConversationStateBackgroundSource.candidates(...)
+	       -> BackgroundWorker.select(...)
        -> BackgroundPacket
   -> BackgroundAssembler compatible `[World Book Entries]` / `[Memories]` blocks
   -> PromptAssembler.assemble(...)
@@ -57,5 +59,5 @@ User input
 | `BackgroundWorker` / 后台员工 | 无发言权的后台选择器，只能返回 packet |
 | `BackgroundPacket` | 本轮要注入 prompt 的最终条目集合和诊断信息 |
 | `BackgroundAssembler` | 把 packet 确定性转换成兼容 prompt blocks；统一 `[Background]` block 尚未默认启用 |
-| `LibMan` / 图书管理员 | 有 web search 工具权的素材构建 agent，不参与主聊天输出 |
+| `LibMan` / 图书管理员 | 素材构建 agent，不参与主聊天输出；当前 runtime 为 offline cited draft，Exa web search broker 仍是目标架构 |
 | `AgentCore` | 后台 agent/worker 共享的任务、权限、执行和诊断基座，不用于普通角色回复自治 |

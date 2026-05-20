@@ -177,7 +177,7 @@ Docs / propagation-audit writeback:
 
 Closeout boundaries:
 - Manual reflect review/apply is implemented.
-- idle/background automatic reflect is not implemented.
+- 2026-05-20 follow-up added idle/background draft-only reflect worker; it does not auto-apply/write memory.
 - mark_duplicate / needs_user_review are not auto-applied and do not delete or overwrite source memories.
 - Unified [Background] block and Background request-shape audit remain future work.
 

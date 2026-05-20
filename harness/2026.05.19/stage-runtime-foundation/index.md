@@ -2,7 +2,7 @@
 
 > 日期：2026-05-19
 > 范围：Stage / Director runtime、Stage DB/UI、多角色同场单 speaker 输出、用户导演输入。
-> 结论：本轮目标已完成；仍保留 LLM Director agent、多 speaker parser、Responses Stage snapshot 和 XCUITest 为后续计划。
+> 结论：本轮 Stage runtime foundation 已完成；2026-05-20 后续增量又补齐 LLM Director agent、多 speaker parser、Responses Stage snapshot、Stage XCUITest baseline、Stage -> Background filter 和独立 Stage 管理页。
 
 ## 1. 完成内容
 
@@ -80,15 +80,22 @@ Other checks：
 
 ## 4. 剩余边界
 
-未实现：
+2026-05-20 后续增量已关闭：
 
-- LLM Director agent / AgentCore executor wiring。
-- `agent` mode 生成 LLM `DirectorPlan`。
-- 多 speaker output parser、speaker block schema、parser diagnostics 和一轮多 assistant message 拆分。
-- Responses API 下 Stage system block folding snapshot。
-- Stage 独立列表页。
-- Stage 创建、DirectorMode、participant add/remove、director input 的 XCUITest。
-- Stage participant / director instruction 尚未作为 `BackgroundManager` source request filter。
+- LLM Director agent / AgentCore executor wiring：`LLMDirectorExecutor` / `LLMDirectorTask`。
+- `agent` mode 生成 LLM `DirectorPlan`，非法输出 fallback deterministic。
+- 多 speaker output parser 和一轮多 assistant message 拆分：`StageSpeakerBlockParser` 与 `persistCompletedAssistantMessages(...)`。
+- Responses API 下 Stage system block folding snapshot：`ChatViewModelPromptAssemblyTests`。
+- Stage 独立列表页：`StageManagementView` / `StageManagementViewModel`。
+- Stage 创建、DirectorMode、participant add/remove、director input 的 XCUITest baseline：`OpenChatUITests/StageUITests.swift`。
+- Stage participant / director instruction 作为 `BackgroundManager` source request filter：`StageBackgroundContext`。
+
+仍未实现：
+
+- Stage management 不是完整 CRUD editor。
+- 多 speaker parser 不是 streaming parser，高级 parser diagnostics / schema repair 仍未实现。
+- 普通角色仍不是 AgentCore agent，也没有 tool call 权限。
+- Exa / LibMan web search 不属于 Stage runtime foundation，仍未接入。
 
 本轮实现不改变以下原则：
 

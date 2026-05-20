@@ -1,6 +1,6 @@
 # Background 迁移计划
 
-> 状态：已实现到 Phase 6 compatible switch。AgentCore foundation、Phase 4A-4D source tools/adapters、Phase 5 DTO/worker/diagnostics、Phase 6 manager/prompt/chat switch 已落地并通过 focused tests；统一 `[Background]` block、LibMan 和 synthesis 尚未实现。
+> 状态：已实现到 Phase 6 compatible switch，并已追加 CharacterState / ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
 
 ## Phase 0：文档和边界
 
@@ -145,25 +145,40 @@
 目标：
 
 - 新增素材构建入口。
-- 使用 Exa structured output 生成 `LibrarianDraft`。
-- 用户确认后写入角色卡/世界书。
+- 当前第一版使用 LLM + 用户提供 source materials 生成 `LibrarianDraft`，不联网。
+- 目标架构再接 Exa structured output。
+- 用户确认后写入角色卡/世界书的 apply UI 仍是后续范围。
 - 写入世界书后触发 embedding rebuild。
 
 验证：
 
 - 无确认不写 DB。
 - draft 带 citations。
-- Exa 失败不影响主聊天。
+- 当前 offline draft parser 拒绝无 citations 输出。
+- 后续 Exa 失败不影响主聊天。
+
+当前状态：
+
+- 已完成 offline draft runtime：`LibrarianDraftTask` / `LibrarianDraftExecutor` 通过 `LLMAgentExecutor` 生成用户可见草稿，policy 为 read-only、需要 confirmation，不写数据库。
+- 已有 `LibrarianDraftTaskTests` 覆盖 cited draft、API request shape、无 DB write 和无 citation reject。
+- 未实现：Exa ToolBroker / web search、UI preview/apply flow、confirmed write 和 world book embedding rebuild enqueue。
 
 ## Phase 8：低频 synthesis
 
 目标：
 
-- 可选引入低频 reflect / observation synthesis。
+- 可选引入低频 reflect / observation synthesis draft。
 - 产物必须带 `based_on` ids。
-- 默认不进入每轮聊天。
+- 默认不进入每轮聊天，不静默写库。
 
 验证：
 
 - synthesis 不覆盖原始记忆。
 - 无 source ids 的 synthesis 不允许保存为长期事实。
+
+当前状态：
+
+- 已完成 draft-only idle worker：`MemoryReflectBackgroundWorker.prepareIdleDraft(...)` 从 recent high-value memories 生成 `MemoryReflectObservation` draft，并受 minimum memories / interval / running guard 限制。
+- `ChatViewModel.triggerMemoryExtraction()` 后会尝试低频 draft 准备，但当前不会自动 apply / write memory。
+- `MemoryReflectBackgroundWorkerTests` 覆盖 draft produced without DB write 和 insufficient memories skip。
+- 未实现：duplicate/conflict review UI、自动合并 / 删除 / 覆盖策略、后台任务持久队列。

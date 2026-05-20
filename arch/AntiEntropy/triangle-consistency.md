@@ -15,9 +15,9 @@
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-结果：成功。实际设备 iOS 26.5 `iPhone 17 Pro`，Swift Testing 最新报告已在 2026-05-19 Stage runtime foundation closeout 更新为 `378 tests in 67 suites passed`，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。同日较早的 Director contract foundation 基线为 372 tests / 67 suites；Background Source Tools Phase 4A-4D closeout 后基线曾为 319 tests / 61 suites。
+结果：成功。2026-05-20 最新 full scheme 在 iOS 26.5 `iPhone 17 Pro` 上通过：Swift Testing `397 tests in 72 suites passed`，随后 `OpenChatUITests/StageUITests` 执行 1 个 XCTest 通过，`xcodebuild` 结尾为 `** TEST SUCCEEDED **`。2026-05-19 Stage runtime foundation closeout 的旧 full suite 基线为 378 tests / 67 suites。
 
-本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full suite 为 378 个 Swift Testing 测试。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract、checkpoint compression、compression mode、WorldBook Vectorization Phase A/B/C/D、AgentCore foundation、Background Source Tools Phase 4A-4D、Background Worker / Prompt Switch、Director contract 和 Stage runtime foundation tests 均已纳入当前基线。
+本次审计还统计到 `OpenChatTests/` 当前有 20+ 个 Swift 测试文件，full scheme 为 397 个 Swift Testing 测试 + 1 个 UI XCTest。API/Responses/reasoning、Prompt 四层顺序、Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/idle draft worker、checkpoint compression、compression mode、WorldBook Vectorization Phase A/B/C/D、AgentCore foundation、Background Source Tools / Worker / Stage filter、LLM Director、multi-speaker parser、Stage management ViewModel 和 Stage UI automation baseline tests 均已纳入当前基线。
 
 2026-05-16 世界书向量化 Phase A 追加验证：`xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,id=2277CB75-AF36-4ABF-84EE-7444C1DD6759'` 在 iOS 26.5 `iPhone 17` 通过，结果为 `261 tests in 47 suites passed`，`** TEST SUCCEEDED **`。
 
@@ -25,9 +25,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 | 边 | 当前结论 | 说明 |
 |---|---|---|
-| `src-test` | 通过但不完整 | 全量自动化测试通过；Chat 发送链路、Background switch、Director contract 和 Stage runtime foundation 均有自动化覆盖，但仍缺少 UI 自动化测试。 |
+| `src-test` | 通过 | 2026-05-20 full scheme 通过：Swift Testing 397 tests / 72 suites，Stage UI XCTest 1 test，`** TEST SUCCEEDED **`。 |
 | `arch-src` | 基本一致 | Prompt、Memory、WorldBook、Background、Director/Stage foundation、data model 和 migration 约束已按当前源码回写；Feature 分层说明仍有历史漂移，留待独立分层修复。 |
-| `arch-test` | 基本一致 | 测试数量已回写为 378；Prompt、migration、Chat 当前输入去重、Memory、WorldBook、AgentCore、Background、Director contract 和 Stage runtime foundation 均已补测试，Feature/UI 分层契约与 Stage XCUITest 仍需后续补强。 |
+| `arch-test` | 基本一致 | 测试数量已回写为 397 Swift tests / 72 suites + 1 UI test；Prompt、migration、Chat 当前输入去重、Memory、WorldBook、AgentCore、Background、Director contract、Stage runtime foundation、LLM Director、multi-speaker parser、Responses Stage snapshot、Stage -> Background filter 和 Stage management ViewModel 均已有自动化覆盖。Feature/UI 分层契约仍需后续补强。 |
 
 ## 模块矩阵
 
@@ -36,12 +36,12 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | API Client / Networking | 基本一致 | 基本一致 | 通过。当前覆盖 Chat Completions、Responses、reasoning、baseURL 不强拼 `/v1`、model list。 |
 | PromptEngine | 基本一致 | 基本一致 | 函数级测试覆盖四层顺序、labeled context blocks、ISO8601 时间位于 Current Turn；Chat 发送链路覆盖 API request 四层顺序和当前输入去重。 |
 | ContextManager | 一致 | 一致 | Truncation、CompressionPolicy、source hash、PreparedHistory、CompressionSummarizer、CheckpointCompactor、checkpoint reuse 与 fallback 均有测试覆盖；Prompt 端到端仍通过 Chat 发送链路测试间接覆盖。 |
-| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；`MemoryRecallToolTests` 覆盖 read-only source tool pass-through；当前 full suite 为 378 tests / 67 suites。 |
+| Memory | 一致 | 一致 | `EmbeddingServiceTests`、`VectorStoreTests`、`MemoryManagerRetrievalTests`、`DatabaseManagerMemoryTests`、`MemoryExtractionCutoffTests`、`ChatViewModelPromptAssemblyTests`、`MemoryExtractionParsingTests`、`MigrationTests` 覆盖 bundle 资源、CoreML embedding、sqlite-vec KNN、批量原子写入、recall trace、fallback tiers、recent high-value 查询、sortOrder cutoff 边界、并发消息不跳过、v2 extraction parsing、provenance CRUD、dedupe、source validation、sourceMessageIds 过滤、skip/reinforce 不插入、atomic entry+embedding+provenance write；`MemoryReflectModelsTests` 覆盖 reflect DTO contract；`MemoryReflectBackgroundWorkerTests` 覆盖 idle draft worker 不写库；`ResponsesAPIRequestTests` 与 `ChatViewModelPromptAssemblyTests` 覆盖 Responses `[Memories]` request shape；`MemoryExtractionPhaseTests` 覆盖提取状态枚举语义；`MemoryRecallToolTests` 覆盖 read-only source tool pass-through；当前 full scheme 为 397 Swift tests / 72 suites + 1 UI test。 |
 | WorldBook Vectorization Phase A/B/C/D | 一致 | 一致 | `Migrations.swift` v15/v16、`WorldBookEntryEmbeddingMetaRecord`、`WorldBookVectorStore`、`WorldBookEmbeddingTextBuilder`、`WorldBookEntryHasher`、`WorldBookEmbeddingIndexer`、`WorldBookSource`、editor save/import lifecycle wiring、delete cleanup、eraseAllData cleanup 和 Data Management 手动 rebuild 已与 `arch/data-model.md`、`arch/modules/world-book.md`、`arch/modules/background/world-book-vectorization.md`、`arch/modules/background/sources.md`、`arch/modules/prompt-assembly.md` 同步；`MigrationTests`、`WorldBookVectorStoreTests`、`WorldBookEmbeddingTextBuilderTests`、`WorldBookEntryHasherTests`、`WorldBookEmbeddingIndexerTests`、`WorldBookSourceTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests`、`WorldBookEditorViewModelTests`、`DatabaseManagerWorldBookTests`、`SettingsViewModelWorldBookIndexTests`、`CriticalSaveFlowTests` 覆盖 schema、索引、cascade、worldBook-scoped KNN、disabled entry 过滤、delete、invalid dimension、text/hash、existing-entry rebuild/backfill、fresh skip、hash mismatch reindex、failure meta、batch continue、keyword + semantic recall、semantic-only prompt 注入、block 兼容、save/import indexing、index failure non-blocking、delete/erase cleanup 和 manual rebuild。BackgroundWorker / BackgroundPacket 仍为后续边界。 |
-| AgentCore Foundation | 一致 | 一致 | `OpenChat/Core/AgentCore/*` 已实现 identity、capability/policy、task/result、diagnostics、schema validation、deterministic executor 和 typed `AgentError`；`AgentDescriptorTests`、`AgentPolicyTests`、`DeterministicAgentExecutorTests`、`AgentDiagnosticsTests` 覆盖 Codable/raw value、三类 policy profile、LLM/web/network/database-write denial、diagnostics selected/omitted/fallback/errors。BackgroundWorker 已在后续 Background Worker / Prompt Switch Phase 5/6 作为受限 consumer 落地；Director deterministic runtime 已在 Stage foundation 中落地；LibMan runtime 仍未实现。 |
-| Director / Stage Runtime Foundation | 一致 | 一致 | `OpenChat/Core/Stage/DirectorMode.swift`、`StageInstruction.swift`、`DirectorPlan.swift`、`DirectorDiagnostics.swift`、`StageModels.swift`、`DirectorController.swift`、`DirectorExecutor.swift` 已实现 Director contract 和 deterministic runtime；`Migrations.swift` v18、`StageRecord`、`StageParticipantRecord`、`StageInstructionRecord`、`DatabaseManager+Stage` 已实现 Stage DB；`ChatViewModel` / `InputBarView` / `ChatSettingsSheet` 已接入 Stage UI、director input 和 speaker metadata；`PromptAssembler` 已接入 `stageTurnPlan`。`DirectorContractTests`、`MigrationTests`、`ChatViewModelPromptAssemblyTests` 覆盖 runtime、DB、prompt request shape、director input history isolation 和 speaker metadata；Stage focused 68 tests / 3 suites passed，full suite 378 tests / 67 suites passed。LLM Director agent、多 speaker parser、Responses Stage snapshot 和 Stage XCUITest 仍未实现。 |
+| AgentCore Foundation | 一致 | 一致 | `OpenChat/Core/AgentCore/*` 已实现 identity、capability/policy、task/result、diagnostics、schema validation、deterministic executor、`LLMAgentExecutor` 和 typed `AgentError`；`AgentDescriptorTests`、`AgentPolicyTests`、`DeterministicAgentExecutorTests`、`AgentDiagnosticsTests` 覆盖 Codable/raw value、policy profile、LLM/web/network/database-write denial、diagnostics selected/omitted/fallback/errors。BackgroundWorker、LLM Director 和 LibMan offline draft 已作为 consumers 落地；ToolBroker / Exa broker 仍未实现。 |
+| Director / Stage Runtime Foundation | 一致 | 一致 | `OpenChat/Core/Stage/DirectorMode.swift`、`StageInstruction.swift`、`DirectorPlan.swift`、`DirectorDiagnostics.swift`、`StageModels.swift`、`DirectorController.swift`、`DirectorExecutor.swift`、`LLMDirectorTask.swift`、`StageSpeakerBlockParser.swift` 已实现 Director contract、deterministic runtime、LLM Director agent 和完整输出后的 multi-speaker parser；Stage DB/UI、speaker metadata、director input 和 Stage prompt 已接入 Chat 主链路。`DirectorContractTests`、`LLMDirectorExecutorTests`、`StageSpeakerBlockParserTests`、`MigrationTests`、`ChatViewModelPromptAssemblyTests`、`ResponsesAPITests` 和 `OpenChatUITests/StageUITests.swift` 覆盖 runtime、DB、prompt request shape、director input history isolation、speaker metadata、Responses Stage folding、multi-speaker split 和 Stage UI baseline。 |
 | Background Source Tools Phase 4A-4D | 一致 | 一致 | `BackgroundSourceTool.swift`、`MemoryRecallTool.swift`、`WorldBookRecallTool.swift`、`MemoryBackgroundSource.swift`、`WorldBookBackgroundSource.swift` 已实现 read-only source tool / adapter 边界；`MemoryRecallToolTests`、`WorldBookRecallToolTests`、`BackgroundSourceTests` 覆盖 input forwarding、result order preservation、rank/reason/trace/omission metadata、source-prefixed candidate ids、request boundary、nil worldBook passthrough、no token-budget trim 和 no indexer/rebuild dependency。Phase 4 closeout focused 74 tests / 9 suites passed。后续 Phase 5/6 已完成 worker / packet / manager / prompt switch，见下一行。 |
-| Background Worker / Prompt Switch Phase 5/6 | 一致 | 一致 | `BackgroundPolicy.swift`、`BackgroundPacket.swift`、`BackgroundDiagnostics.swift`、`BackgroundWorker.swift`、`BackgroundManager.swift`、`BackgroundAssembler.swift` 已实现 deterministic candidate selection、packet diagnostics、source orchestration、worldBook keyword fallback 和兼容 prompt block assembly；`DependencyContainer` / `ChatViewModel+Support` 已切到 `BackgroundManager.prepare(...) -> PromptAssembler(... backgroundPacket:)`。`BackgroundPacketTests`、`BackgroundWorkerTests`、`BackgroundDiagnosticsTests`、`BackgroundManagerTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests` focused 40 tests / 6 suites passed；source/AgentCore broader regression 45 tests / 7 suites passed。统一 `[Background]` block、Character/ConversationState sources、LibMan 和 synthesis 仍未实现。 |
+| Background Worker / Prompt Switch Phase 5/6 | 一致 | 一致 | `BackgroundPolicy.swift`、`BackgroundPacket.swift`、`BackgroundDiagnostics.swift`、`BackgroundWorker.swift`、`BackgroundManager.swift`、`BackgroundAssembler.swift` 已实现 deterministic candidate selection、packet diagnostics、source orchestration、worldBook keyword fallback 和兼容 prompt block assembly；`DependencyContainer` / `ChatViewModel+Support` 已切到 `BackgroundManager.prepare(...) -> PromptAssembler(... backgroundPacket:)`，并已装配 CharacterState / ConversationState sources 与 Stage context filter。`BackgroundSourceTests`、`BackgroundManagerTests`、`PromptAssemblerTests`、`ChatViewModelPromptAssemblyTests` 覆盖 state sources、Stage -> Background query enrichment、packet compatible blocks 和 request-shape。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI 和自动 synthesis 写入仍未实现。 |
 | Database / Data Model | 基本一致 | 基本一致 | migration/record 测试通过；MigrationTests 保护 migration 源码不引用 runtime Record/enum 符号。 |
 | Features / UI | 部分不一致 | 不完整 | 缺少 Feature/ViewModel/UI 路径测试，当前主要靠编译和 Core 测试间接保护。 |
 | Settings / Endpoint Model | 部分不一致 | 基本一致 | Endpoint model、API mode、fetch models、会话级 compression mode 持久化测试通过；全局测试基线已更新为 378 tests；Data Management 世界书 semantic index 手动 rebuild 已有 ViewModel 测试覆盖，其他 Settings UI/manual 路径仍需后续验收。 |
@@ -183,7 +183,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 - `arch/index.md` 当前已回写为“319 个 Swift Testing 测试 / 61 个 suites 全部通过”。
 - `arch/roadmap.md` 当前已回写为“当前通过的 Swift Testing 测试（319 个 / 61 suites）”。
-- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与该计划波次的 251-test full suite 历史结果；当前全局基线见本文顶部的 319-test full suite。
+- `arch/modules/memory/index.md` 已回写 Memory embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性覆盖与该计划波次的 251-test full suite 历史结果；当前全局基线见本文顶部的 397 Swift tests + 1 UI test full scheme。
 - `arch/modules/settings/api-endpoint.md` 不再作为本轮测试数量来源；全局基线以本文件和 `arch/index.md` 为准。
 - `arch/modules/api-client.md` 不在 Task 5 允许编辑范围内，本次不修改。
 
@@ -195,12 +195,12 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 当前可信结论
 
-1. 当前工作区能编译并通过全量 Swift Testing：378 tests passed。
+1. 当前工作区能编译并通过 full scheme：Swift Testing 397 tests / 72 suites，Stage UI XCTest 1 test。
 2. API Client / Responses / reasoning / baseURL 行为在当前工作区内有较强测试支撑。
-3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重、Responses `[Memories]` folding 与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试，retain v2 provenance/dedupe/source validation 和 reflect DTO contract 已有测试覆盖；仍缺少 UI 自动化覆盖。
-4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、WorldBook Vectorization Phase A/B/C/D、AgentCore foundation、Background Source Tools Phase 4A-4D、migration 约束、checkpoint compression/compression mode 语义和 319-test 基线；Feature 边界漂移留待后续分层修复计划。
+3. Prompt/Context/Memory 的 Core 函数级测试可用，Chat 真实发送链路已有当前输入去重、Responses `[Memories]` folding 与 checkpoint invalidation 测试；Memory 提取 cutoff 已有 sortOrder 边界测试，retain v2 provenance/dedupe/source validation 和 reflect DTO contract 已有测试覆盖；Stage UI baseline 已有 XCUITest，Memory reflect UI 仍缺少端到端 UI 自动化覆盖。
+4. arch 已回写 Prompt 四层顺序、Memory 位置与 embedding/vector/retrieval/extraction-cutoff/recall-trace/fallback-tier/retain-v2-provenance/reflect-contract/Responses-request-shape 可靠性、WorldBook Vectorization Phase A/B/C/D、AgentCore foundation、Background Source Tools Phase 4A-4D、migration 约束、checkpoint compression/compression mode 语义和 397 Swift tests + 1 UI test 基线；Feature 边界漂移留待后续分层修复计划。
 5. 2026-05-17 Background Source Tools Phase 4A-4D 已落地：Memory / WorldBook read-only recall tools 与 BackgroundSource adapters 已通过 focused closeout。
-6. 2026-05-17 Background Worker / Prompt Switch Phase 5/6 已落地：BackgroundWorker 作为 AgentCore 受限 deterministic consumer，Chat/Prompt 主链路已切到 `BackgroundPacket` 兼容 block 来源；统一 `[Background]` block 仍未实现。
+6. 2026-05-17 Background Worker / Prompt Switch Phase 5/6 已落地：BackgroundWorker 作为 AgentCore 受限 deterministic consumer，Chat/Prompt 主链路已切到 `BackgroundPacket` 兼容 block 来源；2026-05-20 已追加 Character / ConversationState sources 与 Stage context filter；统一 `[Background]` block 仍未实现。
 
 ## 修复顺序状态
 
@@ -210,7 +210,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 | 2 | Prompt 时间格式统一为 ISO8601 | Closed：源码输出 `[Time] <ISO8601> [/Time]`，测试解析验证。 |
 | 3 | 明确 Prompt 四层顺序与 Current-Turn Context | Closed：统一为四层顺序，PromptAssemblerTests 与 ChatViewModelPromptAssemblyTests 覆盖。 |
 | 4 | 回写 Memory 目录和触发时机现实 | Closed：文档写回前置同步提取、onDisappear 兜底、sortOrder cutoff 增量提取与 15% memory budget。 |
-| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 378 tests 基线。 |
+| 5 | 清理测试数量和验证命令说明 | Closed：全局状态统一为 397 Swift tests / 72 suites + 1 UI test 基线。 |
 | 6 | 分层修复或 App shell 例外归档 | Open：已拆出 `arch/AntiEntropy/layering-repair-plan.md`。 |
 
 ## 修复写回（2026-04-27）
@@ -244,7 +244,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' '-only-testing:OpenChatTests/MemoryRecallToolTests' '-only-testing:OpenChatTests/WorldBookRecallToolTests' '-only-testing:OpenChatTests/BackgroundSourceTests' '-only-testing:OpenChatTests/MemoryManagerRetrievalTests' '-only-testing:OpenChatTests/WorldBookSourceTests' '-only-testing:OpenChatTests/PromptAssemblerTests' '-only-testing:OpenChatTests/ChatViewModelPromptAssemblyTests' '-only-testing:OpenChatTests/AgentPolicyTests' '-only-testing:OpenChatTests/DeterministicAgentExecutorTests'
 ```
 
-结果：74 tests / 9 suites passed，`** TEST SUCCEEDED **`。本次 drift audit 已重跑同一 focused closeout，仍为 74 tests / 9 suites passed；当前 full-suite 基线为 378 tests / 67 suites passed。
+结果：74 tests / 9 suites passed，`** TEST SUCCEEDED **`。本次 drift audit 已重跑同一 focused closeout，仍为 74 tests / 9 suites passed；当时 full-suite 基线为 378 tests / 67 suites passed，当前最新 full scheme 基线见本文顶部。
 
 ## Checkpoint Compression 三边一致性写回（2026-04-30）
 
@@ -349,10 +349,10 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 ### arch-src
 
 - `arch/modules/stage/index.md` 已从“目标架构未实现”改为“Stage / Director 最小运行时已落地”，并记录当前 Chat -> Director -> Background -> Prompt -> API -> staged assistant message 链路。
-- `arch/modules/stage/director.md` 已写回 `DirectorController` / `DirectorExecutor` deterministic runtime、Chat 主链路接入、director-only turn 和未实现的 LLM Director agent 边界。
-- `arch/modules/stage/prompt-flow.md` 已写回 `PromptAssembler.preview/assemble(stageTurnPlan:)` 当前源码现实，以及 Responses API Stage folding snapshot 未实现。
-- `arch/modules/stage/multi-character.md` 已写回 Stage participant / speaker metadata 当前实现和多 speaker parser 未实现。
-- `arch/modules/stage/migration-plan.md` 已把 Phase 2/3/8/9/10 从纯目标更新为当前已落地状态，同时保留多角色连续输出和 LLM Director agent 为后续。
+- `arch/modules/stage/director.md` 已写回 `DirectorController` / `DirectorExecutor` deterministic runtime、LLM Director runtime、Chat 主链路接入和 director-only turn。
+- `arch/modules/stage/prompt-flow.md` 已写回 `PromptAssembler.preview/assemble(stageTurnPlan:)` 当前源码现实，以及 Responses API Stage folding snapshot。
+- `arch/modules/stage/multi-character.md` 已写回 Stage participant / speaker metadata 当前实现和完整输出后的 multi-speaker parser。
+- `arch/modules/stage/migration-plan.md` 已把 Phase 2/3/8/9/10 从纯目标更新为当前已落地状态，同时保留 streaming parser / full Stage editor 为后续。
 - `arch/data-model.md` 已新增 `stage`、`stage_participant`、`stage_instruction`、`message` speaker metadata 和 `v18_create_stage_tables` 迁移说明。
 
 ### arch-test

@@ -1,6 +1,6 @@
 # Stage 迁移计划
 
-> 状态：Director contract foundation、Stage DB、Stage participant binding、用户导演输入 UI 和最小 deterministic Stage runtime 已落地；LLM Director agent、多角色连续输出 parser、独立 Stage 列表页和 UI 自动化仍未实现。
+> 状态：Director contract foundation、Stage DB、Stage participant binding、用户导演输入 UI、deterministic/LLM Director runtime、多 speaker parser、独立 Stage 管理页和 Stage UI 自动化 baseline 已落地。
 
 ## Phase 0：文档和边界
 
@@ -68,7 +68,7 @@
 - DirectorPlan 只用于 stage control，不直接显示为 assistant 回复。
 - silent mode 下完全跳过 Director agent。
 
-当前状态：policy 与 DTO contract 已落地；deterministic executor/controller 和 Chat/Stage 调度接入已完成。LLM Director agent、schema repair、timeout behavior 和 AgentCore executor wiring 仍未实现。
+当前状态：policy 与 DTO contract 已落地；deterministic executor/controller 和 Chat/Stage 调度接入已完成；`LLMDirectorExecutor` / `LLMDirectorTask` 已通过 AgentCore/LLM 接入 `DirectorMode.agent`。schema repair 与更细 timeout behavior 仍是后续增强。
 
 ## Phase 5：Background 接入 Stage
 
@@ -88,4 +88,4 @@
 
 该阶段涉及 schema 变更，应单独设计 migration。
 
-当前备注：v18 已为 `message` 追加 `stageId` / `speakerKind` / `speakerId` / `speakerName`，足够支持单 speaker staged assistant message；真正多 speaker parser 和一轮多 message 拆分仍需单独计划与测试。
+当前备注：v18 已为 `message` 追加 `stageId` / `speakerKind` / `speakerId` / `speakerName`；`StageSpeakerBlockParser` 与 `persistCompletedAssistantMessages(...)` 已支持完整输出后的多 speaker parser 和一轮多 message 拆分。

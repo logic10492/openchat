@@ -46,9 +46,9 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 ## 4. 当前测试缺口
 
-- 检索 trace 目前只在 Memory 层测试覆盖，尚未接入产品 UI。
+- 检索 / Background diagnostics 已接入 `RetrievalTraceView`，在 Chat detailed stats 下展示；尚无 XCUITest 覆盖该 UI。
 - reflect 手动入口已有 ViewModel 级测试；尚无 XCUITest 自动点击 MemoryListView 的端到端 UI 流程。
-- idle/background 自动 reflect、duplicate 自动删除和冲突自动解决尚未实现，因此没有对应行为测试。
+- idle/background reflect draft worker 已有 `MemoryReflectBackgroundWorkerTests`；duplicate 自动删除、自动 apply/write 和冲突自动解决尚未实现，因此没有对应行为测试。
 
 ## 5. Hindsight-lite 目标测试
 

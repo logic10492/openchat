@@ -158,4 +158,5 @@ Phase C 已实现 Chat prompt 主链路的最小召回融合；2026-05-17 Phase 
 - 已实现：delete entry / delete worldBook / eraseAllData 不留下 vector/meta 残留。
 - 已实现：Data Management 手动 rebuild 可 backfill existing entries。
 - 已实现：BackgroundWorker / BackgroundPacket / BackgroundManager 统一调度；输出仍保持兼容 `[World Book Entries]` block。
-- 未实现：统一 `[Background]` block、Character/ConversationState sources、LibMan / synthesis。
+- 已实现：Character/ConversationState sources、LibMan offline draft runtime、idle reflect draft worker。
+- 未实现：统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review。
