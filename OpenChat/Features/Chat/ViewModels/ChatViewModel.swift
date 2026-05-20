@@ -216,7 +216,7 @@ final class ChatViewModel {
         if isStageResponderSelectionCustomized {
             isStageResponderSelectionCustomized = false
         }
-        return Array(activeParticipants.prefix(2).map(\.id))
+        return activeParticipants.map(\.id)
     }
 
     private func syncStageResponderSelection() {

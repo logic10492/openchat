@@ -5,11 +5,11 @@
 
 2026-05-19 closeout：Stage foundation 已追加 `stage`、`stage_participant`、`stage_instruction` 三张表和 `message` speaker metadata；`ChatViewModel` 已能在 Chat Settings 中启用 Stage、绑定多个角色、切换 DirectorMode。正常 participant 输入会经 `DeterministicDirectorExecutor -> DirectorController` 选择 active speaker，把 `[Stage]`、`[Stage Participants]`、`[Director Instructions]` 注入当前 `PromptAssembler` 主链路；director 输入保存为隐藏 stage instruction，不保存为普通 user message，也不触发 API 请求。
 
-2026-05-20 closeout：`DirectorMode.agent` 已经在 `ChatViewModel+Support.generateResponse(...)` 中走 `LLMDirectorExecutor -> LLMAgentExecutor -> LLMDirectorTask`，由 LLM 生成结构化 `DirectorPlan`，失败时 fallback 到 deterministic plan。`StageSpeakerBlockParser` 已接入 assistant 完成保存路径，可解析 `[Speaker: ...]` / `Name:` blocks 并拆成多条 staged assistant messages。`OpenChatUITests/StageUITests.swift` 覆盖 Stage 创建、DirectorMode、participant add/remove、director input 隔离。`StageManagementView` / `StageManagementViewModel` 提供独立 Stage 管理入口。
+2026-05-20 closeout：`LLMDirectorExecutor -> LLMAgentExecutor -> LLMDirectorTask` 已作为 Core 能力落地，可生成结构化 `DirectorPlan`，失败时 fallback 到 deterministic plan。当前 Chat 主链路不使用 LLM Director 决定本轮 responder 顺序；角色顺序由用户 responder 面板或 active participant sortOrder 决定。`StageSpeakerBlockParser` 已接入 assistant 完成保存路径，可解析 `[Speaker: ...]` / `Name:` blocks 并拆成多条 staged assistant messages。`OpenChatUITests/StageUITests.swift` 覆盖 Stage 创建、DirectorMode、participant add/remove、director input 隔离。`StageManagementView` / `StageManagementViewModel` 提供独立 Stage 管理入口。
 
 2026-05-20 UI closeout：Stage enabled 后，`ChatSettingsSheet` 不再显示单会话 `Character` picker / World Book 显示项；角色入口只保留 Stage 区域的 `Add Participant`。`ChatViewModel.saveConversationSettings()` 在 Stage 模式下不会通过旧的 `selectedCharacterCardID` 覆盖 `conversation.characterCardId`。`OpenChatUITests/StageUITests.swift` 追加断言防止 `chat.characterPicker` 在 Stage 设置页回归出现。
 
-2026-05-21 two-speaker closeout：Stage participant 输入的最小运行策略改为“前两个 active/present 角色都说话”。`ChatViewModel+Support.generateResponse(...)` 会按本轮 responder 顺序为每个 speaker 单独准备 prompt、单独调用 `APIClient.streamMessage(...)`，每次只注入该 speaker 对应的 `CharacterCardRecord`。默认 responder 顺序来自 `StageContext.activeParticipants.prefix(2)`；用户可在输入栏导演工具按钮展开的可折叠面板中勾选回应角色并调整顺序，状态由 `ChatViewModel.stageResponderIds` 驱动。这一步不扩展 Director agent 调度；完整 Director speakerPlan 驱动仍是后续工作。
+2026-05-21 serial responder closeout：Stage participant 输入的运行策略收敛为“按用户决定的 responder 顺序串行生成”。`ChatViewModel+Support.generateResponse(...)` 会为每个 responder 单独准备 prompt、单独调用 `APIClient.streamMessage(...)`，每次只注入该 responder 对应的 `CharacterCardRecord`。默认 responder 顺序来自当前 active/present participants 的 `sortOrder`；用户可在输入栏导演工具按钮展开的面板中勾选回应角色并调整顺序，状态由 `ChatViewModel.stageResponderIds` 驱动。后一位 responder 的请求会把本轮已生成的前序 responder 输出以带 speaker 前缀的 `user` message 追加到 API messages 末尾，因此顺序是 `user -> A -> B -> ...`，同时不会让 B 把 A 的输出误认成自己的 assistant 历史。
 
 Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍然是 persona；Stage 负责多角色参与、发言顺序、导演介入和舞台级状态管理。
 
@@ -48,24 +48,16 @@ Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍�
 ```text
 User input
   -> ChatViewModel
-  -> DirectorExecutor
-       -> deterministic speaker plan, or LLM DirectorPlan in agent mode
-       -> optional hidden stage instruction
-  -> BackgroundManager.prepare(...)
-  -> PromptAssembler
-       -> [Stage]
-       -> [Stage Participants]
-       -> character persona
-       -> background packet
-       -> conversation history
-       -> [Director Instructions]
-       -> current turn
-  -> APIClient.streamMessage(...)
-       -> per selected speaker, with that speaker's CharacterCardRecord
-  -> one or more staged assistant messages with speaker metadata
+  -> resolver: stageResponderIds, or active/present participants sorted by sortOrder
+  -> for each responder in order:
+       -> BackgroundManager.prepare(...) for that responder
+       -> PromptAssembler with that responder's CharacterCardRecord
+       -> APIClient.streamMessage(...)
+       -> save one staged assistant message with speaker metadata
+       -> append this output to the next responder request as assistant history
 ```
 
-当前 Stage participant 输入默认让前两个 active/present 角色分别生成回复；若用户打开输入栏导演工具面板并调整 responder，则按用户选择的角色和顺序生成。每个角色是独立 API 调用，因此角色卡、世界书、记忆和 Background request 都按当前 speaker 重新准备。仍保留完整 assistant 输出后的 speaker block parser 作为兼容路径；streaming 过程中按 speaker block 实时分流、Director speakerPlan 完整调度仍属于后续增强。
+当前 Stage participant 输入按用户选择的 responder 顺序串行生成；若用户没有自定义，则按 active/present participant 的 sortOrder。每个角色是独立 API 调用，因此角色卡、世界书、记忆和 Background request 都按当前 speaker 重新准备。后一位角色请求看到的对话历史包含前一位角色刚生成的输出。仍保留完整 assistant 输出后的 speaker block parser 作为兼容路径；streaming 过程中按 speaker block 实时分流属于后续增强。
 
 ## 5. 与 Background 的关系
 

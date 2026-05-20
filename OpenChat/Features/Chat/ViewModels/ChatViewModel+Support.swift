@@ -53,16 +53,7 @@ extension ChatViewModel {
                 inputRole: stageInputRole,
                 currentInput: prompt
             )
-            if stageContext.stage.directorModeValue == .agent {
-                stageTurnPlan = try await LLMDirectorExecutor(
-                    agentExecutor: directorAgentExecutor,
-                    apiClient: apiClient,
-                    endpoint: endpoint,
-                    parameters: currentParameters
-                ).execute(input)
-            } else {
-                stageTurnPlan = try await directorExecutor.execute(input)
-            }
+            stageTurnPlan = try await directorExecutor.execute(input)
         } else {
             stageTurnPlan = nil
         }
@@ -420,13 +411,13 @@ extension ChatViewModel {
             do {
                 for speaker in speakers {
                     let characterCard = try await databaseManager.fetchCharacterCard(id: speaker.characterCardId)
-                    let historyMessages = promptHistoryMessages + generatedRecords
                     let assembly = try await prepareAssembly(
                         prompt: prompt,
                         endpoint: endpoint,
                         characterCard: characterCard,
                         stageTurnPlan: stageTurnPlan?.forSpeaker(speaker),
-                        promptHistoryMessages: historyMessages
+                        promptHistoryMessages: promptHistoryMessages,
+                        stageContinuationRecords: generatedRecords
                     )
                     tokenUsage = assembly.tokenUsage
 
@@ -460,7 +451,6 @@ extension ChatViewModel {
                         stageTurnPlan: stageTurnPlan?.forSpeaker(speaker)
                     )
                     if let first = completedRecords.first {
-                        generatedRecords.append(first)
                         setAssistantStats(
                             makeStreamingStats(
                                 usage: result.usage,
@@ -471,6 +461,7 @@ extension ChatViewModel {
                             messageID: first.id
                         )
                     }
+                    generatedRecords.append(contentsOf: completedRecords)
                     baseSortOrder += max(completedRecords.count, 1)
                 }
 
@@ -488,10 +479,17 @@ extension ChatViewModel {
         endpoint: APIEndpointConfig,
         characterCard: CharacterCardRecord?,
         stageTurnPlan: StageTurnPlan?,
-        promptHistoryMessages: [MessageRecord]
+        promptHistoryMessages: [MessageRecord],
+        stageContinuationRecords: [MessageRecord] = []
     ) async throws -> AssemblyResult {
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
+        let recentMessages = promptHistoryMessages + stageContinuationRecords
+        let stageContinuationTokens = stageContinuationRecords.reduce(0) { total, record in
+            total + TokenCounter.count(
+                message: record.stageHistoryChatMessage(activeSpeakerId: stageTurnPlan?.participant?.id)
+            )
+        }
 
         if let backgroundManager {
             await rebuildWorldBookEmbeddingsIfNeeded(worldBook: worldBook)
@@ -500,7 +498,7 @@ extension ChatViewModel {
                 characterCard: characterCard,
                 worldBook: worldBook,
                 worldBookEntries: worldBookEntries,
-                recentMessages: promptHistoryMessages,
+                recentMessages: recentMessages,
                 stageContext: stageTurnPlan.map(StageBackgroundContext.init(stageTurnPlan:)),
                 currentInput: prompt,
                 tokenBudget: max(Int((Double(endpoint.maxContextTokens) * 0.15).rounded(.down)), 1),
@@ -524,7 +522,7 @@ extension ChatViewModel {
                 messages: promptHistoryMessages,
                 conversation: conversation,
                 endpoint: endpoint,
-                fixedTokens: preview.fixedTokens
+                fixedTokens: preview.fixedTokens + stageContinuationTokens
             )
             return PromptAssembler.assemble(
                 conversation: conversation,
@@ -534,6 +532,9 @@ extension ChatViewModel {
                 processedHistory: history,
                 currentInput: prompt,
                 endpoint: endpoint
+            ).appendingStageContinuation(
+                records: stageContinuationRecords,
+                activeSpeakerId: stageTurnPlan?.participant?.id
             )
         }
 
@@ -555,7 +556,7 @@ extension ChatViewModel {
         let recalledWorldBookEntries = await recallWorldBookEntries(
             worldBook: worldBook,
             entries: worldBookEntries,
-            recentMessages: promptHistoryMessages,
+            recentMessages: recentMessages,
             currentInput: prompt
         )
         let preview: PromptAssemblyPreview
@@ -577,7 +578,7 @@ extension ChatViewModel {
                 worldBook: worldBook,
                 worldBookEntries: recalledWorldBookEntries,
                 memories: memories,
-                recentMessages: promptHistoryMessages,
+                recentMessages: recentMessages,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
                 endpoint: endpoint
@@ -588,7 +589,7 @@ extension ChatViewModel {
             messages: promptHistoryMessages,
             conversation: conversation,
             endpoint: endpoint,
-            fixedTokens: preview.fixedTokens
+            fixedTokens: preview.fixedTokens + stageContinuationTokens
         )
         if usesPreselectedWorldBookEntries {
             return PromptAssembler.assembleWithPreselectedWorldBookEntries(
@@ -601,6 +602,9 @@ extension ChatViewModel {
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
                 endpoint: endpoint
+            ).appendingStageContinuation(
+                records: stageContinuationRecords,
+                activeSpeakerId: stageTurnPlan?.participant?.id
             )
         }
         return PromptAssembler.assemble(
@@ -609,11 +613,14 @@ extension ChatViewModel {
             worldBook: worldBook,
             worldBookEntries: recalledWorldBookEntries,
             memories: memories,
-            recentMessages: promptHistoryMessages,
+            recentMessages: recentMessages,
             processedHistory: history,
             stageTurnPlan: stageTurnPlan,
             currentInput: prompt,
             endpoint: endpoint
+        ).appendingStageContinuation(
+            records: stageContinuationRecords,
+            activeSpeakerId: stageTurnPlan?.participant?.id
         )
     }
 
@@ -955,5 +962,55 @@ extension ChatViewModel {
             return messages
         }
         return messages.filter { $0.id != currentInputRecord.id }
+    }
+}
+
+private extension AssemblyResult {
+    func appendingStageContinuation(
+        records: [MessageRecord],
+        activeSpeakerId: String?
+    ) -> AssemblyResult {
+        guard !records.isEmpty else { return self }
+        var messages = messages
+        let continuationMessages = records.map {
+            $0.stageHistoryChatMessage(activeSpeakerId: activeSpeakerId)
+        }
+        messages.append(contentsOf: continuationMessages)
+        let continuationTokens = records.reduce(0) { total, record in
+            total + TokenCounter.count(message: record.stageHistoryChatMessage(activeSpeakerId: activeSpeakerId))
+        }
+        let totalUsed = tokenUsage.totalUsed + continuationTokens
+        let usage = TokenUsageReport(
+            totalBudget: tokenUsage.totalBudget,
+            systemPrompt: tokenUsage.systemPrompt,
+            characterDescription: tokenUsage.characterDescription,
+            scenario: tokenUsage.scenario,
+            slowPlotDirective: tokenUsage.slowPlotDirective,
+            timeContext: tokenUsage.timeContext,
+            background: tokenUsage.background,
+            worldBookEntries: tokenUsage.worldBookEntries,
+            memories: tokenUsage.memories,
+            exampleDialogs: tokenUsage.exampleDialogs,
+            history: tokenUsage.history + continuationTokens,
+            currentInput: tokenUsage.currentInput,
+            totalUsed: totalUsed,
+            remaining: max(tokenUsage.totalBudget - totalUsed, 0)
+        )
+        return AssemblyResult(
+            messages: messages,
+            tokenUsage: usage,
+            triggeredEntries: triggeredEntries
+        )
+    }
+}
+
+private extension MessageRecord {
+    func stageHistoryChatMessage(activeSpeakerId: String?) -> ChatMessage {
+        let trimmedSpeaker = speakerName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmedSpeaker, !trimmedSpeaker.isEmpty else {
+            return chatMessage
+        }
+        let promptRole = speakerId == activeSpeakerId ? role : "user"
+        return ChatMessage(role: promptRole, content: "\(trimmedSpeaker): \(content)")
     }
 }

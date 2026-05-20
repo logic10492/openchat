@@ -1905,7 +1905,16 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(secondMessages.contains("You are Io. Speak with bright certainty."))
         #expect(secondMessages.contains("Active Speaker: Io"))
         #expect(!secondMessages.contains("You are Mara. Speak with moonlit restraint."))
-        #expect(secondMessages.contains("Mara answers."))
+        #expect(secondMessages.contains("Mara: Mara answers."))
+        let secondTurnMessages = requests[1].messages.filter { $0.role == "user" || $0.role == "assistant" }
+        let userTurnIndex = try #require(secondTurnMessages.firstIndex {
+            $0.role == "user" && $0.content.contains("Both respond.")
+        })
+        let maraTurnIndex = try #require(secondTurnMessages.firstIndex {
+            $0.role == "user" && $0.content == "Mara: Mara answers."
+        })
+        #expect(userTurnIndex < maraTurnIndex)
+        #expect(maraTurnIndex == secondTurnMessages.indices.last)
 
         let assistantRecords = try await databaseManager.fetchMessages(conversationId: conversationRecord.id)
             .filter { $0.role == "assistant" }

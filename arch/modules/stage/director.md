@@ -12,7 +12,9 @@ Director agent 模式复用 `AgentCore`，只输出结构化 `DirectorPlan`。�
 
 2026-05-19 runtime closeout：`OpenChat/Core/Stage/DirectorController.swift` 与 `DirectorExecutor.swift` 已接入 `ChatViewModel+Support.generateResponse(...)`。当前 executor 是 deterministic：participant 输入时优先选择被输入文本点名的 active participant，否则选择 sortOrder 最小的 active participant；director 输入时生成隐藏 `StageInstruction`，作为 instruction-only turn，不生成普通 user message、不生成 title、不调用 API。`OpenChatTests/Core/StageTests/DirectorContractTests.swift` 覆盖 controller 选择和 director-only turn；`OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 覆盖 director input history 隔离与 Stage prompt request shape。
 
-2026-05-20 closeout：`OpenChat/Core/Stage/LLMDirectorTask.swift` 与 `LLMDirectorExecutor` 已接入 `DirectorMode.agent`。Chat 主链路在 stage mode 为 `.agent` 时使用 `LLMDirectorExecutor(agentExecutor: directorAgentExecutor, apiClient: endpoint: parameters:)`，并由 `LLMAgentExecutor` 执行 typed `AgentTask`。`LLMDirectorExecutorTests` 覆盖 agent mode 使用 LLM plan、invalid output fallback deterministic plan、policy 不联网不写库。
+2026-05-20 closeout：`OpenChat/Core/Stage/LLMDirectorTask.swift` 与 `LLMDirectorExecutor` 已作为 Core 能力接入 `DirectorMode.agent`，并由 `LLMAgentExecutor` 执行 typed `AgentTask`。`LLMDirectorExecutorTests` 覆盖 agent mode 使用 LLM plan、invalid output fallback deterministic plan、policy 不联网不写库。
+
+2026-05-21 closeout：Chat 主链路的 Stage responder 顺序已收敛为用户选择或 active participant sortOrder；`ChatViewModel+Support.generateResponse(...)` 不再调用 LLM Director 来决定当前轮次的角色顺序。LLM Director 保留为后续导演建议/诊断能力，不作为当前串行 responder 主路径。
 
 ## 1. 三种工作模式
 
@@ -39,8 +41,8 @@ Director agent 模式复用 `AgentCore`，只输出结构化 `DirectorPlan`。�
 可以：
 
 - 生成 stage instruction。
-- 建议哪些角色应参与本轮。
-- 建议发言顺序。
+- 建议哪些角色应参与本轮（后续能力；当前 Chat 主链路不消费该建议作为 responder 顺序）。
+- 建议发言顺序（后续能力；当前顺序来自用户 responder 面板或 active participant sortOrder）。
 - 标记剧情节奏问题。
 - 提醒冲突、未完成事件或场景连续性。
 
@@ -88,7 +90,7 @@ enum StageInputRole: String, Codable, Sendable {
 
 - 本轮输入作为 stage instruction。
 - 不当作角色听到的普通台词，除非用户显式要求“让所有角色听到”。
-- 可以影响 Background request、speaker plan 和 Stage state。
+- 可以影响 Background request、Stage state 和后续导演语义；当前不直接覆盖 responder 顺序。
 
 ## 3. Director 输出 contract
 
@@ -113,7 +115,7 @@ enum DirectorMode: String, Codable, Sendable {
 
 - `DirectorMode`: `silent`、`agent`、`userControlled`，raw value / Codable / CaseIterable 已测试。
 - `StageInstruction`: `source` 为 user / director agent / system default；默认 `visibility == hiddenFromCharacters`；空白 content 会抛出 typed `StageInstructionError.emptyContent`。
-- `SpeakerTurn`: 仅为 Phase 6 hint，允许 participant / character id 为空，不代表多角色输出已实现。
+- `SpeakerTurn`: 仅为 DirectorPlan hint，允许 participant / character id 为空；当前 Chat 主链路不使用它覆盖用户 responder 顺序。
 - `DirectorDiagnostics`: 只承载 warning、omitted instruction ids、policy profile 和 metadata，不承载 assistant draft。
 - `StagePromptLayerPlan`: 纯 contract helper，锁定 prompt order 中 `directorInstructions` 位于 `currentBackground` 之后、`currentTurn` 之前。
 - `StageTurnPlan`: runtime DTO，提供 `[Stage]`、`[Stage Participants]` 和 `[Director Instructions]` system blocks 给 `PromptAssembler`。
@@ -124,8 +126,8 @@ enum DirectorMode: String, Codable, Sendable {
 
 - `DirectorController.planTurn(...)` deterministic speaker selection。
 - `DeterministicDirectorExecutor.execute(...)`。
-- `LLMDirectorExecutor.execute(...)` 与 `LLMDirectorTask`，在 `DirectorMode.agent` 下通过 AgentCore/LLM 生成 `DirectorPlan`。
-- `ChatViewModel+Support.generateResponse(...)` 读取 `fetchStageContext(...)`，执行 Director，解析 active speaker 对应 `CharacterCardRecord`，并把 `StageTurnPlan` 传入 `PromptAssembler.preview(...)` / `assemble(...)`。
+- `LLMDirectorExecutor.execute(...)` 与 `LLMDirectorTask`，可通过 AgentCore/LLM 生成 `DirectorPlan`，但当前 Chat responder 主链路不调用它决定顺序。
+- `ChatViewModel+Support.generateResponse(...)` 读取 `fetchStageContext(...)`，使用 deterministic `StageTurnPlan` 注入 Stage prompt blocks，并按用户 responder 顺序为每个角色单独调用 `PromptAssembler.preview(...)` / `assemble(...)`。
 - user/assistant message 会保存 `stageId`、`speakerKind`、`speakerId`、`speakerName`。
 
 仍未实现：

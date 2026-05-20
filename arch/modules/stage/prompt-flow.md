@@ -1,6 +1,6 @@
 # Stage Prompt Flow
 
-> 状态：Stage prompt runtime 已接入 production `PromptAssembler` / Chat request shape；Responses API Stage snapshot、LLM Director agent prompt 和多 speaker parser 已有基础实现与测试。
+> 状态：Stage prompt runtime 已接入 production `PromptAssembler` / Chat request shape；Responses API Stage snapshot、LLM Director agent prompt 和多 speaker parser 已有基础实现与测试。当前 Chat 主链路按用户 responder 顺序串行生成，不用 LLM Director 决定角色顺序。
 
 2026-05-19 runtime closeout：`PromptAssembler.preview(...)` / `assemble(...)` 新增 `stageTurnPlan: StageTurnPlan?` 兼容参数。Stage enabled 时，`ChatViewModel+Support.generateResponse(...)` 会先执行 `DeterministicDirectorExecutor`，再把 `StageTurnPlan` 传入 Preview / Context / Assemble 链路。Stage blocks 保持现有四层 prompt 结构：Stage Identity 与 participants 属于 Stable Identity；Director Instructions 属于 Current-Turn Context，位于 BackgroundPacket 输出后、Current Turn 前。
 
@@ -33,7 +33,8 @@ Stage prompt 应在现有四层 prompt 基础上扩展，而不是完全推翻�
 
 Director agent 模式下：
 
-- DirectorPlan 进入 `Director Instructions` 或 hidden stage-control block。
+- Core 仍保留 `LLMDirectorExecutor` / `LLMDirectorTask` 的结构化 `DirectorPlan` 能力。
+- 当前 Chat 主链路不把 LLM DirectorPlan 用作 responder 顺序来源；本轮顺序来自用户选择或 active participant sortOrder。
 - 不直接作为 assistant message。
 
 ## 3. Background 请求
