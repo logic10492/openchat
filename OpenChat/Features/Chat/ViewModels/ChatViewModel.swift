@@ -68,6 +68,10 @@ final class ChatViewModel {
         return availableWorldBooks.first(where: { $0.id == worldBookId })?.name
     }
 
+    var showsConversationCharacterPicker: Bool {
+        !isStageEnabled
+    }
+
     var isStageEnabled: Bool {
         stage?.isEnabled == true
     }
@@ -326,7 +330,9 @@ final class ChatViewModel {
     func saveConversationSettings() async {
         conversation.apiEndpointId = selectedEndpointID
         conversation.modelName = selectedModelName
-        conversation.characterCardId = selectedCharacterCardID
+        if showsConversationCharacterPicker {
+            conversation.characterCardId = selectedCharacterCardID
+        }
         conversation.contextStrategy = selectedContextStrategy.rawValue
         conversation.compressionMode = selectedCompressionMode.rawValue
         conversation.customScenario = customScenario.nilIfBlank

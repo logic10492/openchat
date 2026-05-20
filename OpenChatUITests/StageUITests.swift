@@ -38,6 +38,7 @@ final class StageUITests: XCTestCase {
             XCTFail("Missing Director Mode picker")
             return
         }
+        XCTAssertFalse(app.descendants(matching: .any)["chat.characterPicker"].exists)
         directorMode.tap()
         tapOption("Agent", app: app)
 

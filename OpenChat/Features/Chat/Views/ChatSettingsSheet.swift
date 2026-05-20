@@ -28,17 +28,20 @@ struct ChatSettingsSheet: View {
                         }
                     }
 
-                    Picker(String(localized: "Character"), selection: characterBinding) {
-                        Text(String(localized: "None")).tag(Optional<String>.none)
-                        ForEach(viewModel.availableCharacterCards) { card in
-                            Text(card.name).tag(Optional(card.id))
+                    if viewModel.showsConversationCharacterPicker {
+                        Picker(String(localized: "Character"), selection: characterBinding) {
+                            Text(String(localized: "None")).tag(Optional<String>.none)
+                            ForEach(viewModel.availableCharacterCards) { card in
+                                Text(card.name).tag(Optional(card.id))
+                            }
                         }
-                    }
+                        .accessibilityIdentifier("chat.characterPicker")
 
-                    if let worldBookName = viewModel.selectedCharacterWorldBookName {
-                        LabeledContent(String(localized: "World Book")) {
-                            Text(worldBookName)
-                                .foregroundStyle(.secondary)
+                        if let worldBookName = viewModel.selectedCharacterWorldBookName {
+                            LabeledContent(String(localized: "World Book")) {
+                                Text(worldBookName)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 

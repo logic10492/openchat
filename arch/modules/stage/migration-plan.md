@@ -53,6 +53,7 @@
 目标：
 
 - 已落地：Stage 可绑定多个角色卡，当前入口在 `ChatSettingsSheet`。
+- 已落地：Stage enabled 后 `ChatSettingsSheet` 隐藏单会话 `Character` picker / World Book 显示项；角色管理只通过 Stage participants 入口进行，保存设置时也不会用旧角色字段覆盖 Stage 会话。
 - 已落地：Director/default policy 决定本轮主 speaker，当前 deterministic 策略为“输入点名优先，否则第一个 active participant”。
 - 已落地：Prompt 包含 active participants 名称和 active speaker。
 - 已落地：模型仍只输出一个角色回复，并保存 speaker metadata。

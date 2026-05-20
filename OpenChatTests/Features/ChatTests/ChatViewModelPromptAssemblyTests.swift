@@ -160,6 +160,48 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(saved?.compressionModeValue == .highIntelligence)
     }
 
+    @Test func test_saveConversationSettings_stageEnabledDoesNotOverwriteConversationCharacter() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let originalCard = TestHelpers.makeCharacterCard(id: "original-card", name: "Mara")
+        let candidateCard = TestHelpers.makeCharacterCard(id: "candidate-card", name: "Io")
+        let conversation: ConversationRecord = {
+            var record = TestHelpers.makeConversation(id: "stage-character-save-boundary")
+            record.characterCardId = originalCard.id
+            return record
+        }()
+        try await database.write { db in
+            try originalCard.insert(db)
+            try candidateCard.insert(db)
+            try conversation.insert(db)
+        }
+        _ = try await database.createStage(
+            conversationId: conversation.id,
+            title: "Stage Boundary",
+            directorMode: .silent
+        )
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        await viewModel.loadStage()
+        viewModel.selectedCharacterCardID = candidateCard.id
+        await viewModel.saveConversationSettings()
+
+        let saved = try await database.fetchConversation(id: conversation.id)
+        #expect(saved?.characterCardId == originalCard.id)
+    }
+
     @Test func test_selected_provider_dialect_falls_back_to_default_model_when_saved_model_is_stale() async throws {
         let database = try TestHelpers.makeDatabaseManager()
         let now = Date()

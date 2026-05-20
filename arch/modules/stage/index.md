@@ -7,6 +7,8 @@
 
 2026-05-20 closeout：`DirectorMode.agent` 已经在 `ChatViewModel+Support.generateResponse(...)` 中走 `LLMDirectorExecutor -> LLMAgentExecutor -> LLMDirectorTask`，由 LLM 生成结构化 `DirectorPlan`，失败时 fallback 到 deterministic plan。`StageSpeakerBlockParser` 已接入 assistant 完成保存路径，可解析 `[Speaker: ...]` / `Name:` blocks 并拆成多条 staged assistant messages。`OpenChatUITests/StageUITests.swift` 覆盖 Stage 创建、DirectorMode、participant add/remove、director input 隔离。`StageManagementView` / `StageManagementViewModel` 提供独立 Stage 管理入口。
 
+2026-05-20 UI closeout：Stage enabled 后，`ChatSettingsSheet` 不再显示单会话 `Character` picker / World Book 显示项；角色入口只保留 Stage 区域的 `Add Participant`。`ChatViewModel.saveConversationSettings()` 在 Stage 模式下不会通过旧的 `selectedCharacterCardID` 覆盖 `conversation.characterCardId`。`OpenChatUITests/StageUITests.swift` 追加断言防止 `chat.characterPicker` 在 Stage 设置页回归出现。
+
 Stage 是 Chat 的扩展形态，不是把每个角色都 agent 化。角色仍然是 persona；Stage 负责多角色参与、发言顺序、导演介入和舞台级状态管理。
 
 角色回复第一阶段保持自然流式文本。动作感优先依赖模型自然输出的 Markdown 斜体等文本形态，再由 UI 做轻量展示适配；不把角色回复改造成 AgentCore runtime 或 tool call。
