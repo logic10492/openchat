@@ -28,20 +28,31 @@ The project is an Xcode project, not a Swift Package. Use `xcodebuild` or open `
 
 ## Repository Setup
 
-Clone with submodules:
+Clone the repository:
 
 ```bash
-git clone --recurse-submodules git@github.com:logic10492/openchat.git
+git clone git@github.com:logic10492/openchat.git
 cd openchat
 ```
 
-If you already cloned without submodules:
+## Optional Local Embedding Assets
 
-```bash
-git submodule update --init --recursive
+`OpenChat/Resources/Models` is intentionally not tracked and is not a Git submodule. It is ignored because the CoreML model assets are large generated files.
+
+Semantic memory and semantic world-book recall expect these local files when enabled:
+
+```text
+OpenChat/Resources/Models/
+|-- MultilingualE5Small.mlpackage
+`-- tokenizer.json
 ```
 
-`OpenChat/Resources/Models` is a submodule that contains the local embedding model assets used by semantic memory and world-book retrieval. The app can still be inspected without those assets, but model-backed embedding tests and semantic recall need the submodule present.
+The model used by the current implementation is a CoreML conversion of `intfloat/multilingual-e5-small`:
+
+- CoreML conversion reference: https://huggingface.co/fanstudioapps/multilingual-e5-small-coreml-embedder-256-512
+- Original upstream model: https://huggingface.co/intfloat/multilingual-e5-small
+
+Place the model package and tokenizer under `OpenChat/Resources/Models/` before running embedding-backed tests or using semantic retrieval locally.
 
 ## Build
 
@@ -89,7 +100,7 @@ OpenChat/
 |-- App/            App entry, dependency container, global app state
 |-- Core/           Database, networking, prompt engine, context, memory, stage, background
 |-- Features/       Chat, character cards, world books, conversations, settings, stage UI
-|-- Resources/      Assets, localization, model submodule
+|-- Resources/      Assets, localization, optional local models
 `-- Shared/         Shared SwiftUI components and utilities
 
 OpenChatTests/      Swift Testing unit tests
