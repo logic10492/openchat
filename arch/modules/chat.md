@@ -11,7 +11,7 @@
 - 重新生成最后一条 AI 回复
 - 编辑已发送的用户消息（编辑后重新生成）
 - 当前会话设置（上下文策略；非 Stage 会话支持角色卡/世界书切换，Stage 会话通过 Stage participants 管理角色）
-- 会话信息展示（角色卡头像、token 使用情况）
+- 会话信息展示（顶部角色胶囊；token 使用情况保留在消息统计区域，不在导航栏常驻显示）
 - 每条 AI 回复下方显示详细统计（输入/输出 token 数、TPS、上下文窗口剩余百分比），可在全局设置中关闭详细模式，关闭后仅在窗口余量 < 20% 时显示上下文窗口剩余百分比
 - 记忆提取完成时在对话中显示临时提示（"已提取 N 条记忆"，3 秒后自动消失）
 
@@ -21,8 +21,8 @@
 
 | 文件 | 职责 |
 |---|---|
-| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 + 记忆更新 banner；导航栏仅保留设置入口与状态信息 |
-| `MessageBubbleView.swift` | 单条消息气泡，支持 Markdown、长按菜单、流式统计展示 |
+| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 + 记忆更新 banner；导航栏使用液态玻璃角色胶囊承载当前角色/世界书与非 Stage 角色切换入口，右侧仅保留设置与生成标题状态 |
+| `MessageBubbleView.swift` | 单条扁平消息气泡，支持 Markdown、长按菜单、流式统计展示 |
 | `ReasoningDisclosureView.swift` | AI 思考内容展示：折叠摘要、固定高度滚动预览、长文本尾部截断与系统复制 |
 | `InputBarView.swift` | 底部输入栏（文本框 + 发送/停止按钮） |
 | `ChatSettingsSheet.swift` | 当前会话设置面板 |
@@ -38,26 +38,25 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│ [←] 🎭 艾拉              [⚙️] [📊]    │  ← 导航栏：返回 + 角色头像名称 + 设置 
+│ [←]       艾拉                  [⚙️] │  ← 导航栏：液态玻璃角色胶囊 + 设置
+│          银月森林                      │  ← 胶囊副标题：仅角色卡绑定世界书时显示
 │─────────────────────────────────────────│
 │                                         │
-│         [场景：银月森林的入口]           │  ← 场景提示（可选显示）
+│        ┌────────────────────────────┐   │
+│        │ 你好，请问你是谁？         │   │  ← 用户消息：右侧扁平气泡
+│        └────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │
-│  │ 👤 你好，请问你是谁？            │   │  ← 用户消息（右侧）
-│  └──────────────────────────────────┘   │
-│                                         │
-│  ┌──────────────────────────────────┐   │
-│  │ 🤖 我是艾拉，银月森林的守护者。  │   │  ← AI 消息（左侧）
+│  │ 我是艾拉，银月森林的守护者。     │   │  ← AI 消息：左侧扁平气泡
 │  │ 有什么我能帮助你的吗？           │   │
 │  └──────────────────────────────────┘   │
 │                                         │
-│  ┌──────────────────────────────────┐   │
-│  │ 👤 这里是哪里？                  │   │  ← 可编辑：气泡方的铅笔按钮
-│  └──────────────────────────────────┘   │
+│        ┌────────────────────────────┐   │
+│        │ 这里是哪里？               │   │  ← 长按气泡：复制 / 编辑
+│        └────────────────────────────┘   │
 │                                         │
 │  ┌──────────────────────────────────┐   │
-│  │ 🤖 这里是银月森林的入口...       │   │  ← 可重新生成：长按 → 重新生成
+│  │ 这里是银月森林的入口...          │   │  ← 可重新生成：动作栏 / 长按菜单
 │  │ 前方就是精灵族的领地了。█        │   │  ← 流式输出光标
 │  └──────────────────────────────────┘   │
 │                                         │
@@ -67,6 +66,15 @@
 └─────────────────────────────────────────┘
 ```
 
+顶部胶囊规则：
+- 非 Stage 会话显示当前角色卡名；如果角色卡绑定世界书，第二行用次要文字显示世界书名；未绑定世界书时不显示副标题。
+- 点击非 Stage 胶囊在胶囊下方弹出 SwiftUI popover，而不是展开胶囊本体；胶囊本体不显示 chevron 或其他展开暗示。
+- popover 上半部分是“可选世界书”：包含“无世界书”和所有世界书；选择世界书只更新下半部分筛选，不立即保存会话。
+- popover 下半部分是“世界书可选角色”：展示当前世界书下的角色；“无世界书”筛选下展示未绑定世界书的角色。选择角色后更新 `selectedCharacterCardID` 并复用 `ChatViewModel.saveConversationSettings()` 保存到当前会话。
+- Stage 会话本轮只做简单兼容：胶囊显示 `Stage` 与当前 active/present participants 摘要，点击进入设置，不通过胶囊切换会话级角色卡。
+
+实现证据：`ChatView.swift` 的 principal toolbar 使用 `ChatHeaderCapsule` 渲染角色胶囊；`ChatHeaderGlassCapsuleStyle` 在 iOS 26+ 使用原生 `glassEffect(.regular.interactive(), in: Capsule())`，在 iOS 17-25 保留 `.ultraThinMaterial` fallback。非 Stage 分支通过 `Button + popover` 展示 `CharacterPickerPopover`，由 `availableWorldBooks` 与 `availableCharacterCards` 组成世界书筛选和角色列表，并在角色选择时调用 `selectCharacterCard(_:)`；Stage 分支仅作为设置入口。
+
 ### 3.2 MessageBubbleView
 
 **布局规则**：
@@ -74,6 +82,8 @@
 - assistant 消息：左对齐，次要色背景
 - system 消息：居中，淡灰色，小字体（通常不展示给用户，除非是压缩摘要）
 - 主消息列约束最大宽度，避免 iPad / 横屏下长文本铺满全屏；用户消息比助手消息更窄，保持对话阅读节奏。
+- 消息行内不展示头像、`You`、角色名或 assistant 名称；身份由左右对齐和顶部胶囊承担。
+- 气泡保持扁平色块，不使用液态玻璃材质；液态玻璃只用于顶部胶囊。
 
 **内容渲染**：
 - 使用 Markdown 渲染（粗体、斜体、代码块、列表等）
@@ -88,9 +98,11 @@
 **长按菜单**：
 | 消息类型 | 菜单项 |
 |---|---|
-| user | 复制、编辑、删除 |
-| assistant | 复制、重新生成、删除 |
+| user | 编辑、复制 |
+| assistant | 底部动作栏与长按菜单：复制、重新生成、删除 |
 | system (压缩) | 查看原始内容 |
+
+实现证据：`MessageBubbleView.swift` 不再渲染 avatar / role label；user 气泡使用 `Color.accentColor`，assistant 气泡使用 `Color(.secondarySystemGroupedBackground)`，两者都不使用 `.ultraThinMaterial`。user 气泡挂载 `Edit` / `Copy` 长按菜单；assistant 气泡保留 `MessageActionBar` 并提供同等长按菜单。`ChatView.swift` 通过 `EditMessageSheet` 收集编辑后的文本并调用 `ChatViewModel.editMessage(...)`。
 
 ### 3.3 InputBarView
 
@@ -218,6 +230,10 @@ extension ChatViewModel {
     func deleteMessage(_ messageId: String) async
 }
 ```
+
+编辑语义：只允许编辑 user 消息，且生成中不接受编辑。编辑早期 user turn 时，`ChatViewModel.editMessage(...)` 会保存新的 user 内容、删除该消息 sortOrder 之后的所有 message，并删除覆盖该位置的 compression checkpoint，然后用新内容重新生成 assistant 回复。这等价于 KV cache 前缀变更后的分支截断：旧 assistant 回复和后续 user turn 不再进入新的 prompt history。
+
+实现证据：`ChatViewModel.swift` 的 `editMessage(_:newContent:)` 先校验 `target.role == "user"`，随后调用 `deleteCompressionCheckpoints(conversationId:sourceEndAtOrAfter:)` 与 `deleteMessages(conversationId:afterSortOrder:)`，最后以 `persistUserMessage: false` 调用 `generateResponse(...)`。`ChatViewModelPromptAssemblyTests.test_editUserMessage_truncatesTailAndRegeneratesFromEditedPrefix` 覆盖 `a -> A -> b -> B -> c -> C` 编辑 `a` 后只保留 `edited a -> new response`，并验证新请求不包含旧分支内容。
 
 ### 4.3 发送消息完整流程
 

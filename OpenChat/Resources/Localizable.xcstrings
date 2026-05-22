@@ -38,6 +38,7 @@
       }
     },
     "%@/%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -173,6 +174,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "助手"
+          }
+        }
+      }
+    },
+    "Available World Books" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选世界书"
           }
         }
       }
@@ -726,6 +738,17 @@
         }
       }
     },
+    "Edit Message" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑消息"
+          }
+        }
+      }
+    },
     "Edit Model" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1231,6 +1254,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暂无舞台参与角色"
+          }
+        }
+      }
+    },
+    "No World Book" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无世界书"
           }
         }
       }
@@ -1865,6 +1899,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "世界书"
+          }
+        }
+      }
+    },
+    "World Book Characters" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "世界书可选角色"
           }
         }
       }

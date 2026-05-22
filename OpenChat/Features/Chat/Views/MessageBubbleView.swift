@@ -3,33 +3,27 @@ import SwiftUI
 struct MessageBubbleView: View {
     let item: MessageDisplayItem
     var isStreaming = false
-    var characterName: String?
     var showDetailedStats = false
+    var canEdit = true
+    let onEdit: () -> Void
     let onDelete: () -> Void
     let onRegenerate: () -> Void
     @State private var isHovering = false
 
     private var isUser: Bool { item.role == "user" }
     private var maximumMessageWidth: CGFloat { isUser ? 520 : 680 }
-    private var horizontalSpacerWidth: CGFloat { isUser ? 56 : 32 }
+    private var horizontalSpacerWidth: CGFloat { isUser ? 64 : 48 }
 
     var body: some View {
-        HStack(alignment: .top, spacing: OpenChatDesignSystem.Spacing.sm) {
+        HStack(alignment: .bottom, spacing: OpenChatDesignSystem.Spacing.sm) {
             if isUser {
                 Spacer(minLength: horizontalSpacerWidth)
-                VStack(alignment: .trailing, spacing: 6) {
-                    roleLabel
-                    contentView
-                    actionBar
-                }
-                .frame(maxWidth: maximumMessageWidth, alignment: .trailing)
-                avatarView
+                contentView
+                    .frame(maxWidth: maximumMessageWidth, alignment: .trailing)
             } else {
-                avatarView
                 VStack(alignment: .leading, spacing: 6) {
-                    roleLabel
                     contentView
-                    actionBar
+                    assistantActionBar
                     statsBar
                 }
                 .frame(maxWidth: maximumMessageWidth, alignment: .leading)
@@ -39,54 +33,6 @@ struct MessageBubbleView: View {
         .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
         .onHover { isHovering = $0 }
         .accessibilityIdentifier("messageBubble.\(item.role).\(item.speakerName ?? roleName)")
-    }
-
-    // MARK: - Avatar
-
-    private var avatarView: some View {
-        Circle()
-            .fill(avatarBackground)
-            .frame(width: OpenChatDesignSystem.IconSize.avatar, height: OpenChatDesignSystem.IconSize.avatar)
-            .overlay {
-                Image(systemName: avatarIcon)
-                    .font(.system(size: OpenChatDesignSystem.IconSize.xs, weight: .medium))
-                    .foregroundStyle(avatarForeground)
-            }
-            .overlay(
-                Circle()
-                    .stroke(avatarForeground.opacity(0.16), lineWidth: 0.5)
-            )
-    }
-
-    private var avatarIcon: String {
-        switch item.role {
-        case "user": "person.fill"
-        case "assistant": "sparkle"
-        default: "info.circle.fill"
-        }
-    }
-
-    private var avatarBackground: Color {
-        switch item.role {
-        case "user": OpenChatDesignSystem.Surface.subtleFill
-        case "assistant": OpenChatDesignSystem.Surface.accentSoft
-        default: OpenChatDesignSystem.Surface.warningWash
-        }
-    }
-
-    private var avatarForeground: Color {
-        switch item.role {
-        case "user": Color(.label)
-        case "assistant": Color.accentColor
-        default: Color.orange
-        }
-    }
-
-    // MARK: - Role Label
-
-    private var roleLabel: some View {
-        Text(roleName)
-            .font(OpenChatDesignSystem.Typography.sectionTitle)
     }
 
     private var roleName: String {
@@ -99,7 +45,7 @@ struct MessageBubbleView: View {
         case "user":
             return String(localized: "You")
         case "assistant":
-            return characterName ?? String(localized: "Assistant")
+            return String(localized: "Assistant")
         default:
             return String(localized: "System")
         }
@@ -111,18 +57,29 @@ struct MessageBubbleView: View {
         Group {
             if item.role == "user" {
                 Text(item.content)
-                    .padding(14)
+                    .font(OpenChatDesignSystem.Typography.body)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+                    .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
                     .textSelection(.enabled)
                     .background(
                         RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
-                            .fill(.ultraThinMaterial)
+                            .fill(Color.accentColor)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
-                            .stroke(OpenChatDesignSystem.Surface.hairline, lineWidth: 0.5)
-                            .blendMode(.overlay)
-                    )
-                    .shadowElevation1()
+                    .contextMenu {
+                        Button {
+                            onEdit()
+                        } label: {
+                            Label(String(localized: "Edit"), systemImage: "pencil")
+                        }
+                        .disabled(!canEdit)
+
+                        Button {
+                            UIPasteboard.general.string = item.content
+                        } label: {
+                            Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+                        }
+                    }
             } else {
                 VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
                     reasoningSection
@@ -133,8 +90,43 @@ struct MessageBubbleView: View {
                         }
                     }
                 }
-                .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
+                .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+                .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
+                        .fill(assistantBubbleColor)
+                )
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = item.content
+                    } label: {
+                        Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+                    }
+
+                    Button {
+                        onRegenerate()
+                    } label: {
+                        Label(String(localized: "Regenerate"), systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isStreaming)
+
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label(String(localized: "Delete"), systemImage: "trash")
+                    }
+                    .disabled(isStreaming)
+                }
             }
+        }
+    }
+
+    private var assistantBubbleColor: Color {
+        switch item.role {
+        case "assistant":
+            return Color(.secondarySystemGroupedBackground)
+        default:
+            return OpenChatDesignSystem.Surface.warningWash
         }
     }
 
@@ -178,11 +170,11 @@ struct MessageBubbleView: View {
     // MARK: - Action Bar
 
     @ViewBuilder
-    private var actionBar: some View {
+    private var assistantActionBar: some View {
         if !isStreaming {
             MessageActionBar(
-                role: item.role,
                 content: item.content,
+                showsRegenerate: item.role == "assistant",
                 onRegenerate: onRegenerate,
                 onDelete: onDelete
             )
@@ -216,6 +208,7 @@ struct MessageBubbleView: View {
                 reasoningContent: nil
             )
         ),
+        onEdit: {},
         onDelete: {},
         onRegenerate: {}
     )
@@ -238,6 +231,7 @@ struct MessageBubbleView: View {
                 reasoningContent: nil
             )
         ),
+        onEdit: {},
         onDelete: {},
         onRegenerate: {}
     )
@@ -261,6 +255,7 @@ struct MessageBubbleView: View {
             )
         ),
         isStreaming: true,
+        onEdit: {},
         onDelete: {},
         onRegenerate: {}
     )

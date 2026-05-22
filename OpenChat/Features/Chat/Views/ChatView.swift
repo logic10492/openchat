@@ -3,9 +3,13 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
     @State private var isShowingSettings = false
+    @State private var editingMessage: EditableMessage?
+    @State private var editedMessageText = ""
     @State private var shouldFollowStreaming = true
     @State private var followResumeGeneration = 0
     @State private var resumeFollowTask: Task<Void, Never>?
+    @State private var isShowingCharacterPicker = false
+    @State private var selectedCharacterPickerWorldBookID: String?
     @GestureState private var isTouchingMessageList = false
 
     init(viewModel: ChatViewModel) {
@@ -15,24 +19,26 @@ struct ChatView: View {
     var body: some View {
         chatContent
             .background(OpenChatDesignSystem.Surface.pageBackground)
-            .navigationTitle(viewModel.conversation.title)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    characterCapsuleControl
+                        .offset(y: 3)
+                }
+
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if viewModel.isGeneratingTitle {
                         ProgressView()
                             .controlSize(.small)
-                    }
-                    if let tokenUsage = viewModel.tokenUsage {
-                        Text("\(tokenUsage.totalUsed)/\(tokenUsage.totalBudget)")
-                            .font(OpenChatDesignSystem.Typography.monoMetadata)
-                            .foregroundStyle(.secondary)
+                            .offset(y: 3)
                     }
                     Button {
                         isShowingSettings = true
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                     }
+                    .offset(y: 3)
                     .accessibilityLabel(String(localized: "Chat Settings"))
                     .accessibilityIdentifier("chat.settingsButton")
                 }
@@ -47,6 +53,22 @@ struct ChatView: View {
             .sheet(isPresented: $isShowingSettings) {
                 ChatSettingsSheet(viewModel: viewModel)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $editingMessage) { message in
+                EditMessageSheet(
+                    text: $editedMessageText,
+                    onCancel: {
+                        editingMessage = nil
+                    },
+                    onSave: {
+                        let newContent = editedMessageText
+                        editingMessage = nil
+                        Task {
+                            await viewModel.editMessage(message.id, newContent: newContent)
+                        }
+                    }
+                )
+                .presentationDetents([.medium])
             }
     }
 
@@ -76,6 +98,82 @@ struct ChatView: View {
             }
     }
 
+    // MARK: - Character Capsule
+
+    @ViewBuilder
+    private var characterCapsuleControl: some View {
+        if viewModel.showsConversationCharacterPicker {
+            Button {
+                presentCharacterPicker()
+            } label: {
+                ChatHeaderCapsule(
+                    title: viewModel.selectedCharacterName ?? String(localized: "Select Character"),
+                    subtitle: viewModel.selectedCharacterWorldBookName
+                )
+            }
+            .buttonStyle(.plain)
+            .popover(
+                isPresented: $isShowingCharacterPicker,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                CharacterPickerPopover(
+                    worldBooks: viewModel.availableWorldBooks,
+                    characterCards: viewModel.availableCharacterCards,
+                    selectedCharacterCardID: viewModel.selectedCharacterCardID,
+                    selectedWorldBookID: $selectedCharacterPickerWorldBookID,
+                    onSelectCharacterCard: { id in
+                        selectCharacterCard(id)
+                        isShowingCharacterPicker = false
+                    }
+                )
+                .presentationCompactAdaptation(.popover)
+            }
+            .accessibilityLabel(String(localized: "Select Character"))
+            .accessibilityIdentifier("chat.characterCapsule")
+        } else {
+            Button {
+                isShowingSettings = true
+            } label: {
+                ChatHeaderCapsule(
+                    title: String(localized: "Stage"),
+                    subtitle: stageCapsuleSubtitle
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Stage"))
+            .accessibilityIdentifier("chat.stageCapsule")
+        }
+    }
+
+    private var selectedCharacterWorldBookID: String? {
+        guard let id = viewModel.selectedCharacterCardID,
+              let card = viewModel.availableCharacterCards.first(where: { $0.id == id }),
+              let worldBookId = card.worldBookId,
+              viewModel.availableWorldBooks.contains(where: { $0.id == worldBookId })
+        else { return nil }
+        return worldBookId
+    }
+
+    private var stageCapsuleSubtitle: String? {
+        let names = viewModel.activeStageParticipants.map(\.displayName)
+        guard !names.isEmpty else { return nil }
+        return names.joined(separator: ", ")
+    }
+
+    private func presentCharacterPicker() {
+        selectedCharacterPickerWorldBookID = selectedCharacterWorldBookID
+        isShowingCharacterPicker = true
+    }
+
+    private func selectCharacterCard(_ id: String?) {
+        guard viewModel.showsConversationCharacterPicker,
+              viewModel.selectedCharacterCardID != id
+        else { return }
+        viewModel.selectedCharacterCardID = id
+        Task { await viewModel.saveConversationSettings() }
+    }
+
     // MARK: - Message List
 
     private var messageList: some View {
@@ -89,8 +187,11 @@ struct ChatView: View {
                             MessageBubbleView(
                                 item: item,
                                 isStreaming: isStreamingMessage(item),
-                                characterName: item.speakerName ?? viewModel.activeStageSpeakerName ?? viewModel.selectedCharacterName,
                                 showDetailedStats: viewModel.showDetailedStats,
+                                canEdit: !viewModel.isGenerating,
+                                onEdit: {
+                                    beginEditing(item)
+                                },
                                 onDelete: {
                                     Task { await viewModel.deleteMessage(item.id) }
                                 },
@@ -245,12 +346,254 @@ struct ChatView: View {
         }
     }
 
+    private func beginEditing(_ item: MessageDisplayItem) {
+        guard item.role == "user", !viewModel.isGenerating else { return }
+        editedMessageText = item.content
+        editingMessage = EditableMessage(id: item.id)
+    }
+
     private func binding<Value>(_ keyPath: ReferenceWritableKeyPath<ChatViewModel, Value>) -> Binding<Value> {
         @Bindable var viewModel = viewModel
         return Binding(
             get: { viewModel[keyPath: keyPath] },
             set: { viewModel[keyPath: keyPath] = $0 }
         )
+    }
+}
+
+private struct EditableMessage: Identifiable {
+    let id: String
+}
+
+private struct CharacterPickerPopover: View {
+    let worldBooks: [WorldBookRecord]
+    let characterCards: [CharacterCardRecord]
+    let selectedCharacterCardID: String?
+    @Binding var selectedWorldBookID: String?
+    let onSelectCharacterCard: (String?) -> Void
+
+    private var filteredCharacterCards: [CharacterCardRecord] {
+        characterCards.filter { card in
+            if let selectedWorldBookID {
+                return card.worldBookId == selectedWorldBookID
+            }
+            return card.worldBookId == nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.sm) {
+            worldBookSection
+            Divider()
+            characterSection
+        }
+        .padding(OpenChatDesignSystem.Spacing.sm)
+        .frame(width: 320, alignment: .leading)
+    }
+
+    private var worldBookSection: some View {
+        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
+            sectionHeader(String(localized: "Available World Books"))
+
+            VStack(spacing: OpenChatDesignSystem.Spacing.xxs) {
+                pickerRow(
+                    title: String(localized: "No World Book"),
+                    systemImage: "book.closed",
+                    isSelected: selectedWorldBookID == nil
+                ) {
+                    selectedWorldBookID = nil
+                }
+
+                ForEach(worldBooks) { book in
+                    pickerRow(
+                        title: book.name,
+                        systemImage: book.isEnabled ? "book" : "book.closed",
+                        isSelected: selectedWorldBookID == book.id
+                    ) {
+                        selectedWorldBookID = book.id
+                    }
+                }
+            }
+        }
+    }
+
+    private var characterSection: some View {
+        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
+            sectionHeader(String(localized: "World Book Characters"))
+
+            VStack(spacing: OpenChatDesignSystem.Spacing.xxs) {
+                pickerRow(
+                    title: String(localized: "None"),
+                    systemImage: "person.slash",
+                    isSelected: selectedCharacterCardID == nil
+                ) {
+                    onSelectCharacterCard(nil)
+                }
+
+                if filteredCharacterCards.isEmpty {
+                    Text(String(localized: "No Characters"))
+                        .font(OpenChatDesignSystem.Typography.secondary)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+                        .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
+                } else {
+                    ForEach(filteredCharacterCards) { card in
+                        pickerRow(
+                            title: card.name,
+                            systemImage: "person",
+                            isSelected: selectedCharacterCardID == card.id
+                        ) {
+                            onSelectCharacterCard(card.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(OpenChatDesignSystem.Typography.badge)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+    }
+
+    private func pickerRow(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: OpenChatDesignSystem.Spacing.sm) {
+                Image(systemName: systemImage)
+                    .font(.subheadline)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: OpenChatDesignSystem.IconSize.md)
+
+                Text(title)
+                    .font(OpenChatDesignSystem.Typography.rowTitle)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: OpenChatDesignSystem.Spacing.sm)
+
+                Image(systemName: "checkmark")
+                    .font(OpenChatDesignSystem.Typography.badge)
+                    .foregroundStyle(Color.accentColor)
+                    .opacity(isSelected ? 1 : 0)
+            }
+            .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+            .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
+            .background(
+                isSelected ? OpenChatDesignSystem.Surface.accentWash : Color.clear,
+                in: RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xs, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xs, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ChatHeaderCapsule: View {
+    let title: String
+    let subtitle: String?
+
+    var body: some View {
+        capsuleContent
+            .modifier(ChatHeaderGlassCapsuleStyle())
+    }
+
+    private var capsuleContent: some View {
+        HStack(spacing: OpenChatDesignSystem.Spacing.sm) {
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(OpenChatDesignSystem.Typography.badge)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+        }
+    }
+}
+
+private struct ChatHeaderGlassCapsuleStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        let capsule = Capsule()
+        content
+            .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+            .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
+            .frame(minWidth: 156, maxWidth: 252, minHeight: 48)
+            .background {
+                if #available(iOS 26.0, *) {
+                    Color.clear
+                } else {
+                    capsule.fill(.ultraThinMaterial)
+                }
+            }
+            .overlay {
+                if #available(iOS 26.0, *) {
+                    EmptyView()
+                } else {
+                    capsule
+                        .stroke(Color.white.opacity(0.22), lineWidth: 0.5)
+                        .blendMode(.overlay)
+                }
+            }
+            .ifAvailableGlassEffect(in: capsule)
+            .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
+            .contentShape(capsule)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func ifAvailableGlassEffect<S: Shape>(in shape: S) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            self
+        }
+    }
+}
+
+private struct EditMessageSheet: View {
+    @Binding var text: String
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    private var canSave: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .font(OpenChatDesignSystem.Typography.body)
+                .scrollContentBackground(.hidden)
+                .padding(OpenChatDesignSystem.Spacing.md)
+                .background(OpenChatDesignSystem.Surface.pageBackground)
+                .navigationTitle(String(localized: "Edit Message"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "Cancel"), action: onCancel)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "Save"), action: onSave)
+                            .disabled(!canSave)
+                    }
+                }
+        }
     }
 }
 

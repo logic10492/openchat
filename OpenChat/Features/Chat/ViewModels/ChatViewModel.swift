@@ -339,11 +339,15 @@ final class ChatViewModel {
     }
 
     func editMessage(_ messageId: String, newContent: String) async {
+        let trimmedContent = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty, !isGenerating else { return }
+
         do {
             let records = try await databaseManager.fetchMessages(conversationId: conversation.id)
             guard var target = records.first(where: { $0.id == messageId }) else { return }
-            target.content = newContent
-            target.tokenCount = TokenCounter.count(newContent)
+            guard target.role == "user" else { return }
+            target.content = trimmedContent
+            target.tokenCount = TokenCounter.count(trimmedContent)
             try await databaseManager.saveMessage(target)
             try await databaseManager.deleteCompressionCheckpoints(
                 conversationId: conversation.id,
@@ -354,7 +358,7 @@ final class ChatViewModel {
                 afterSortOrder: target.sortOrder
             )
             await loadMessages()
-            try await generateResponse(for: newContent, persistUserMessage: false)
+            try await generateResponse(for: trimmedContent, persistUserMessage: false)
         } catch {
             appState.present(error: error.localizedDescription)
         }

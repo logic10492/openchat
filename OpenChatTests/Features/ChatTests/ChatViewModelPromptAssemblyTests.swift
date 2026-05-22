@@ -1826,6 +1826,121 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(checkpoints.isEmpty)
     }
 
+    @Test func test_editUserMessage_truncatesTailAndRegeneratesFromEditedPrefix() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-edit-tail",
+            name: "Edit Tail Endpoint",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-edit-tail",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(id: "edit-tail", slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        let conversationRecord = conversation
+        let userA = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "a", sortOrder: 1)
+        let assistantA = TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "response a", sortOrder: 2)
+        let userB = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "b", sortOrder: 3)
+        let assistantB = TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "response b", sortOrder: 4)
+        let userC = TestHelpers.makeMessage(conversationId: conversation.id, role: "user", content: "c", sortOrder: 5)
+        let assistantC = TestHelpers.makeMessage(conversationId: conversation.id, role: "assistant", content: "response c", sortOrder: 6)
+        let checkpoint = TestHelpers.makeCompressionCheckpoint(
+            conversationId: conversation.id,
+            sourceStartSortOrder: 1,
+            sourceEndSortOrder: 4,
+            sourceHash: CompressionSourceHasher.hash(messages: [userA, assistantA, userB, assistantB]),
+            summary: "old branch summary"
+        )
+        try await databaseManager.write { db in
+            try endpoint.insert(db)
+            try model.insert(db)
+            try conversationRecord.insert(db)
+            try userA.insert(db)
+            try assistantA.insert(db)
+            try userB.insert(db)
+            try assistantB.insert(db)
+            try userC.insert(db)
+            try assistantC.insert(db)
+            try checkpoint.insert(db)
+        }
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"new response"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        await viewModel.editMessage(userA.id, newContent: "edited a")
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        #expect(storedMessages.map(\.role) == ["user", "assistant"])
+        #expect(storedMessages.map(\.content) == ["edited a", "new response"])
+        #expect(storedMessages.map(\.sortOrder) == [1, 2])
+        #expect(viewModel.messages.map(\.content) == ["edited a", "new response"])
+
+        let request = try #require(capture.load())
+        #expect(request.messages.filter { $0.role == "user" && $0.content.contains("edited a") }.count == 1)
+        #expect(!request.messages.contains { $0.role == "assistant" && $0.content == "response a" })
+        #expect(!request.messages.contains { $0.role == "user" && $0.content == "b" })
+        #expect(!request.messages.contains { $0.role == "assistant" && $0.content == "response b" })
+        #expect(!request.messages.contains { $0.role == "user" && $0.content == "c" })
+        #expect(!request.messages.contains { $0.role == "assistant" && $0.content == "response c" })
+
+        let checkpoints = try await databaseManager.fetchCompressionCheckpoints(conversationId: conversation.id)
+        #expect(checkpoints.isEmpty)
+    }
+
     @Test func test_deleteMessage_deletesAffectedCompressionCheckpoints() async throws {
         let databaseManager = try TestHelpers.makeDatabaseManager()
         let conversation = TestHelpers.makeConversation(id: "delete-checkpoint", contextStrategy: .compression)

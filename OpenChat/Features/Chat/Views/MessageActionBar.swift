@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct MessageActionBar: View {
-    let role: String
     let content: String
+    var showsRegenerate = true
     let onRegenerate: () -> Void
     let onDelete: () -> Void
 
@@ -15,7 +15,7 @@ struct MessageActionBar: View {
             }
             .accessibilityLabel(String(localized: "Copy"))
 
-            if role == "assistant" {
+            if showsRegenerate {
                 Button(action: onRegenerate) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -35,8 +35,7 @@ struct MessageActionBar: View {
 
 #Preview {
     VStack(spacing: 20) {
-        MessageActionBar(role: "assistant", content: "Hello", onRegenerate: {}, onDelete: {})
-        MessageActionBar(role: "user", content: "Hi", onRegenerate: {}, onDelete: {})
+        MessageActionBar(content: "Hello", onRegenerate: {}, onDelete: {})
     }
     .padding()
 }

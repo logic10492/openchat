@@ -39,6 +39,7 @@ OpenChat/
 ## Swift 代码规范
 
 - 优先使用 `struct` 而非 `class`，除非需要引用语义
+- UI 实现必须尽可能使用 SwiftUI；除非 SwiftUI 已经无法满足需求，否则禁止使用 UIKit 或其他 UI framework。确需 fallback 时必须说明 SwiftUI 不可行的原因。
 - 使用 Swift Concurrency (`async/await`)，不使用 Combine 或回调
 - 错误处理使用 typed `enum` 实现 `LocalizedError`，不使用泛 `Error`
 - 所有数据库操作通过 GRDB Record 类型，不写裸 SQL
