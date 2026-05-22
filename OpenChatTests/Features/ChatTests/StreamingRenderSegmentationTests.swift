@@ -46,6 +46,15 @@ struct StreamingRenderSegmentationTests {
         #expect(item.contentRenderRevision != originalRevision)
     }
 
+    @Test func test_markdownLayout_joinsNewlineBlocksIntoSingleRenderSurface() {
+        let blocks = TextContentBlock.makeBlocks(from: "动作一\n台词一")
+        let layout = MarkdownTextLayoutPlan(blocks: blocks)
+
+        #expect(blocks.map(\.text) == ["动作一\n", "台词一"])
+        #expect(layout.plainText == "动作一\n台词一")
+        #expect(layout.renderSurfaceCount == 1)
+    }
+
     @Test func test_messageDisplayItem_compactsExcessBlankLinesOnlyForRendering() {
         let record = MessageRecord(
             id: "assistant-blank-lines",

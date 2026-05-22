@@ -123,6 +123,18 @@ private struct RenderedMarkdownBlock {
     let attributed: AttributedString
 }
 
+struct MarkdownTextLayoutPlan: Equatable, Sendable {
+    let blocks: [TextContentBlock]
+
+    var plainText: String {
+        blocks.map(\.text).joined()
+    }
+
+    var renderSurfaceCount: Int {
+        blocks.isEmpty ? 0 : 1
+    }
+}
+
 private actor MarkdownRenderCache {
     static let shared = MarkdownRenderCache()
 
@@ -187,43 +199,50 @@ struct MarkdownTextView: View {
 
 private struct SegmentedMarkdownTextView: View {
     let blocks: [TextContentBlock]
+    @State private var renderedBlocks: [Int: RenderedMarkdownBlock] = [:]
 
     private var characterCount: Int {
         blocks.reduce(0) { $0 + $1.text.count }
     }
 
+    private var layoutPlan: MarkdownTextLayoutPlan {
+        MarkdownTextLayoutPlan(blocks: blocks)
+    }
+
+    private var renderSignature: [MarkdownBlockSignature] {
+        blocks.map { MarkdownBlockSignature(id: $0.id, text: $0.text) }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(blocks) { block in
-                MarkdownTextBlockView(block: block, totalCharacterCount: characterCount)
-            }
-        }
+        composedText(for: layoutPlan)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct MarkdownTextBlockView: View {
-    let block: TextContentBlock
-    let totalCharacterCount: Int
-    @State private var renderedBlock: RenderedMarkdownBlock?
-
-    var body: some View {
-        Group {
-            if let renderedBlock, renderedBlock.text == block.text {
-                Text(renderedBlock.attributed)
-            } else {
-                Text(block.text)
-            }
-        }
-        .textSelection(.enabled)
-        .task(id: block.text) {
-            await refreshMarkdownBlock()
+        .task(id: renderSignature) {
+            await refreshMarkdownBlocks()
         }
     }
 
-    private func refreshMarkdownBlock() async {
-        let snapshot = block
-        let delay = MarkdownRenderPolicy.refreshDelay(forCharacterCount: totalCharacterCount)
+    private func composedText(for plan: MarkdownTextLayoutPlan) -> Text {
+        plan.blocks.reduce(Text(verbatim: "")) { partial, block in
+            partial + text(for: block)
+        }
+    }
+
+    private func text(for block: TextContentBlock) -> Text {
+        if let renderedBlock = renderedBlocks[block.id], renderedBlock.text == block.text {
+            Text(renderedBlock.attributed)
+        } else {
+            Text(block.text)
+        }
+    }
+
+    private func refreshMarkdownBlocks() async {
+        let snapshots = blocks
+        guard !snapshots.isEmpty else {
+            renderedBlocks = [:]
+            return
+        }
+
+        let delay = MarkdownRenderPolicy.refreshDelay(forCharacterCount: characterCount)
 
         do {
             try await Task.sleep(for: delay)
@@ -232,10 +251,21 @@ private struct MarkdownTextBlockView: View {
         }
 
         guard !Task.isCancelled else { return }
-        if let attributed = await MarkdownRenderCache.shared.attributedString(for: snapshot.text) {
-            renderedBlock = RenderedMarkdownBlock(text: snapshot.text, attributed: attributed)
-        } else {
-            renderedBlock = nil
+
+        var nextRenderedBlocks: [Int: RenderedMarkdownBlock] = [:]
+        for block in snapshots {
+            guard !Task.isCancelled else { return }
+            if let attributed = await MarkdownRenderCache.shared.attributedString(for: block.text) {
+                nextRenderedBlocks[block.id] = RenderedMarkdownBlock(text: block.text, attributed: attributed)
+            }
         }
+
+        guard !Task.isCancelled else { return }
+        renderedBlocks = nextRenderedBlocks
     }
+}
+
+private struct MarkdownBlockSignature: Equatable {
+    let id: Int
+    let text: String
 }
