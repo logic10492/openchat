@@ -38,6 +38,8 @@
 		1D76DA92A1B8E3A68528B9B6 /* String+Token.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE72EC9FC476C3B0188C389B /* String+Token.swift */; };
 		1F492D0ED34FE609A9AAE4D1 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0F30C0D529E1B6894B83606B /* Localizable.xcstrings */; };
 		1F8BF358EE8A4E3CCF3D4045 /* View+Modifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 904E33A230B34FCCB76CF8A4 /* View+Modifiers.swift */; };
+		1F9B7E2A4C6D8E901234ABCD /* ReasoningDisclosureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9B7E2A4C6D8E901234ABCC /* ReasoningDisclosureView.swift */; };
+		1F9B7E2A4C6D8E901234ABD1 /* UserDefaults+ModelParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9B7E2A4C6D8E901234ABD0 /* UserDefaults+ModelParameters.swift */; };
 		1FA274887224981FCF21CBB1 /* DeterministicAgentExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BAEA9377414D537FA329101 /* DeterministicAgentExecutor.swift */; };
 		1FAC3C13A0C82BEEBAF1BBD5 /* DatabaseManagerMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CA0BBCADB7134CEED5FF4C /* DatabaseManagerMemoryTests.swift */; };
 		2087C3A8E4B9C8E03EF14036 /* WorldBookEntryHasherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2149844ED390CDEC4FA07B0 /* WorldBookEntryHasherTests.swift */; };
@@ -301,6 +303,8 @@
 		1E624CF0053773BABC44B996 /* OpenChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EC7C7BC53398395272506E7 /* InputBarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InputBarView.swift; sourceTree = "<group>"; };
 		1EFF3FF49F0CF6BB7AE7345A /* MemoryError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryError.swift; sourceTree = "<group>"; };
+		1F9B7E2A4C6D8E901234ABCC /* ReasoningDisclosureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReasoningDisclosureView.swift; sourceTree = "<group>"; };
+		1F9B7E2A4C6D8E901234ABD0 /* UserDefaults+ModelParameters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "UserDefaults+ModelParameters.swift"; sourceTree = "<group>"; };
 		1FA8A289C8C6DBEC6DEAE053 /* AgentExecutionResult.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentExecutionResult.swift; sourceTree = "<group>"; };
 		2135957F80F9B2337CE71CAF /* AgentPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentPolicyTests.swift; sourceTree = "<group>"; };
 		223D2E00A10147943982E003 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -853,6 +857,7 @@
 				189DC4157D079B0CF9379519 /* MemoryExtractionIndicator.swift */,
 				1C7409BECBE14A211F7CF379 /* MessageActionBar.swift */,
 				CE91F0D5773AF63CE16578CF /* MessageBubbleView.swift */,
+				1F9B7E2A4C6D8E901234ABCC /* ReasoningDisclosureView.swift */,
 				419159E2344BD0D099F24690 /* RetrievalTraceView.swift */,
 				134DF09C9333EFF04EE16505 /* StatsBarView.swift */,
 			);
@@ -950,6 +955,7 @@
 				A5F5B53AA65415CDAEE2DBBA /* ResponsesAPIResponse.swift */,
 				2EC526724B7F30155D157AD7 /* SSEStreamParser.swift */,
 				995B293024068705B703A2FF /* TitleGenerator.swift */,
+				1F9B7E2A4C6D8E901234ABD0 /* UserDefaults+ModelParameters.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -1446,6 +1452,7 @@
 				5512016629406A9649CCAF7A /* AppState.swift in Sources */,
 				3CE7079623B2E0C871D32B42 /* DependencyContainer.swift in Sources */,
 				A30C98A2B8571A2FF06C607A /* UITestingSupport.swift in Sources */,
+				1F9B7E2A4C6D8E901234ABD1 /* UserDefaults+ModelParameters.swift in Sources */,
 				AAA8014B469732AA8F3ED03E /* ContentView.swift in Sources */,
 				D10E24EBEE522E20A788CD20 /* AgentCapability.swift in Sources */,
 				4CC09C91CE9EBD819276FBC7 /* AgentDescriptor.swift in Sources */,
@@ -1578,6 +1585,7 @@
 				16C3B3D4F487448B6FBA8685 /* MemoryExtractionIndicator.swift in Sources */,
 				BB27C1DEB4097F6825B821FB /* MessageActionBar.swift in Sources */,
 				7EBCFAA7C27643E380DB627A /* MessageBubbleView.swift in Sources */,
+				1F9B7E2A4C6D8E901234ABCD /* ReasoningDisclosureView.swift in Sources */,
 				649018A05E7715878E4F8AAE /* RetrievalTraceView.swift in Sources */,
 				4B5CE8CA402968CE551B8CDB /* StatsBarView.swift in Sources */,
 				6B678CD8312C3DB40E81E4B6 /* ConversationListViewModel.swift in Sources */,

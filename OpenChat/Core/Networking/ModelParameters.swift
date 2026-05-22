@@ -1,6 +1,9 @@
 import Foundation
 
 struct ModelParameters: Codable, Equatable, Sendable {
+    static let openChatDefaultTemperature = 0.8
+    static let openChatDefaultTopP = 0.95
+
     var temperature: Double
     var topP: Double
     var maxTokens: Int?
@@ -11,7 +14,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
     var reasoningEffort: ReasoningEffort
 
     init(
-        temperature: Double = 0.8,
+        temperature: Double = Self.openChatDefaultTemperature,
         topP: Double = 1.0,
         maxTokens: Int? = nil,
         frequencyPenalty: Double = 0.0,

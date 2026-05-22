@@ -6,8 +6,8 @@ enum AppConstants {
     static let defaultModelName = "gpt-4o-mini"
     static let defaultMaxContextTokens = 131_072
     static let contextRatio = 0.4
-    static let defaultTemperature = 0.8
-    static let defaultTopP = 0.95
+    static let defaultTemperature = ModelParameters.openChatDefaultTemperature
+    static let defaultTopP = ModelParameters.openChatDefaultTopP
     static let defaultContextStrategy = ContextStrategy.truncation
 
     static let slowPlotModePrompt = """

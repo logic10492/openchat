@@ -515,6 +515,17 @@
         }
       }
     },
+    "Customize for This Chat" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为本会话自定义"
+          }
+        }
+      }
+    },
     "Danger Zone" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -750,6 +761,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启用舞台"
+          }
+        }
+      }
+    },
+    "Enable Thinking" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用思考"
           }
         }
       }
@@ -1720,6 +1742,17 @@
         }
       }
     },
+    "Thinking Budget" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考预算"
+          }
+        }
+      }
+    },
     "This will delete conversations, character cards, world books, world book entries, memories, and messages. API endpoints are kept. This action cannot be undone." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1775,6 +1808,17 @@
         }
       }
     },
+    "Unset" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未设置"
+          }
+        }
+      }
+    },
     "Use Default" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1799,6 +1843,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户接管"
+          }
+        }
+      }
+    },
+    "Using global model defaults." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用全局模型默认值。"
           }
         }
       }

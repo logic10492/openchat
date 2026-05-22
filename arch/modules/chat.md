@@ -21,8 +21,9 @@
 
 | 文件 | 职责 |
 |---|---|
-| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 + 记忆更新 banner |
+| `ChatView.swift` | 聊天主界面，组合消息列表 + 输入栏 + 记忆更新 banner；导航栏仅保留设置入口与状态信息 |
 | `MessageBubbleView.swift` | 单条消息气泡，支持 Markdown、长按菜单、流式统计展示 |
+| `ReasoningDisclosureView.swift` | AI 思考内容展示：折叠摘要、固定高度滚动预览、长文本尾部截断与系统复制 |
 | `InputBarView.swift` | 底部输入栏（文本框 + 发送/停止按钮） |
 | `ChatSettingsSheet.swift` | 当前会话设置面板 |
 | `ChatViewModel.swift` | 核心 ViewModel，管理消息状态、调度 API 请求 |
@@ -72,11 +73,17 @@
 - user 消息：右对齐，主题色背景
 - assistant 消息：左对齐，次要色背景
 - system 消息：居中，淡灰色，小字体（通常不展示给用户，除非是压缩摘要）
+- 主消息列约束最大宽度，避免 iPad / 横屏下长文本铺满全屏；用户消息比助手消息更窄，保持对话阅读节奏。
 
 **内容渲染**：
 - 使用 Markdown 渲染（粗体、斜体、代码块、列表等）
 - 流式输出时逐步追加文本，末尾显示闪烁光标
 - 展示层会把连续 3 个以上换行压缩为最多 1 个空行，避免角色输出留下大段空白；原始 message content 不改写
+
+**思考内容展示**：
+- 第一级：默认折叠，只显示 `Character Thinking` 行和生成中状态，不直接暴露思考正文。
+- 第二级：点开展开后显示固定高度滚动预览。若思考内容过长，预览保留尾部上下文，前置内容用省略号表达，避免长思考链挤占主回复。预览文本启用系统文本选择，用户可通过系统复制菜单复制可见内容。
+- 实现证据：`MessageBubbleView.swift` 调用 `ReasoningDisclosureView` 渲染 `MessageRecord.reasoningContent`；`ReasoningDisclosureView.swift` 负责折叠状态、固定高度预览、尾部截断和系统文本选择。
 
 **长按菜单**：
 | 消息类型 | 菜单项 |
@@ -103,12 +110,42 @@ struct InputBarView: View {
 
 ### 3.4 ChatSettingsSheet
 
-在聊天界面点击设置图标弹出的 Sheet：
+在聊天界面点击设置图标弹出的 Sheet。会话标题编辑也在该面板中完成，避免主导航栏堆叠多个操作按钮：
 
 ```
 ┌─────────────────────────────────────────┐
 │ 会话设置                         [完成]  │
 │─────────────────────────────────────────│
+│ Section: 会话                            │
+│   标题: [银月森林的入口]                 │
+│   API 端点: [使用默认 ▸]                │
+│   模型: [使用默认 ▸]                    │
+│   角色卡: [艾拉 ▸]                      │
+│   上下文策略: [剔除/压缩]               │
+│   场景覆盖: [可选文本输入]              │
+│   慢速剧情推进: [开关]                  │
+│                                         │
+│ Section: Stage                          │
+│   导演模式 / 参与者管理                  │
+│                                         │
+│ Section: 模型                            │
+│   本会话自定义模型参数: [开关]           │
+│   关闭时展示继承的全局默认值摘要         │
+│   打开后展开 Temperature / Top P /      │
+│   Max Tokens / Thinking 设置             │
+└─────────────────────────────────────────┘
+```
+
+模型参数继承规则：
+- `conversation.modelParameters == nil` 时，`ChatViewModel.currentParameters` 从 `UserDefaults.openChatDefaultModelParameters()` 读取全局默认。
+- 旧版本曾在保存会话设置时把当时的默认模型参数写入 `conversation.modelParameters`；`ChatViewModel` 会把这类 legacy 默认 JSON 视为“继承全局”，避免老会话被固定在旧默认值上。
+- 只有打开 `Customize for This Chat` 时，保存设置才会把当前控件值编码到 `conversation.modelParameters`。
+- 关闭本会话自定义会清空 `conversation.modelParameters`，后续生成继续继承全局默认。
+- 实现证据：`ChatSettingsSheet.swift` 的 Model section 使用 `usesCustomModelParameters` 控制摘要/控件展开；`ChatViewModel.swift` 的 `currentParameters` 在会话覆盖和全局默认之间切换，并兼容 legacy 默认参数 JSON；`ChatViewModelPromptAssemblyTests.swift` 覆盖全局继承、legacy 默认参数继承、开启自定义时预填当前全局默认，以及保存时不写入覆盖的回归。
+
+历史布局草图：
+
+```
 │ Section: 角色与世界（非 Stage 会话）     │
 │   角色卡: [艾拉 ▸]          [更换/移除] │
 │   世界: 中土世界（通过角色卡关联）       │

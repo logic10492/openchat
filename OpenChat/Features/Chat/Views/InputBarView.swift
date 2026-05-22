@@ -63,13 +63,15 @@ struct InputBarView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
-                .stroke(OpenChatDesignSystem.Surface.hairline, lineWidth: 0.5)
+                .stroke(inputStroke, lineWidth: isFocused ? 1 : 0.5)
                 .blendMode(.overlay)
         )
         .shadowElevation2()
+        .frame(maxWidth: 860)
         .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
         .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
         .animation(.easeInOut(duration: 0.2), value: isDirectorPanelExpanded)
+        .animation(.easeInOut(duration: 0.16), value: isFocused)
         .onChange(of: showsDirectorTools) { _, newValue in
             if !newValue {
                 isDirectorPanelExpanded = false
@@ -82,16 +84,20 @@ struct InputBarView: View {
         String(localized: "Message")
     }
 
+    private var inputStroke: Color {
+        isFocused ? Color.accentColor.opacity(0.34) : OpenChatDesignSystem.Surface.hairline
+    }
+
     private var directorToolButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             inputRole = .participant
             isDirectorPanelExpanded.toggle()
         } label: {
-                Image(systemName: isDirectorPanelExpanded ? "theatermasks.fill" : "theatermasks")
-                    .font(.system(size: 22))
-                    .openChatIconButtonFrame()
-                    .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.primary)
+            Image(systemName: isDirectorPanelExpanded ? "theatermasks.fill" : "theatermasks")
+                .font(.system(size: 22))
+                .openChatIconButtonFrame()
+                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.primary)
         }
         .accessibilityLabel(String(localized: "Director Tools"))
         .accessibilityIdentifier("chat.directorToolsButton")

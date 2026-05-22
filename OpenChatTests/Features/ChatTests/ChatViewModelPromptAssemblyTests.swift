@@ -99,6 +99,14 @@ private extension URLRequest {
     }
 }
 
+private func restore(_ defaults: UserDefaults, key: String, value: Any?) {
+    if let value {
+        defaults.set(value, forKey: key)
+    } else {
+        defaults.removeObject(forKey: key)
+    }
+}
+
 @MainActor
 @Suite("Chat prompt assembly")
 struct ChatViewModelPromptAssemblyTests {
@@ -120,6 +128,7 @@ struct ChatViewModelPromptAssemblyTests {
             appState: AppState()
         )
 
+        viewModel.usesCustomModelParameters = true
         viewModel.thinkingEnabled = true
         viewModel.thinkingBudget = 8192
         viewModel.reasoningEffort = ReasoningEffort.max
@@ -128,6 +137,159 @@ struct ChatViewModelPromptAssemblyTests {
 
         #expect(parameters.isThinkingEnabled == true)
         #expect(parameters.reasoningEffort == .max)
+    }
+
+    @Test func test_current_parameters_inherit_global_defaults_without_conversation_override() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation()
+        let defaults = UserDefaults.standard
+        let oldTemperature = defaults.object(forKey: "default_temperature")
+        let oldTopP = defaults.object(forKey: "default_top_p")
+        let oldMaxTokens = defaults.object(forKey: "default_max_tokens")
+        defer {
+            restore(defaults, key: "default_temperature", value: oldTemperature)
+            restore(defaults, key: "default_top_p", value: oldTopP)
+            restore(defaults, key: "default_max_tokens", value: oldMaxTokens)
+        }
+        defaults.set(0.35, forKey: "default_temperature")
+        defaults.set(0.72, forKey: "default_top_p")
+        defaults.set(4096, forKey: "default_max_tokens")
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        #expect(viewModel.usesCustomModelParameters == false)
+        #expect(viewModel.currentParameters.temperature == 0.35)
+        #expect(viewModel.currentParameters.topP == 0.72)
+        #expect(viewModel.currentParameters.maxTokens == 4096)
+    }
+
+    @Test func test_legacy_default_conversation_parameters_inherit_global_defaults() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        var conversation = TestHelpers.makeConversation()
+        conversation.modelParameters = RecordCoders.encode(
+            ModelParameters(
+                temperature: ModelParameters.openChatDefaultTemperature,
+                topP: ModelParameters.openChatDefaultTopP,
+                maxTokens: 1024
+            )
+        )
+
+        let defaults = UserDefaults.standard
+        let oldTemperature = defaults.object(forKey: "default_temperature")
+        let oldTopP = defaults.object(forKey: "default_top_p")
+        let oldMaxTokens = defaults.object(forKey: "default_max_tokens")
+        defer {
+            restore(defaults, key: "default_temperature", value: oldTemperature)
+            restore(defaults, key: "default_top_p", value: oldTopP)
+            restore(defaults, key: "default_max_tokens", value: oldMaxTokens)
+        }
+        defaults.set(0.31, forKey: "default_temperature")
+        defaults.set(0.61, forKey: "default_top_p")
+        defaults.set(3072, forKey: "default_max_tokens")
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        #expect(viewModel.usesCustomModelParameters == false)
+        #expect(viewModel.currentParameters.temperature == 0.31)
+        #expect(viewModel.currentParameters.topP == 0.61)
+        #expect(viewModel.currentParameters.maxTokens == 3072)
+    }
+
+    @Test func test_saveConversationSettings_preserves_global_model_inheritance() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "conversation-model-inheritance")
+        try await database.saveConversation(conversation)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        viewModel.modelTemperature = 1.25
+        viewModel.modelTopP = 0.4
+        viewModel.modelMaxTokens = 2048
+        viewModel.usesCustomModelParameters = false
+        await viewModel.saveConversationSettings()
+
+        let saved = try await database.fetchConversation(id: conversation.id)
+        #expect(saved?.modelParameters == nil)
+    }
+
+    @Test func test_enable_custom_model_parameters_prefills_global_defaults() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation()
+        let defaults = UserDefaults.standard
+        let oldTemperature = defaults.object(forKey: "default_temperature")
+        let oldTopP = defaults.object(forKey: "default_top_p")
+        let oldMaxTokens = defaults.object(forKey: "default_max_tokens")
+        defer {
+            restore(defaults, key: "default_temperature", value: oldTemperature)
+            restore(defaults, key: "default_top_p", value: oldTopP)
+            restore(defaults, key: "default_max_tokens", value: oldMaxTokens)
+        }
+        defaults.set(0.42, forKey: "default_temperature")
+        defaults.set(0.68, forKey: "default_top_p")
+        defaults.set(6144, forKey: "default_max_tokens")
+
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: APIClient(),
+            contextManager: ContextManager(databaseManager: database, apiClient: APIClient()),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: database),
+                apiClient: APIClient()
+            ),
+            titleGenerator: TitleGenerator(apiClient: APIClient()),
+            appState: AppState()
+        )
+
+        viewModel.modelTemperature = 1.25
+        viewModel.modelTopP = 0.4
+        viewModel.modelMaxTokens = 2048
+        viewModel.setUsesCustomModelParameters(true)
+
+        #expect(viewModel.usesCustomModelParameters == true)
+        #expect(viewModel.modelTemperature == 0.42)
+        #expect(viewModel.modelTopP == 0.68)
+        #expect(viewModel.modelMaxTokens == 6144)
     }
 
     @Test func test_saveConversationSettings_persistsCompressionMode() async throws {

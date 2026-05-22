@@ -43,6 +43,7 @@ final class ChatViewModel {
     var stageInputRole: StageInputRole = .participant
     var stageResponderIds: [String] = []
     private var isStageResponderSelectionCustomized = false
+    var conversationTitle: String
     var selectedEndpointID: String?
     var selectedModelName: String?
     var selectedCharacterCardID: String?
@@ -50,9 +51,10 @@ final class ChatViewModel {
     var selectedCompressionMode: CompressionMode
     var customScenario = ""
     var slowPlotMode: Bool
-    var modelTemperature = AppConstants.defaultTemperature
-    var modelTopP = AppConstants.defaultTopP
-    var modelMaxTokens = 1024
+    var usesCustomModelParameters = false
+    var modelTemperature: Double
+    var modelTopP: Double
+    var modelMaxTokens: Int
     var thinkingEnabled = false
     var thinkingBudget = 8192
     var reasoningEffort: ReasoningEffort = .high
@@ -132,6 +134,8 @@ final class ChatViewModel {
         self.directorExecutor = directorExecutor
         self.directorAgentExecutor = directorAgentExecutor
         self.appState = appState
+        let defaultParameters = UserDefaults.standard.openChatDefaultModelParameters()
+        conversationTitle = conversation.title
         selectedEndpointID = conversation.apiEndpointId
         selectedModelName = conversation.modelName
         selectedCharacterCardID = conversation.characterCardId
@@ -140,8 +144,13 @@ final class ChatViewModel {
         customScenario = conversation.customScenario ?? ""
         slowPlotMode = conversation.slowPlotMode
         showDetailedStats = UserDefaults.standard.bool(forKey: "show_detailed_stats")
+        modelTemperature = defaultParameters.temperature
+        modelTopP = defaultParameters.topP
+        modelMaxTokens = defaultParameters.maxTokens ?? 1024
 
-        if let parameters = conversation.decodedModelParameters {
+        if let parameters = conversation.decodedModelParameters,
+           !parameters.isLegacyImplicitConversationDefault {
+            usesCustomModelParameters = true
             modelTemperature = parameters.temperature
             modelTopP = parameters.topP
             modelMaxTokens = parameters.maxTokens ?? 1024
@@ -266,6 +275,7 @@ final class ChatViewModel {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         conversation.title = trimmed
+        conversationTitle = trimmed
         conversation.isTitleGenerated = true
         conversation.updatedAt = .now
         do {
@@ -299,6 +309,7 @@ final class ChatViewModel {
             )
 
             conversation.title = title
+            conversationTitle = title
             conversation.isTitleGenerated = true
             conversation.updatedAt = .now
             try await databaseManager.saveConversation(conversation)
@@ -367,6 +378,13 @@ final class ChatViewModel {
     }
 
     func saveConversationSettings() async {
+        let trimmedTitle = conversationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty, trimmedTitle != conversation.title {
+            conversation.title = trimmedTitle
+            conversationTitle = trimmedTitle
+            conversation.isTitleGenerated = true
+            appState.conversationListNeedsRefresh = true
+        }
         conversation.apiEndpointId = selectedEndpointID
         conversation.modelName = selectedModelName
         if showsConversationCharacterPicker {
@@ -376,7 +394,9 @@ final class ChatViewModel {
         conversation.compressionMode = selectedCompressionMode.rawValue
         conversation.customScenario = customScenario.nilIfBlank
         conversation.slowPlotMode = slowPlotMode
-        conversation.modelParameters = RecordCoders.encode(currentParameters)
+        conversation.modelParameters = usesCustomModelParameters
+            ? RecordCoders.encode(customModelParameters)
+            : nil
         conversation.updatedAt = .now
 
         do {
@@ -463,6 +483,14 @@ final class ChatViewModel {
     }
 
     var currentParameters: ModelParameters {
+        usesCustomModelParameters ? customModelParameters : inheritedModelParameters
+    }
+
+    var inheritedModelParameters: ModelParameters {
+        UserDefaults.standard.openChatDefaultModelParameters()
+    }
+
+    var customModelParameters: ModelParameters {
         ModelParameters(
             temperature: modelTemperature,
             topP: modelTopP,
@@ -473,5 +501,31 @@ final class ChatViewModel {
             thinkingBudget: thinkingEnabled ? thinkingBudget : nil,
             reasoningEffort: reasoningEffort
         )
+    }
+
+    func setUsesCustomModelParameters(_ usesCustom: Bool) {
+        if usesCustom, !usesCustomModelParameters {
+            let inherited = inheritedModelParameters
+            modelTemperature = inherited.temperature
+            modelTopP = inherited.topP
+            modelMaxTokens = inherited.maxTokens ?? 1024
+            thinkingEnabled = inherited.isThinkingEnabled
+            thinkingBudget = inherited.thinkingBudget ?? 8192
+            reasoningEffort = inherited.reasoningEffort
+        }
+        usesCustomModelParameters = usesCustom
+    }
+}
+
+private extension ModelParameters {
+    var isLegacyImplicitConversationDefault: Bool {
+        temperature == ModelParameters.openChatDefaultTemperature
+            && topP == ModelParameters.openChatDefaultTopP
+            && maxTokens == 1024
+            && frequencyPenalty == 0
+            && presencePenalty == 0
+            && (stop?.isEmpty ?? true)
+            && thinkingBudget == nil
+            && reasoningEffort == .high
     }
 }

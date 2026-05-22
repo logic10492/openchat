@@ -3,8 +3,6 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
     @State private var isShowingSettings = false
-    @State private var isShowingRename = false
-    @State private var renameText = ""
     @State private var shouldFollowStreaming = true
     @State private var followResumeGeneration = 0
     @State private var resumeFollowTask: Task<Void, Never>?
@@ -15,6 +13,46 @@ struct ChatView: View {
     }
 
     var body: some View {
+        chatContent
+            .background(OpenChatDesignSystem.Surface.pageBackground)
+            .navigationTitle(viewModel.conversation.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if viewModel.isGeneratingTitle {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    if let tokenUsage = viewModel.tokenUsage {
+                        Text("\(tokenUsage.totalUsed)/\(tokenUsage.totalBudget)")
+                            .font(OpenChatDesignSystem.Typography.monoMetadata)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        isShowingSettings = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel(String(localized: "Chat Settings"))
+                    .accessibilityIdentifier("chat.settingsButton")
+                }
+            }
+            .task {
+                await viewModel.loadMessages()
+                await viewModel.loadSettingsOptions()
+            }
+            .onDisappear {
+                viewModel.triggerMemoryExtraction()
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                ChatSettingsSheet(viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
+            }
+    }
+
+    // MARK: - Layout
+
+    private var chatContent: some View {
         messageList
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 InputBarView(
@@ -34,57 +72,8 @@ struct ChatView: View {
                         viewModel.markStageResponderSelectionCustomized()
                     }
                 )
-                .padding(.bottom, 8)
+                .padding(.bottom, OpenChatDesignSystem.Spacing.xs)
             }
-            .background(OpenChatDesignSystem.Surface.pageBackground)
-            .navigationTitle(viewModel.conversation.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    Button {
-                        renameText = viewModel.conversation.title
-                        isShowingRename = true
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                if viewModel.isGeneratingTitle {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                if let tokenUsage = viewModel.tokenUsage {
-                    Text("\(tokenUsage.totalUsed)/\(tokenUsage.totalBudget)")
-                        .font(OpenChatDesignSystem.Typography.monoMetadata)
-                        .foregroundStyle(.secondary)
-                }
-                Button {
-                    isShowingSettings = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .accessibilityLabel(String(localized: "Chat Settings"))
-                .accessibilityIdentifier("chat.settingsButton")
-            }
-        }
-        .task {
-            await viewModel.loadMessages()
-            await viewModel.loadSettingsOptions()
-        }
-        .onDisappear {
-            viewModel.triggerMemoryExtraction()
-        }
-        .sheet(isPresented: $isShowingSettings) {
-            ChatSettingsSheet(viewModel: viewModel)
-                .presentationDetents([.medium, .large])
-        }
-        .alert(String(localized: "Rename Conversation"), isPresented: $isShowingRename) {
-            TextField(String(localized: "Title"), text: $renameText)
-            Button(String(localized: "Cancel"), role: .cancel) {}
-            Button(String(localized: "Save")) {
-                Task { await viewModel.renameConversation(newTitle: renameText) }
-            }
-        }
     }
 
     // MARK: - Message List
@@ -130,6 +119,8 @@ struct ChatView: View {
                                 .id("retrieval-trace")
                         }
                     }
+                    .frame(maxWidth: 860)
+                    .frame(maxWidth: .infinity)
                     .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
                     .padding(.top, OpenChatDesignSystem.Spacing.md)
                     .padding(.bottom, OpenChatDesignSystem.Spacing.lg)
@@ -179,14 +170,18 @@ struct ChatView: View {
     // MARK: - Empty State
 
     private var chatEmptyState: some View {
-        VStack(spacing: OpenChatDesignSystem.Spacing.sm) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.md) {
             Spacer()
-            Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(String(localized: "Send a message to start the conversation."))
-                .font(OpenChatDesignSystem.Typography.secondary)
-                .foregroundStyle(.secondary)
+            VStack(spacing: OpenChatDesignSystem.Spacing.sm) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundStyle(.tertiary)
+                Text(String(localized: "Send a message to start the conversation."))
+                    .font(OpenChatDesignSystem.Typography.secondary)
+                    .foregroundStyle(.secondary)
+            }
+            .openChatCardStyle()
+            .frame(maxWidth: 360)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

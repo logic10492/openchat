@@ -6,7 +6,7 @@
 
 - 调节模型参数的全局默认值
 - 恢复默认值
-- 会话级参数可覆盖全局参数
+- 会话默认继承全局参数；用户显式打开本会话自定义后，会话级参数才覆盖全局参数
 
 ## 2. 视图设计
 
@@ -34,6 +34,12 @@ Section: 模型参数默认值
 
 ## 4. 参数优先级
 
-会话级参数覆盖存储在 `conversation.modelParameters` JSON 字段中。
+会话级参数覆盖存储在 `conversation.modelParameters` JSON 字段中；`nil` 表示继承全局默认。旧版本保存设置时可能写入一份默认参数 JSON，当前 `ChatViewModel` 会把这类 legacy 默认值视为继承全局默认，避免老会话继续固定旧默认。
 
 PromptEngine 使用时的优先级：**会话参数 > 全局参数**。
+
+实现证据：
+- `UserDefaults+ModelParameters.swift` 负责从 `default_temperature` / `default_top_p` / `default_max_tokens` 等 key 解析全局默认。
+- `ChatViewModel.currentParameters` 在 `usesCustomModelParameters == false` 时返回全局默认，在 `true` 时返回会话控件值。
+- `ChatViewModel.saveConversationSettings()` 仅在本会话自定义打开时写入 `conversation.modelParameters`，否则保存为 `nil`。
+- `ChatViewModelPromptAssemblyTests.swift` 覆盖全局默认继承、legacy 默认参数继承、打开本会话自定义时预填当前全局默认，以及保存继承状态不写入覆盖。

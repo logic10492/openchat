@@ -10,16 +10,19 @@ struct MessageBubbleView: View {
     @State private var isHovering = false
 
     private var isUser: Bool { item.role == "user" }
+    private var maximumMessageWidth: CGFloat { isUser ? 520 : 680 }
+    private var horizontalSpacerWidth: CGFloat { isUser ? 56 : 32 }
 
     var body: some View {
         HStack(alignment: .top, spacing: OpenChatDesignSystem.Spacing.sm) {
             if isUser {
-                Spacer(minLength: 48)
+                Spacer(minLength: horizontalSpacerWidth)
                 VStack(alignment: .trailing, spacing: 6) {
                     roleLabel
                     contentView
                     actionBar
                 }
+                .frame(maxWidth: maximumMessageWidth, alignment: .trailing)
                 avatarView
             } else {
                 avatarView
@@ -29,7 +32,8 @@ struct MessageBubbleView: View {
                     actionBar
                     statsBar
                 }
-                Spacer(minLength: 48)
+                .frame(maxWidth: maximumMessageWidth, alignment: .leading)
+                Spacer(minLength: horizontalSpacerWidth)
             }
         }
         .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
@@ -48,6 +52,10 @@ struct MessageBubbleView: View {
                     .font(.system(size: OpenChatDesignSystem.IconSize.xs, weight: .medium))
                     .foregroundStyle(avatarForeground)
             }
+            .overlay(
+                Circle()
+                    .stroke(avatarForeground.opacity(0.16), lineWidth: 0.5)
+            )
     }
 
     private var avatarIcon: String {
@@ -104,6 +112,7 @@ struct MessageBubbleView: View {
             if item.role == "user" {
                 Text(item.content)
                     .padding(14)
+                    .textSelection(.enabled)
                     .background(
                         RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
                             .fill(.ultraThinMaterial)
@@ -115,7 +124,7 @@ struct MessageBubbleView: View {
                     )
                     .shadowElevation1()
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
                     reasoningSection
                     HStack(alignment: .bottom, spacing: 0) {
                         MarkdownTextView(blocks: item.contentBlocks)
@@ -127,43 +136,18 @@ struct MessageBubbleView: View {
                 .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
             }
         }
-        .textSelection(.enabled)
     }
 
     // MARK: - Reasoning Section
 
-    @State private var isReasoningExpanded = false
-
     @ViewBuilder
     private var reasoningSection: some View {
         if let reasoning = item.reasoningContent, !reasoning.isEmpty {
-            DisclosureGroup(isExpanded: $isReasoningExpanded) {
-                Text(reasoning)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(OpenChatDesignSystem.Spacing.xs)
-            } label: {
-                Label {
-                    Text(String(localized: "Character Thinking"))
-                    if isStreaming && item.content.isEmpty {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .padding(.leading, OpenChatDesignSystem.Spacing.xxs)
-                    }
-                } icon: {
-                    Image(systemName: "brain")
-                }
-                .font(OpenChatDesignSystem.Typography.badge)
-                .foregroundStyle(.purple)
-            }
-            .padding(OpenChatDesignSystem.Spacing.xs)
-            .background(
-                OpenChatDesignSystem.Surface.reasoningWash,
-                in: RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xs, style: .continuous)
+            ReasoningDisclosureView(
+                reasoning: reasoning,
+                isStreaming: isStreaming && item.content.isEmpty
             )
         } else if isStreaming && item.content.isEmpty {
-            // Streaming hasn't produced content yet — may be in reasoning phase
             HStack(spacing: 6) {
                 Image(systemName: "brain")
                 Text(String(localized: "Character thinking…"))

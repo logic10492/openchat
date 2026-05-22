@@ -10,6 +10,9 @@ struct ChatSettingsSheet: View {
                 stageSection
 
                 Section(String(localized: "Conversation")) {
+                    TextField(String(localized: "Title"), text: titleBinding)
+                        .textInputAutocapitalization(.sentences)
+
                     Picker(String(localized: "Endpoint"), selection: endpointBinding) {
                         Text(String(localized: "Use Default")).tag(Optional<String>.none)
                         ForEach(viewModel.availableEndpoints) { endpoint in
@@ -65,34 +68,12 @@ struct ChatSettingsSheet: View {
                 }
 
                 Section(String(localized: "Model")) {
-                    LabeledContent(String(localized: "Temperature")) {
-                        Text(viewModel.modelTemperature.formatted(.number.precision(.fractionLength(2))))
-                    }
-                    Slider(value: temperatureBinding, in: 0...2, step: 0.05)
+                    Toggle(String(localized: "Customize for This Chat"), isOn: customModelParametersBinding)
 
-                    LabeledContent(String(localized: "Top P")) {
-                        Text(viewModel.modelTopP.formatted(.number.precision(.fractionLength(2))))
-                    }
-                    Slider(value: topPBinding, in: 0...1, step: 0.05)
-
-                    Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
-                        Text("\(String(localized: "Max Tokens")): \(viewModel.modelMaxTokens)")
-                    }
-
-                    Toggle(String(localized: "Enable Thinking"), isOn: thinkingEnabledBinding)
-
-                    if viewModel.thinkingEnabled {
-                        if viewModel.selectedProviderDialect == .deepSeekV4 {
-                            Picker(String(localized: "Reasoning Effort"), selection: reasoningEffortBinding) {
-                                ForEach(ReasoningEffort.allCases) { effort in
-                                    Text(effort.displayName).tag(effort)
-                                }
-                            }
-                        } else {
-                            Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
-                                Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
-                            }
-                        }
+                    if viewModel.usesCustomModelParameters {
+                        customModelParameterControls
+                    } else {
+                        inheritedModelParameterSummary
                     }
                 }
             }
@@ -163,6 +144,62 @@ struct ChatSettingsSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var customModelParameterControls: some View {
+        LabeledContent(String(localized: "Temperature")) {
+            Text(viewModel.modelTemperature.formatted(.number.precision(.fractionLength(2))))
+        }
+        Slider(value: temperatureBinding, in: 0...2, step: 0.05)
+
+        LabeledContent(String(localized: "Top P")) {
+            Text(viewModel.modelTopP.formatted(.number.precision(.fractionLength(2))))
+        }
+        Slider(value: topPBinding, in: 0...1, step: 0.05)
+
+        Stepper(value: maxTokensBinding, in: 128...131_072, step: 128) {
+            Text("\(String(localized: "Max Tokens")): \(viewModel.modelMaxTokens)")
+        }
+
+        Toggle(String(localized: "Enable Thinking"), isOn: thinkingEnabledBinding)
+
+        if viewModel.thinkingEnabled {
+            if viewModel.selectedProviderDialect == .deepSeekV4 {
+                Picker(String(localized: "Reasoning Effort"), selection: reasoningEffortBinding) {
+                    ForEach(ReasoningEffort.allCases) { effort in
+                        Text(effort.displayName).tag(effort)
+                    }
+                }
+            } else {
+                Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
+                    Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
+                }
+            }
+        }
+    }
+
+    private var inheritedModelParameterSummary: some View {
+        let parameters = viewModel.inheritedModelParameters
+        return VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
+            Text(String(localized: "Using global model defaults."))
+                .foregroundStyle(.secondary)
+            LabeledContent(String(localized: "Temperature")) {
+                Text(parameters.temperature.formatted(.number.precision(.fractionLength(2))))
+            }
+            LabeledContent(String(localized: "Top P")) {
+                Text(parameters.topP.formatted(.number.precision(.fractionLength(2))))
+            }
+            LabeledContent(String(localized: "Max Tokens")) {
+                Text(parameters.maxTokens.map(String.init) ?? String(localized: "Unset"))
+            }
+        }
+        .font(OpenChatDesignSystem.Typography.secondary)
+    }
+
+    private var titleBinding: Binding<String> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.conversationTitle
+    }
+
     private var endpointBinding: Binding<String?> {
         @Bindable var viewModel = viewModel
         return $viewModel.selectedEndpointID
@@ -211,6 +248,13 @@ struct ChatSettingsSheet: View {
     private var maxTokensBinding: Binding<Int> {
         @Bindable var viewModel = viewModel
         return $viewModel.modelMaxTokens
+    }
+
+    private var customModelParametersBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.usesCustomModelParameters },
+            set: { viewModel.setUsesCustomModelParameters($0) }
+        )
     }
 
     private var thinkingEnabledBinding: Binding<Bool> {
