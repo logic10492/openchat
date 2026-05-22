@@ -36,7 +36,7 @@ struct ChatView: View {
                 )
                 .padding(.bottom, 8)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(OpenChatDesignSystem.Surface.pageBackground)
             .navigationTitle(viewModel.conversation.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -55,7 +55,7 @@ struct ChatView: View {
                 }
                 if let tokenUsage = viewModel.tokenUsage {
                     Text("\(tokenUsage.totalUsed)/\(tokenUsage.totalBudget)")
-                        .font(.caption.monospacedDigit())
+                        .font(OpenChatDesignSystem.Typography.monoMetadata)
                         .foregroundStyle(.secondary)
                 }
                 Button {
@@ -95,7 +95,7 @@ struct ChatView: View {
                 if viewModel.messages.isEmpty && !viewModel.isGenerating {
                     chatEmptyState
                 } else {
-                    LazyVStack(spacing: 24) {
+                    LazyVStack(spacing: OpenChatDesignSystem.Spacing.lg) {
                         ForEach(viewModel.messages) { item in
                             MessageBubbleView(
                                 item: item,
@@ -130,9 +130,9 @@ struct ChatView: View {
                                 .id("retrieval-trace")
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 24)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+                    .padding(.top, OpenChatDesignSystem.Spacing.md)
+                    .padding(.bottom, OpenChatDesignSystem.Spacing.lg)
                 }
             }
             .simultaneousGesture(scrollPauseGesture)
@@ -179,13 +179,13 @@ struct ChatView: View {
     // MARK: - Empty State
 
     private var chatEmptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.sm) {
             Spacer()
             Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 40))
+                .font(.system(size: 40, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(String(localized: "Send a message to start the conversation."))
-                .font(.subheadline)
+                .font(OpenChatDesignSystem.Typography.secondary)
                 .foregroundStyle(.secondary)
             Spacer()
         }

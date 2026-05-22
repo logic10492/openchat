@@ -105,15 +105,18 @@ struct SidebarView: View {
                 Text(String(localized: "New Chat"))
                 Spacer()
             }
-            .fontWeight(.medium)
-            .padding(.horizontal, 12)
+            .font(OpenChatDesignSystem.Typography.rowTitle)
+            .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
             .padding(.vertical, 10)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(
+                OpenChatDesignSystem.Surface.sidebarControl,
+                in: RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.sm, style: .continuous)
+            )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("sidebar.newChat")
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+        .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
     }
 
     // MARK: - Conversation List
@@ -124,9 +127,9 @@ struct SidebarView: View {
                 LoadingIndicator()
                     .frame(maxHeight: .infinity)
             } else if viewModel.conversations.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: OpenChatDesignSystem.Spacing.xs) {
                     Text(String(localized: "No conversations yet"))
-                        .font(.subheadline)
+                        .font(OpenChatDesignSystem.Typography.secondary)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxHeight: .infinity)
@@ -138,7 +141,12 @@ struct SidebarView: View {
                     )
                     .accessibilityIdentifier("sidebar.conversation.\(conversation.id)")
                     .tag(conversation.id)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                    .listRowInsets(EdgeInsets(
+                        top: OpenChatDesignSystem.Spacing.xxs,
+                        leading: OpenChatDesignSystem.Spacing.xs,
+                        bottom: OpenChatDesignSystem.Spacing.xxs,
+                        trailing: OpenChatDesignSystem.Spacing.xs
+                    ))
                     .swipeActions(edge: .trailing) {
                         Button(String(localized: "Delete"), role: .destructive) {
                             Task { await viewModel.deleteConversation(conversation) }
@@ -195,8 +203,8 @@ struct SidebarView: View {
                 appState.isShowingSettings = true
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+        .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
     }
 
     private func sidebarActionButton(
@@ -205,16 +213,14 @@ struct SidebarView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OpenChatDesignSystem.Spacing.xs) {
                 Image(systemName: systemImage)
-                    .frame(width: 20)
+                    .frame(width: OpenChatDesignSystem.IconSize.md)
                 Text(title)
-                    .font(.subheadline)
+                    .font(OpenChatDesignSystem.Typography.secondary)
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .openChatListRowStyle()
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
@@ -248,16 +254,17 @@ struct SidebarConversationRow: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xxs) {
             Text(conversation.title)
-                .font(.subheadline.weight(.medium))
+                .font(OpenChatDesignSystem.Typography.rowTitle)
                 .lineLimit(1)
             Text(conversation.updatedAt.openChatRelativeTimestamp())
-                .font(.caption)
+                .font(OpenChatDesignSystem.Typography.metadata)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 4)
+        .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
+        .padding(.horizontal, OpenChatDesignSystem.Spacing.xxs)
+        .openChatSidebarRow(isSelected: isSelected)
     }
 }
 

@@ -4,18 +4,18 @@ struct WelcomeView: View {
     let onNewChat: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.lg) {
             Spacer()
 
             Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 56))
+                .font(.system(size: 56, weight: .light))
                 .foregroundStyle(.secondary)
 
-            VStack(spacing: 8) {
+            VStack(spacing: OpenChatDesignSystem.Spacing.xs) {
                 Text(String(localized: "OpenChat"))
-                    .font(.largeTitle.bold())
+                    .font(OpenChatDesignSystem.Typography.largeTitle)
                 Text(String(localized: "Start a new conversation to begin."))
-                    .font(.body)
+                    .font(OpenChatDesignSystem.Typography.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -24,11 +24,7 @@ struct WelcomeView: View {
                     Image(systemName: "plus")
                     Text(String(localized: "New Chat"))
                 }
-                .fontWeight(.medium)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .foregroundStyle(.white)
+                .openChatPrimaryButtonStyle()
             }
             .buttonStyle(.plain)
 

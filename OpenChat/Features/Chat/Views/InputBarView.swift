@@ -32,7 +32,7 @@ struct InputBarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.xs) {
             if showsDirectorTools, isDirectorPanelExpanded {
                 directorPanel
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -41,35 +41,34 @@ struct InputBarView: View {
             HStack(alignment: .bottom, spacing: 0) {
                 if showsDirectorTools {
                     directorToolButton
-                        .padding(.leading, 8)
-                        .padding(.bottom, 8)
+                        .padding(.leading, OpenChatDesignSystem.Spacing.xs)
+                        .padding(.bottom, OpenChatDesignSystem.Spacing.xs)
                 }
 
                 TextField(placeholder, text: $text, axis: .vertical)
                     .lineLimit(1...6)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+                    .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
                     .focused($isFocused)
                     .accessibilityIdentifier("chat.inputText")
 
                 sendButton
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 8)
+                    .padding(.trailing, OpenChatDesignSystem.Spacing.xs)
+                    .padding(.bottom, OpenChatDesignSystem.Spacing.xs)
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
                 .fill(.ultraThinMaterial)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.15), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
+                .stroke(OpenChatDesignSystem.Surface.hairline, lineWidth: 0.5)
                 .blendMode(.overlay)
         )
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-        .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .shadowElevation2()
+        .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
+        .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
         .animation(.easeInOut(duration: 0.2), value: isDirectorPanelExpanded)
         .onChange(of: showsDirectorTools) { _, newValue in
             if !newValue {
@@ -89,20 +88,20 @@ struct InputBarView: View {
             inputRole = .participant
             isDirectorPanelExpanded.toggle()
         } label: {
-            Image(systemName: isDirectorPanelExpanded ? "theatermasks.fill" : "theatermasks")
-                .font(.system(size: 22))
-                .frame(width: 36, height: 36)
-                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.primary)
+                Image(systemName: isDirectorPanelExpanded ? "theatermasks.fill" : "theatermasks")
+                    .font(.system(size: 22))
+                    .openChatIconButtonFrame()
+                    .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.primary)
         }
         .accessibilityLabel(String(localized: "Director Tools"))
         .accessibilityIdentifier("chat.directorToolsButton")
     }
 
     private var directorPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.sm) {
             HStack {
                 Label(String(localized: "Response Order"), systemImage: "list.number")
-                    .font(.caption.weight(.semibold))
+                    .font(OpenChatDesignSystem.Typography.badge)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("chat.directorToolsPanel")
                 Spacer()
@@ -111,7 +110,7 @@ struct InputBarView: View {
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 28, height: 28)
+                        .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "Collapse Director Tools"))
@@ -120,10 +119,10 @@ struct InputBarView: View {
 
             if activeParticipants.isEmpty {
                 Text(String(localized: "No active stage participants"))
-                    .font(.caption)
+                    .font(OpenChatDesignSystem.Typography.metadata)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
             } else {
                 VStack(spacing: 6) {
                     ForEach(panelParticipants) { participant in
@@ -132,21 +131,21 @@ struct InputBarView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
+        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+        .padding(.top, OpenChatDesignSystem.Spacing.sm)
     }
 
     private func responderRow(_ participant: StageParticipantRecord) -> some View {
         let selected = responderIds.contains(participant.id)
         let index = responderIds.firstIndex(of: participant.id)
-        return HStack(spacing: 8) {
+        return HStack(spacing: OpenChatDesignSystem.Spacing.xs) {
             Button {
                 toggleResponder(participant)
             } label: {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
+                    .font(.system(size: OpenChatDesignSystem.IconSize.md))
                     .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    .frame(width: 32, height: 32)
+                    .openChatIconButtonFrame(size: OpenChatDesignSystem.IconSize.avatar)
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
@@ -154,7 +153,7 @@ struct InputBarView: View {
             .accessibilityIdentifier("chat.directorResponder.\(participant.displayName)")
 
             Text(participant.displayName)
-                .font(.subheadline.weight(.medium))
+                .font(OpenChatDesignSystem.Typography.rowTitle)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -162,7 +161,7 @@ struct InputBarView: View {
 
             if let index {
                 Text(String(localized: "Order \(index + 1)"))
-                    .font(.caption.monospacedDigit())
+                    .font(OpenChatDesignSystem.Typography.monoMetadata)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("chat.directorResponderOrder.\(participant.displayName)")
             }
@@ -171,7 +170,7 @@ struct InputBarView: View {
                 moveResponder(participant, offset: -1)
             } label: {
                 Image(systemName: "chevron.up")
-                    .frame(width: 28, height: 28)
+                    .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
             }
             .buttonStyle(.plain)
             .disabled(index == nil || index == 0)
@@ -182,7 +181,7 @@ struct InputBarView: View {
                 moveResponder(participant, offset: 1)
             } label: {
                 Image(systemName: "chevron.down")
-                    .frame(width: 28, height: 28)
+                    .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
             }
             .buttonStyle(.plain)
             .disabled(index == nil || index == responderIds.count - 1)
@@ -220,7 +219,7 @@ struct InputBarView: View {
                 onStop()
             }) {
                 Image(systemName: "stop.circle.fill")
-                    .font(.system(size: 28))
+                    .font(.system(size: OpenChatDesignSystem.IconSize.lg))
                     .foregroundStyle(.primary)
             }
             .accessibilityLabel(String(localized: "Stop generating"))
@@ -230,8 +229,8 @@ struct InputBarView: View {
                 onSend()
             }) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(canSend ? Color.primary : Color(.systemGray3))
+                    .font(.system(size: OpenChatDesignSystem.IconSize.lg))
+                    .foregroundStyle(canSend ? Color.primary : OpenChatDesignSystem.Surface.disabledFill)
             }
             .disabled(!canSend)
             .accessibilityLabel(String(localized: "Send message"))

@@ -17,25 +17,22 @@ struct SettingsView: View {
                         editingEndpoint = endpoint
                     } label: {
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xxs) {
                                 HStack(spacing: 6) {
                                     Text(endpoint.name)
-                                        .font(.subheadline.weight(.medium))
+                                        .font(OpenChatDesignSystem.Typography.rowTitle)
                                     if endpoint.isDefault {
                                         Text(String(localized: "Default"))
-                                            .font(.caption2)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(.blue.opacity(0.15), in: Capsule())
+                                            .openChatBadgeStyle()
                                     }
                                 }
                                 Text(endpoint.baseURL)
-                                    .font(.caption)
+                                    .font(OpenChatDesignSystem.Typography.metadata)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(OpenChatDesignSystem.Typography.metadata)
                                 .foregroundStyle(.tertiary)
                         }
                     }

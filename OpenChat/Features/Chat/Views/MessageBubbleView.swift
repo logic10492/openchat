@@ -12,7 +12,7 @@ struct MessageBubbleView: View {
     private var isUser: Bool { item.role == "user" }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: OpenChatDesignSystem.Spacing.sm) {
             if isUser {
                 Spacer(minLength: 48)
                 VStack(alignment: .trailing, spacing: 6) {
@@ -32,7 +32,7 @@ struct MessageBubbleView: View {
                 Spacer(minLength: 48)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
         .onHover { isHovering = $0 }
         .accessibilityIdentifier("messageBubble.\(item.role).\(item.speakerName ?? roleName)")
     }
@@ -42,10 +42,10 @@ struct MessageBubbleView: View {
     private var avatarView: some View {
         Circle()
             .fill(avatarBackground)
-            .frame(width: 32, height: 32)
+            .frame(width: OpenChatDesignSystem.IconSize.avatar, height: OpenChatDesignSystem.IconSize.avatar)
             .overlay {
                 Image(systemName: avatarIcon)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: OpenChatDesignSystem.IconSize.xs, weight: .medium))
                     .foregroundStyle(avatarForeground)
             }
     }
@@ -60,9 +60,9 @@ struct MessageBubbleView: View {
 
     private var avatarBackground: Color {
         switch item.role {
-        case "user": Color(.systemGray5)
-        case "assistant": Color.accentColor.opacity(0.15)
-        default: Color.orange.opacity(0.15)
+        case "user": OpenChatDesignSystem.Surface.subtleFill
+        case "assistant": OpenChatDesignSystem.Surface.accentSoft
+        default: OpenChatDesignSystem.Surface.warningWash
         }
     }
 
@@ -78,7 +78,7 @@ struct MessageBubbleView: View {
 
     private var roleLabel: some View {
         Text(roleName)
-            .font(.subheadline.weight(.semibold))
+            .font(OpenChatDesignSystem.Typography.sectionTitle)
     }
 
     private var roleName: String {
@@ -105,12 +105,12 @@ struct MessageBubbleView: View {
                 Text(item.content)
                     .padding(14)
                     .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
                             .fill(.ultraThinMaterial)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(.white.opacity(0.15), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
+                            .stroke(OpenChatDesignSystem.Surface.hairline, lineWidth: 0.5)
                             .blendMode(.overlay)
                     )
                     .shadowElevation1()
@@ -124,7 +124,7 @@ struct MessageBubbleView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
             }
         }
         .textSelection(.enabled)
@@ -142,23 +142,26 @@ struct MessageBubbleView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+                    .padding(OpenChatDesignSystem.Spacing.xs)
             } label: {
                 Label {
                     Text(String(localized: "Character Thinking"))
                     if isStreaming && item.content.isEmpty {
                         ProgressView()
                             .controlSize(.mini)
-                            .padding(.leading, 4)
+                            .padding(.leading, OpenChatDesignSystem.Spacing.xxs)
                     }
                 } icon: {
                     Image(systemName: "brain")
                 }
-                .font(.caption.weight(.medium))
+                .font(OpenChatDesignSystem.Typography.badge)
                 .foregroundStyle(.purple)
             }
-            .padding(8)
-            .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(OpenChatDesignSystem.Spacing.xs)
+            .background(
+                OpenChatDesignSystem.Surface.reasoningWash,
+                in: RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xs, style: .continuous)
+            )
         } else if isStreaming && item.content.isEmpty {
             // Streaming hasn't produced content yet — may be in reasoning phase
             HStack(spacing: 6) {
@@ -167,10 +170,13 @@ struct MessageBubbleView: View {
                 ProgressView()
                     .controlSize(.mini)
             }
-            .font(.caption.weight(.medium))
+            .font(OpenChatDesignSystem.Typography.badge)
             .foregroundStyle(.purple)
-            .padding(8)
-            .background(Color.purple.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(OpenChatDesignSystem.Spacing.xs)
+            .background(
+                OpenChatDesignSystem.Surface.reasoningWash,
+                in: RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xs, style: .continuous)
+            )
         }
     }
 

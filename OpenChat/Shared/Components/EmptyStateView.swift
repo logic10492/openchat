@@ -6,30 +6,30 @@ struct EmptyStateView: View {
     let systemImage: String
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.md) {
             Image(systemName: systemImage)
-                .font(.system(size: 48, weight: .light))
+                .font(.system(size: OpenChatDesignSystem.IconSize.emptyState, weight: .light))
                 .foregroundStyle(.secondary)
             Text(title)
-                .font(.title3.weight(.medium))
+                .font(OpenChatDesignSystem.Typography.title)
             Text(message)
-                .font(.subheadline)
+                .font(OpenChatDesignSystem.Typography.secondary)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
         }
-        .padding(32)
+        .padding(OpenChatDesignSystem.Spacing.xl)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
                 .fill(.ultraThinMaterial)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.15), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
+                .stroke(OpenChatDesignSystem.Surface.hairline, lineWidth: 0.5)
                 .blendMode(.overlay)
         )
         .shadowElevation1()
-        .padding(24)
+        .padding(OpenChatDesignSystem.Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

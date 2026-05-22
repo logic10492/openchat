@@ -23,18 +23,18 @@ struct WorldBookListView: View {
                         Button {
                             editingWorldBook = worldBook
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: OpenChatDesignSystem.Spacing.sm) {
                                 Image(systemName: "book.closed")
-                                    .font(.title3)
-                                    .foregroundStyle(worldBook.isEnabled ? Color.accentColor : Color(.systemGray3))
-                                    .frame(width: 28)
+                                    .font(.system(size: OpenChatDesignSystem.IconSize.md, weight: .medium))
+                                    .foregroundStyle(worldBook.isEnabled ? Color.accentColor : OpenChatDesignSystem.Surface.disabledFill)
+                                    .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xxs) {
                                     Text(worldBook.name)
-                                        .font(.subheadline.weight(.medium))
+                                        .font(OpenChatDesignSystem.Typography.rowTitle)
                                     if let desc = worldBook.description?.nilIfBlank {
                                         Text(desc)
-                                            .font(.caption)
+                                            .font(OpenChatDesignSystem.Typography.metadata)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }

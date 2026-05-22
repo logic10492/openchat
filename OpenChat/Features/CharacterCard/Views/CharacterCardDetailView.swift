@@ -34,34 +34,34 @@ struct CharacterCardDetailView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OpenChatDesignSystem.Spacing.sm) {
             Circle()
-                .fill(Color.accentColor.opacity(0.12))
+                .fill(OpenChatDesignSystem.Surface.accentWash)
                 .frame(width: 80, height: 80)
                 .overlay {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 32))
+                        .font(.system(size: OpenChatDesignSystem.Spacing.xl))
                         .foregroundStyle(Color.accentColor)
                 }
 
             Text(card.name)
-                .font(.title2.bold())
+                .font(OpenChatDesignSystem.Typography.title)
 
             if !card.decodedTags.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(card.decodedTags, id: \.self) { tag in
                         Text(tag)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(.systemGray5), in: Capsule())
+                            .font(OpenChatDesignSystem.Typography.metadata)
+                            .padding(.horizontal, OpenChatDesignSystem.Spacing.xs)
+                            .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
+                            .background(OpenChatDesignSystem.Surface.subtleFill, in: Capsule())
                     }
                 }
             }
 
             if let worldBookName {
                 Label(worldBookName, systemImage: "book.closed")
-                    .font(.caption)
+                    .font(OpenChatDesignSystem.Typography.metadata)
                     .foregroundStyle(.secondary)
             }
         }

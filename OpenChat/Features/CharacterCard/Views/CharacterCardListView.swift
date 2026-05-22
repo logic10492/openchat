@@ -94,22 +94,22 @@ struct CharacterCardListView: View {
                 Button {
                     selectedCard = card
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: OpenChatDesignSystem.Spacing.sm) {
                         Circle()
-                            .fill(Color.accentColor.opacity(0.12))
+                            .fill(OpenChatDesignSystem.Surface.accentWash)
                             .frame(width: 40, height: 40)
                             .overlay {
                                 Image(systemName: "person.fill")
-                                    .font(.system(size: 16))
+                                    .font(.system(size: OpenChatDesignSystem.IconSize.sm))
                                     .foregroundStyle(Color.accentColor)
                             }
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xxs) {
                             Text(card.name)
-                                .font(.subheadline.weight(.medium))
+                                .font(OpenChatDesignSystem.Typography.rowTitle)
                             if !card.decodedTags.isEmpty {
                                 Text(card.decodedTags.joined(separator: " · "))
-                                    .font(.caption)
+                                    .font(OpenChatDesignSystem.Typography.metadata)
                                     .foregroundStyle(.secondary)
                             }
                         }
