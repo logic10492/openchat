@@ -19,9 +19,13 @@ OpenChat/
 ├── Features/
 │   ├── Chat/
 │   │   ├── Views/
-│   │   │   ├── ChatView.swift              # 聊天主界面（消息列表 + 输入栏）
-│   │   │   ├── MessageBubbleView.swift     # 单条消息气泡（支持 Markdown 渲染）
-│   │   │   ├── InputBarView.swift          # 底部输入栏（文本框 + 发送/停止按钮）
+│   │   │   ├── ChatView.swift              # 聊天页面 shell（ViewModel binding + toolbar/sheet + timeline/composer 组合）
+│   │   │   ├── ChatMessageTimelineView.swift # 消息轨道（日期分隔、分组、滚动跟随、诊断插入）
+│   │   │   ├── ChatChromeViews.swift       # 聊天背景、顶部胶囊、角色 popover、编辑 sheet
+│   │   │   ├── MessageBubbleView.swift     # 单条消息气泡（支持 Markdown 渲染、分组状态、菜单）
+│   │   │   ├── MessageBubbleChrome.swift   # 系统消息、时间脚
+│   │   │   ├── InputBarView.swift          # 底部 composer（文本框 + 发送/停止 + Stage 工具入口）
+│   │   │   ├── DirectorResponderPanel.swift # Stage responder 选择与排序
 │   │   │   └── ChatSettingsSheet.swift     # 当前会话设置面板（上下文策略选择等）
 │   │   ├── ViewModels/
 │   │   │   └── ChatViewModel.swift         # 消息列表状态、发送/流式接收/重新生成/编辑

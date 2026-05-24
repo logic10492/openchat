@@ -10,8 +10,13 @@ struct InputBarView: View {
     let onSend: () -> Void
     let onStop: () -> Void
     let onCustomizeResponders: () -> Void
+
     @State private var isDirectorPanelExpanded = false
+    @State private var measuredInputHeight: CGFloat = 22
     @FocusState private var isFocused: Bool
+
+    private let minimumInputHeight: CGFloat = 22
+    private let maximumInputHeight: CGFloat = 118
 
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -23,53 +28,21 @@ struct InputBarView: View {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    private var panelParticipants: [StageParticipantRecord] {
-        let selected = responderIds.compactMap { id in
-            activeParticipants.first { $0.id == id }
-        }
-        let selectedIds = Set(selected.map(\.id))
-        return selected + activeParticipants.filter { !selectedIds.contains($0.id) }
-    }
-
     var body: some View {
         VStack(spacing: OpenChatDesignSystem.Spacing.xs) {
             if showsDirectorTools, isDirectorPanelExpanded {
                 directorPanel
+                    .frame(maxWidth: 920)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            HStack(alignment: .bottom, spacing: 0) {
-                if showsDirectorTools {
-                    directorToolButton
-                        .padding(.leading, OpenChatDesignSystem.Spacing.xs)
-                        .padding(.bottom, OpenChatDesignSystem.Spacing.xs)
-                }
-
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .lineLimit(1...6)
-                    .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
-                    .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
-                    .focused($isFocused)
-                    .accessibilityIdentifier("chat.inputText")
-
-                sendButton
-                    .padding(.trailing, OpenChatDesignSystem.Spacing.xs)
-                    .padding(.bottom, OpenChatDesignSystem.Spacing.xs)
-            }
+            composerRow
+                .frame(maxWidth: 920)
+                .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
         }
-        .background(
-            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.input, style: .continuous)
-                .stroke(inputStroke, lineWidth: isFocused ? 1 : 0.5)
-                .blendMode(.overlay)
-        )
-        .shadowElevation2()
-        .frame(maxWidth: 860)
-        .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
-        .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
+        .padding(.top, showsDirectorTools && isDirectorPanelExpanded ? OpenChatDesignSystem.Spacing.xs : OpenChatDesignSystem.Spacing.xxs)
+        .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.2), value: isDirectorPanelExpanded)
         .animation(.easeInOut(duration: 0.16), value: isFocused)
         .onChange(of: showsDirectorTools) { _, newValue in
@@ -80,141 +53,134 @@ struct InputBarView: View {
         }
     }
 
+    private var composerRow: some View {
+        HStack(alignment: .bottom, spacing: 7) {
+            if showsDirectorTools {
+                directorToolButton
+                    .padding(.bottom, 4)
+            }
+
+            textInput
+
+            sendButton
+                .padding(.bottom, 4)
+        }
+    }
+
+    private var textInput: some View {
+        ZStack(alignment: .topLeading) {
+            inputMeasurer
+
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(OpenChatDesignSystem.Typography.body)
+                    .foregroundStyle(Color(.placeholderText))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .allowsHitTesting(false)
+            }
+
+            TextEditor(text: $text)
+                .font(OpenChatDesignSystem.Typography.body)
+                .foregroundStyle(Color.primary)
+                .frame(minHeight: editorHeight, maxHeight: editorHeight)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .focused($isFocused)
+                .accessibilityIdentifier("chat.inputText")
+        }
+        .background {
+            inputGlassFill(shape: inputShape)
+        }
+        .overlay {
+            inputShape
+                .stroke(inputStroke, lineWidth: isFocused ? 1 : 0.5)
+        }
+        .inputLiquidGlass(in: inputShape)
+        .shadow(color: Color.black.opacity(0.08), radius: 9, x: 0, y: 3)
+        .onPreferenceChange(InputTextHeightPreferenceKey.self) { height in
+            measuredInputHeight = min(max(height, minimumInputHeight), maximumInputHeight)
+        }
+    }
+
+    private var inputMeasurer: some View {
+        Text(measurementText)
+            .font(OpenChatDesignSystem.Typography.body)
+            .lineLimit(1...6)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: InputTextHeightPreferenceKey.self, value: proxy.size.height)
+                }
+            }
+            .hidden()
+    }
+
+    private var measurementText: String {
+        text.isEmpty ? " " : text + "\n"
+    }
+
+    private var editorHeight: CGFloat {
+        min(max(measuredInputHeight - 6, minimumInputHeight), maximumInputHeight)
+    }
+
+    private var inputCornerRadius: CGFloat {
+        min(22, (editorHeight + 14) / 2)
+    }
+
+    private var inputShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: inputCornerRadius, style: .continuous)
+    }
+
+    @ViewBuilder
+    private func inputGlassFill<S: Shape>(shape: S) -> some View {
+        if #available(iOS 26.0, *) {
+            shape.fill(Color.white.opacity(isFocused ? 0.06 : 0.04))
+        } else {
+            shape.fill(.ultraThinMaterial)
+        }
+    }
+
     private var placeholder: String {
-        String(localized: "Message")
+        if showsDirectorTools, inputRole.isDirectorInstructionInput {
+            return String(localized: "Director instruction")
+        }
+        return String(localized: "Message")
     }
 
     private var inputStroke: Color {
-        isFocused ? Color.accentColor.opacity(0.34) : OpenChatDesignSystem.Surface.hairline
+        isFocused ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.30)
     }
 
     private var directorToolButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            inputRole = .participant
             isDirectorPanelExpanded.toggle()
         } label: {
-            Image(systemName: isDirectorPanelExpanded ? "theatermasks.fill" : "theatermasks")
-                .font(.system(size: 22))
-                .openChatIconButtonFrame()
-                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.primary)
+            Image(systemName: isDirectorPanelExpanded ? "ellipsis.circle.fill" : "ellipsis.circle")
+                .font(.system(size: 29, weight: .regular))
+                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.secondary)
+                .frame(width: 32, height: 32)
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "Director Tools"))
         .accessibilityIdentifier("chat.directorToolsButton")
     }
 
     private var directorPanel: some View {
-        VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.sm) {
-            HStack {
-                Label(String(localized: "Response Order"), systemImage: "list.number")
-                    .font(OpenChatDesignSystem.Typography.badge)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("chat.directorToolsPanel")
-                Spacer()
-                Button {
-                    isDirectorPanelExpanded = false
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 14, weight: .semibold))
-                        .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Collapse Director Tools"))
-                .accessibilityIdentifier("chat.directorToolsCollapse")
-            }
-
-            if activeParticipants.isEmpty {
-                Text(String(localized: "No active stage participants"))
-                    .font(OpenChatDesignSystem.Typography.metadata)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(panelParticipants) { participant in
-                        responderRow(participant)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
-        .padding(.top, OpenChatDesignSystem.Spacing.sm)
-    }
-
-    private func responderRow(_ participant: StageParticipantRecord) -> some View {
-        let selected = responderIds.contains(participant.id)
-        let index = responderIds.firstIndex(of: participant.id)
-        return HStack(spacing: OpenChatDesignSystem.Spacing.xs) {
-            Button {
-                toggleResponder(participant)
-            } label: {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: OpenChatDesignSystem.IconSize.md))
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    .openChatIconButtonFrame(size: OpenChatDesignSystem.IconSize.avatar)
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(participant.displayName)
-            .accessibilityIdentifier("chat.directorResponder.\(participant.displayName)")
-
-            Text(participant.displayName)
-                .font(OpenChatDesignSystem.Typography.rowTitle)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer()
-
-            if let index {
-                Text(String(localized: "Order \(index + 1)"))
-                    .font(OpenChatDesignSystem.Typography.monoMetadata)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("chat.directorResponderOrder.\(participant.displayName)")
-            }
-
-            Button {
-                moveResponder(participant, offset: -1)
-            } label: {
-                Image(systemName: "chevron.up")
-                    .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
-            }
-            .buttonStyle(.plain)
-            .disabled(index == nil || index == 0)
-            .accessibilityLabel(String(localized: "Move responder up"))
-            .accessibilityIdentifier("chat.directorResponderUp.\(participant.displayName)")
-
-            Button {
-                moveResponder(participant, offset: 1)
-            } label: {
-                Image(systemName: "chevron.down")
-                    .openChatIconButtonFrame(size: OpenChatDesignSystem.ControlSize.compactIconButton)
-            }
-            .buttonStyle(.plain)
-            .disabled(index == nil || index == responderIds.count - 1)
-            .accessibilityLabel(String(localized: "Move responder down"))
-            .accessibilityIdentifier("chat.directorResponderDown.\(participant.displayName)")
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func toggleResponder(_ participant: StageParticipantRecord) {
-        inputRole = .participant
-        if let index = responderIds.firstIndex(of: participant.id) {
-            guard responderIds.count > 1 else { return }
-            onCustomizeResponders()
-            responderIds.remove(at: index)
-        } else {
-            onCustomizeResponders()
-            responderIds.append(participant.id)
-        }
-    }
-
-    private func moveResponder(_ participant: StageParticipantRecord, offset: Int) {
-        guard let index = responderIds.firstIndex(of: participant.id) else { return }
-        let target = index + offset
-        guard responderIds.indices.contains(target) else { return }
-        onCustomizeResponders()
-        responderIds.swapAt(index, target)
+        DirectorResponderPanel(
+            inputRole: $inputRole,
+            responderIds: $responderIds,
+            activeParticipants: activeParticipants,
+            onCollapse: {
+                isDirectorPanelExpanded = false
+            },
+            onCustomizeResponders: onCustomizeResponders
+        )
     }
 
     @ViewBuilder
@@ -224,69 +190,122 @@ struct InputBarView: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onStop()
             }) {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: OpenChatDesignSystem.IconSize.lg))
-                    .foregroundStyle(.primary)
+                Image(systemName: "stop.fill")
+                    .font(.system(size: OpenChatDesignSystem.IconSize.sm, weight: .bold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 34, height: 34)
+                    .background {
+                        sendButtonGlassFill(isEnabled: true)
+                    }
+                    .overlay {
+                        sendButtonGlassStroke(isEnabled: true)
+                    }
+                    .inputLiquidGlass(in: Circle())
+                    .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 3)
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(String(localized: "Stop generating"))
         } else {
             Button(action: {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onSend()
             }) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: OpenChatDesignSystem.IconSize.lg))
-                    .foregroundStyle(canSend ? Color.primary : OpenChatDesignSystem.Surface.disabledFill)
+                Image(systemName: "arrow.up")
+                    .font(.system(size: OpenChatDesignSystem.IconSize.md, weight: .bold))
+                    .foregroundStyle(canSend ? Color.accentColor : Color.secondary.opacity(0.75))
+                    .frame(width: 34, height: 34)
+                    .background {
+                        sendButtonGlassFill(isEnabled: canSend)
+                    }
+                    .overlay {
+                        sendButtonGlassStroke(isEnabled: canSend)
+                    }
+                    .inputLiquidGlass(in: Circle())
+                    .shadow(color: Color.black.opacity(canSend ? 0.12 : 0.06), radius: 8, x: 0, y: 3)
             }
+            .buttonStyle(.plain)
             .disabled(!canSend)
             .accessibilityLabel(String(localized: "Send message"))
             .accessibilityIdentifier("chat.sendButton")
         }
     }
 
+    @ViewBuilder
+    private func sendButtonGlassFill(isEnabled: Bool) -> some View {
+        if #available(iOS 26.0, *) {
+            Circle()
+                .fill((isEnabled ? Color.accentColor : Color.white).opacity(isEnabled ? 0.08 : 0.05))
+        } else {
+            Circle()
+                .fill(.ultraThinMaterial)
+        }
+    }
+
+    private func sendButtonGlassStroke(isEnabled: Bool) -> some View {
+        Circle()
+            .stroke(
+                isEnabled ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.28),
+                lineWidth: 0.8
+            )
+    }
 }
 
-#Preview {
+#Preview("Stage Composer") {
     VStack {
         Spacer()
         InputBarView(
-            text: .constant(""),
+            text: .constant("Set the next beat, then let Mara answer."),
             inputRole: .constant(.participant),
-            responderIds: .constant([]),
+            responderIds: .constant(["stage-participant-mara", "stage-participant-io"]),
+            stageParticipants: [
+                StageParticipantRecord(
+                    id: "stage-participant-mara",
+                    stageId: "stage-preview",
+                    characterCardId: "mara",
+                    displayName: "Mara",
+                    visibility: StageParticipantVisibility.present.rawValue,
+                    isActive: true,
+                    sortOrder: 0,
+                    createdAt: .now,
+                    updatedAt: .now
+                ),
+                StageParticipantRecord(
+                    id: "stage-participant-io",
+                    stageId: "stage-preview",
+                    characterCardId: "io",
+                    displayName: "Io",
+                    visibility: StageParticipantVisibility.present.rawValue,
+                    isActive: true,
+                    sortOrder: 1,
+                    createdAt: .now,
+                    updatedAt: .now
+                ),
+            ],
+            showsDirectorTools: true,
             isGenerating: false,
             onSend: {},
             onStop: {},
             onCustomizeResponders: {}
         )
     }
+    .background(OpenChatDesignSystem.Surface.pageBackground)
 }
 
-#Preview("With text") {
-    VStack {
-        Spacer()
-        InputBarView(
-            text: .constant("Hello, how are you?"),
-            inputRole: .constant(.participant),
-            responderIds: .constant([]),
-            isGenerating: false,
-            onSend: {},
-            onStop: {},
-            onCustomizeResponders: {}
-        )
+private struct InputTextHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 22
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
-#Preview("Generating") {
-    VStack {
-        Spacer()
-        InputBarView(
-            text: .constant(""),
-            inputRole: .constant(.participant),
-            responderIds: .constant([]),
-            isGenerating: true,
-            onSend: {},
-            onStop: {},
-            onCustomizeResponders: {}
-        )
+private extension View {
+    @ViewBuilder
+    func inputLiquidGlass<S: Shape>(in shape: S) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            self
+        }
     }
 }

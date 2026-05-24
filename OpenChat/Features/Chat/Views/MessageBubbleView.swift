@@ -5,97 +5,100 @@ struct MessageBubbleView: View {
     var isStreaming = false
     var showDetailedStats = false
     var canEdit = true
+    var isGroupedWithPrevious = false
+    var isGroupedWithNext = false
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onRegenerate: () -> Void
+
     @State private var isHovering = false
+    @State private var cursorVisible = false
 
     private var isUser: Bool { item.role == "user" }
-    private var maximumMessageWidth: CGFloat { isUser ? 520 : 680 }
-    private var horizontalSpacerWidth: CGFloat { isUser ? 64 : 48 }
+    private var isSystem: Bool { item.role == "system" }
+    private var maximumMessageWidth: CGFloat { isUser ? 590 : 680 }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: OpenChatDesignSystem.Spacing.sm) {
-            if isUser {
-                Spacer(minLength: horizontalSpacerWidth)
-                contentView
-                    .frame(maxWidth: maximumMessageWidth, alignment: .trailing)
+        Group {
+            if isSystem {
+                systemMessage
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    contentView
-                    assistantActionBar
-                    statsBar
-                }
-                .frame(maxWidth: maximumMessageWidth, alignment: .leading)
-                Spacer(minLength: horizontalSpacerWidth)
+                messageRow
             }
         }
-        .padding(.vertical, OpenChatDesignSystem.Spacing.xxs)
         .onHover { isHovering = $0 }
         .accessibilityIdentifier("messageBubble.\(item.role).\(item.speakerName ?? roleName)")
     }
 
-    private var roleName: String {
-        if let speakerName = item.speakerName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !speakerName.isEmpty {
-            return speakerName
+    private var messageRow: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            if isUser {
+                Spacer(minLength: 54)
+                messageCluster
+                    .frame(maxWidth: maximumMessageWidth, alignment: .trailing)
+            } else {
+                messageCluster
+                    .frame(maxWidth: maximumMessageWidth, alignment: .leading)
+                Spacer(minLength: 54)
+            }
         }
+        .padding(.vertical, isGroupedWithPrevious || isGroupedWithNext ? 0 : 1)
+    }
 
-        switch item.role {
-        case "user":
-            return String(localized: "You")
-        case "assistant":
-            return String(localized: "Assistant")
-        default:
-            return String(localized: "System")
+    private var messageCluster: some View {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
+            if shouldShowSpeakerName {
+                Text(roleName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+                    .accessibilityIdentifier("messageBubble.speaker.\(roleName)")
+            }
+
+            contentBubble
+
+            if !isUser {
+                assistantActionBar
+                statsBar
+            }
         }
     }
 
-    // MARK: - Content
-
-    private var contentView: some View {
+    private var contentBubble: some View {
         Group {
-            if item.role == "user" {
-                Text(item.content)
-                    .font(OpenChatDesignSystem.Typography.body)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
-                    .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
-                    .textSelection(.enabled)
-                    .background(
-                        RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
-                            .fill(Color.accentColor)
-                    )
-                    .contextMenu {
-                        Button {
-                            onEdit()
-                        } label: {
-                            Label(String(localized: "Edit"), systemImage: "pencil")
-                        }
-                        .disabled(!canEdit)
-
-                        Button {
-                            UIPasteboard.general.string = item.content
-                        } label: {
-                            Label(String(localized: "Copy"), systemImage: "doc.on.doc")
-                        }
+            if isUser {
+                VStack(alignment: .trailing, spacing: OpenChatDesignSystem.Spacing.xxs) {
+                    Text(item.content)
+                        .font(OpenChatDesignSystem.Typography.body)
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                    bubbleFooter
+                }
+                .contextMenu {
+                    Button {
+                        onEdit()
+                    } label: {
+                        Label(String(localized: "Edit"), systemImage: "pencil")
                     }
+                    .disabled(!canEdit)
+
+                    Button {
+                        UIPasteboard.general.string = item.content
+                    } label: {
+                        Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+                    }
+                }
             } else {
                 VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
                     reasoningSection
                     HStack(alignment: .bottom, spacing: 0) {
-                        MarkdownTextView(blocks: item.contentBlocks)
+                        MarkdownTextView(blocks: item.contentBlocks, fillsAvailableWidth: false)
                         if isStreaming {
                             streamingCursor
                         }
                     }
+                    bubbleFooter
                 }
-                .padding(.horizontal, OpenChatDesignSystem.Spacing.md)
-                .padding(.vertical, OpenChatDesignSystem.Spacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: OpenChatDesignSystem.Radius.xl, style: .continuous)
-                        .fill(assistantBubbleColor)
-                )
                 .contextMenu {
                     Button {
                         UIPasteboard.general.string = item.content
@@ -119,15 +122,91 @@ struct MessageBubbleView: View {
                 }
             }
         }
+        .padding(.horizontal, isUser ? OpenChatDesignSystem.Spacing.sm : OpenChatDesignSystem.Spacing.md)
+        .padding(.vertical, 7)
+        .background {
+            UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
+                .fill(bubbleFill)
+        }
+        .overlay {
+            UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
+                .stroke(bubbleStroke, lineWidth: isUser ? 0 : 0.5)
+        }
+        .shadow(
+            color: Color.black.opacity(isUser ? 0.05 : 0.035),
+            radius: isGroupedWithPrevious || isGroupedWithNext ? 1 : 3,
+            x: 0,
+            y: 1
+        )
     }
 
-    private var assistantBubbleColor: Color {
-        switch item.role {
-        case "assistant":
-            return Color(.secondarySystemGroupedBackground)
-        default:
-            return OpenChatDesignSystem.Surface.warningWash
+    private var systemMessage: some View {
+        SystemMessageBubble(
+            content: item.content,
+            copyContent: item.originalContent ?? item.content
+        )
+    }
+
+    @ViewBuilder
+    private var bubbleFooter: some View {
+        if !isGroupedWithNext {
+            MessageTimestampFooter(
+                date: item.createdAt,
+                isStreaming: isStreaming,
+                isOutgoing: isUser
+            )
         }
+    }
+
+    private var roleName: String {
+        if let speakerName = item.speakerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !speakerName.isEmpty {
+            return speakerName
+        }
+
+        switch item.role {
+        case "user":
+            return String(localized: "You")
+        case "assistant":
+            return String(localized: "Assistant")
+        default:
+            return String(localized: "System")
+        }
+    }
+
+    private var shouldShowSpeakerName: Bool {
+        !isUser && !isGroupedWithPrevious && item.speakerName != nil
+    }
+
+    private var bubbleCorners: RectangleCornerRadii {
+        let wide: CGFloat = 18
+        let grouped: CGFloat = 7
+        let tail: CGFloat = 5
+        if isUser {
+            return RectangleCornerRadii(
+                topLeading: wide,
+                bottomLeading: wide,
+                bottomTrailing: isGroupedWithNext ? grouped : tail,
+                topTrailing: isGroupedWithPrevious ? grouped : wide
+            )
+        }
+        return RectangleCornerRadii(
+            topLeading: isGroupedWithPrevious ? grouped : wide,
+            bottomLeading: isGroupedWithNext ? grouped : tail,
+            bottomTrailing: wide,
+            topTrailing: wide
+        )
+    }
+
+    private var bubbleFill: Color {
+        if isUser {
+            return Color.accentColor
+        }
+        return Color(.secondarySystemGroupedBackground)
+    }
+
+    private var bubbleStroke: Color {
+        Color(.separator).opacity(0.10)
     }
 
     // MARK: - Reasoning Section
@@ -164,21 +243,20 @@ struct MessageBubbleView: View {
             .onAppear { cursorVisible = true }
     }
 
-    @State private var cursorVisible = false
     private var cursorOpacity: Double { cursorVisible ? 1.0 : 0.0 }
 
     // MARK: - Action Bar
 
     @ViewBuilder
     private var assistantActionBar: some View {
-        if !isStreaming {
+        if !isStreaming && !isGroupedWithNext && isHovering {
             MessageActionBar(
                 content: item.content,
                 showsRegenerate: item.role == "assistant",
                 onRegenerate: onRegenerate,
                 onDelete: onDelete
             )
-            .opacity(isHovering ? 1 : 0.5)
+            .padding(.leading, OpenChatDesignSystem.Spacing.xs)
         }
     }
 
@@ -186,78 +264,9 @@ struct MessageBubbleView: View {
 
     @ViewBuilder
     private var statsBar: some View {
-        if !isStreaming, let stats = item.streamingStats {
+        if !isStreaming, !isGroupedWithNext, let stats = item.streamingStats {
             StatsBarView(stats: stats, showDetailed: showDetailedStats)
+                .padding(.leading, OpenChatDesignSystem.Spacing.xs)
         }
     }
-}
-
-#Preview("User Message") {
-    MessageBubbleView(
-        item: MessageDisplayItem(
-            record: MessageRecord(
-                id: "1",
-                conversationId: "c1",
-                role: "user",
-                content: "Tell me about the history of ancient Rome.",
-                tokenCount: 10,
-                isCompressed: false,
-                originalContent: nil,
-                sortOrder: 0,
-                createdAt: .now,
-                reasoningContent: nil
-            )
-        ),
-        onEdit: {},
-        onDelete: {},
-        onRegenerate: {}
-    )
-    .padding()
-}
-
-#Preview("Assistant Message") {
-    MessageBubbleView(
-        item: MessageDisplayItem(
-            record: MessageRecord(
-                id: "2",
-                conversationId: "c1",
-                role: "assistant",
-                content: "Ancient Rome was one of the **most powerful** civilizations in history. It began as a small settlement along the banks of the *Tiber River*.",
-                tokenCount: 30,
-                isCompressed: false,
-                originalContent: nil,
-                sortOrder: 1,
-                createdAt: .now,
-                reasoningContent: nil
-            )
-        ),
-        onEdit: {},
-        onDelete: {},
-        onRegenerate: {}
-    )
-    .padding()
-}
-
-#Preview("Streaming") {
-    MessageBubbleView(
-        item: MessageDisplayItem(
-            record: MessageRecord(
-                id: "3",
-                conversationId: "c1",
-                role: "assistant",
-                content: "Generating response...",
-                tokenCount: nil,
-                isCompressed: false,
-                originalContent: nil,
-                sortOrder: 2,
-                createdAt: .now,
-                reasoningContent: nil
-            )
-        ),
-        isStreaming: true,
-        onEdit: {},
-        onDelete: {},
-        onRegenerate: {}
-    )
-    .padding()
 }

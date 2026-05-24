@@ -101,6 +101,37 @@ enum UITestingSupport {
             createdAt: now,
             updatedAt: now
         )
+        let stage = StageRecord(
+            id: Seed.stageId,
+            conversationId: conversation.id,
+            title: "UI Stage",
+            directorMode: DirectorMode.agent.rawValue,
+            isEnabled: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let maraParticipant = StageParticipantRecord(
+            id: Seed.maraParticipantId,
+            stageId: stage.id,
+            characterCardId: mara.id,
+            displayName: "Mara",
+            visibility: StageParticipantVisibility.present.rawValue,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now
+        )
+        let ioParticipant = StageParticipantRecord(
+            id: Seed.ioParticipantId,
+            stageId: stage.id,
+            characterCardId: io.id,
+            displayName: "Io",
+            visibility: StageParticipantVisibility.present.rawValue,
+            isActive: true,
+            sortOrder: 1,
+            createdAt: now,
+            updatedAt: now
+        )
 
         do {
             try databaseManager.dbQueue.write { db in
@@ -109,6 +140,9 @@ enum UITestingSupport {
                 try mara.insert(db)
                 try io.insert(db)
                 try conversation.insert(db)
+                try stage.insert(db)
+                try maraParticipant.insert(db)
+                try ioParticipant.insert(db)
             }
         } catch {
             assertionFailure("Failed to seed UI testing database: \(error.localizedDescription)")
@@ -122,6 +156,9 @@ enum UITestingSupport {
         static let conversationId = "ui-test-conversation"
         static let maraCardId = "ui-test-card-mara"
         static let ioCardId = "ui-test-card-io"
+        static let stageId = "ui-test-stage"
+        static let maraParticipantId = "ui-test-participant-mara"
+        static let ioParticipantId = "ui-test-participant-io"
     }
 }
 
@@ -198,8 +235,9 @@ final class UITestingURLProtocol: URLProtocol, @unchecked Sendable {
 
     private var payload: String {
         if isStreamingRequest {
+            let content = streamingContent
             return """
-            data: {"id":"ui-test","choices":[{"index":0,"delta":{"content":"UI stage reply"},"finish_reason":"stop"}]}
+            data: {"id":"ui-test","choices":[{"index":0,"delta":{"content":"\(content)"},"finish_reason":"stop"}]}
 
             data: [DONE]
 
@@ -226,6 +264,20 @@ final class UITestingURLProtocol: URLProtocol, @unchecked Sendable {
           }
         }
         """
+    }
+
+    private var streamingContent: String {
+        guard let messages = requestJSON?["messages"] as? [[String: Any]] else {
+            return "UI stage reply"
+        }
+        let joined = messages.compactMap { $0["content"] as? String }.joined(separator: "\n")
+        if joined.contains("Active Speaker: Io") {
+            return "Io UI stage reply"
+        }
+        if joined.contains("Active Speaker: Mara") {
+            return "Mara UI stage reply"
+        }
+        return "UI stage reply"
     }
 
     private var directorParticipantId: String? {

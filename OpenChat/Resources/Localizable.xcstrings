@@ -643,6 +643,23 @@
         }
       }
     },
+    "Director input is saved as a hidden stage instruction." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Director input is saved as a hidden stage instruction."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导演输入会保存为隐藏舞台指令。"
+          }
+        }
+      }
+    },
     "Director instruction" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -938,6 +955,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入的角色卡缺少名称。"
+          }
+        }
+      }
+    },
+    "Input Mode" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Input Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入模式"
           }
         }
       }
@@ -1673,6 +1707,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "舞台"
+          }
+        }
+      }
+    },
+    "Stage Controls" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Stage Controls"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "舞台控制"
           }
         }
       }

@@ -182,23 +182,27 @@ private actor MarkdownRenderCache {
 
 struct MarkdownTextView: View {
     private let blocks: [TextContentBlock]
+    private let fillsAvailableWidth: Bool
 
-    init(text: String) {
+    init(text: String, fillsAvailableWidth: Bool = true) {
         self.blocks = TextContentBlock.makeBlocks(from: text)
+        self.fillsAvailableWidth = fillsAvailableWidth
     }
 
-    init(blocks: [TextContentBlock]) {
+    init(blocks: [TextContentBlock], fillsAvailableWidth: Bool = true) {
         self.blocks = blocks
+        self.fillsAvailableWidth = fillsAvailableWidth
     }
 
     var body: some View {
-        SegmentedMarkdownTextView(blocks: blocks)
+        SegmentedMarkdownTextView(blocks: blocks, fillsAvailableWidth: fillsAvailableWidth)
             .textSelection(.enabled)
     }
 }
 
 private struct SegmentedMarkdownTextView: View {
     let blocks: [TextContentBlock]
+    let fillsAvailableWidth: Bool
     @State private var renderedBlocks: [Int: RenderedMarkdownBlock] = [:]
 
     private var characterCount: Int {
@@ -215,7 +219,7 @@ private struct SegmentedMarkdownTextView: View {
 
     var body: some View {
         composedText(for: layoutPlan)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: fillsAvailableWidth ? .infinity : nil, alignment: .leading)
         .task(id: renderSignature) {
             await refreshMarkdownBlocks()
         }
