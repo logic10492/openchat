@@ -18,26 +18,12 @@ struct ChatView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    characterCapsuleControl
-                        .offset(y: 3)
-                }
-
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if viewModel.isGeneratingTitle {
-                        ProgressView()
-                            .controlSize(.small)
-                            .offset(y: 3)
-                    }
-                    Button {
-                        isShowingSettings = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                    .offset(y: 3)
-                    .accessibilityLabel(String(localized: "Chat Settings"))
-                    .accessibilityIdentifier("chat.settingsButton")
-                }
+                ChatNavigationToolbar(
+                    viewModel: viewModel,
+                    isShowingSettings: $isShowingSettings,
+                    isShowingCharacterPicker: $isShowingCharacterPicker,
+                    selectedCharacterPickerWorldBookID: $selectedCharacterPickerWorldBookID
+                )
             }
             .task {
                 await viewModel.loadMessages()
@@ -75,128 +61,15 @@ struct ChatView: View {
         ZStack {
             ChatConversationBackground()
             ChatEdgeEffectViewport {
-                messageList
+                ChatTimelineHostView(
+                    viewModel: viewModel,
+                    onEdit: beginEditing
+                )
             }
         }
             .chatInputBar {
-                InputBarView(
-                    text: binding(\.inputText),
-                    inputRole: binding(\.stageInputRole),
-                    responderIds: binding(\.stageResponderIds),
-                    stageParticipants: viewModel.stageParticipants,
-                    showsDirectorTools: viewModel.isStageEnabled,
-                    isGenerating: viewModel.isGenerating,
-                    onSend: {
-                        Task { await viewModel.sendMessage() }
-                    },
-                    onStop: {
-                        viewModel.stopGenerating()
-                    },
-                    onCustomizeResponders: {
-                        viewModel.markStageResponderSelectionCustomized()
-                    }
-                )
+                ChatInputBarHostView(viewModel: viewModel)
             }
-    }
-
-    // MARK: - Character Capsule
-
-    @ViewBuilder
-    private var characterCapsuleControl: some View {
-        if viewModel.showsConversationCharacterPicker {
-            Button {
-                presentCharacterPicker()
-            } label: {
-                ChatHeaderCapsule(
-                    title: viewModel.selectedCharacterName ?? String(localized: "Select Character"),
-                    subtitle: viewModel.selectedCharacterWorldBookName
-                )
-            }
-            .buttonStyle(.plain)
-            .popover(
-                isPresented: $isShowingCharacterPicker,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .top
-            ) {
-                CharacterPickerPopover(
-                    worldBooks: viewModel.availableWorldBooks,
-                    characterCards: viewModel.availableCharacterCards,
-                    selectedCharacterCardID: viewModel.selectedCharacterCardID,
-                    selectedWorldBookID: $selectedCharacterPickerWorldBookID,
-                    onSelectCharacterCard: { id in
-                        selectCharacterCard(id)
-                        isShowingCharacterPicker = false
-                    }
-                )
-                .presentationCompactAdaptation(.popover)
-            }
-            .accessibilityLabel(String(localized: "Select Character"))
-            .accessibilityIdentifier("chat.characterCapsule")
-        } else {
-            Button {
-                isShowingSettings = true
-            } label: {
-                ChatHeaderCapsule(
-                    title: String(localized: "Stage"),
-                    subtitle: stageCapsuleSubtitle
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "Stage"))
-            .accessibilityIdentifier("chat.stageCapsule")
-        }
-    }
-
-    private var selectedCharacterWorldBookID: String? {
-        guard let id = viewModel.selectedCharacterCardID,
-              let card = viewModel.availableCharacterCards.first(where: { $0.id == id }),
-              let worldBookId = card.worldBookId,
-              viewModel.availableWorldBooks.contains(where: { $0.id == worldBookId })
-        else { return nil }
-        return worldBookId
-    }
-
-    private var stageCapsuleSubtitle: String? {
-        let names = viewModel.activeStageParticipants.map(\.displayName)
-        guard !names.isEmpty else { return nil }
-        return names.joined(separator: ", ")
-    }
-
-    private func presentCharacterPicker() {
-        selectedCharacterPickerWorldBookID = selectedCharacterWorldBookID
-        isShowingCharacterPicker = true
-    }
-
-    private func selectCharacterCard(_ id: String?) {
-        guard viewModel.showsConversationCharacterPicker,
-              viewModel.selectedCharacterCardID != id
-        else { return }
-        viewModel.selectedCharacterCardID = id
-        Task { await viewModel.saveConversationSettings() }
-    }
-
-    // MARK: - Message List
-
-    private var messageList: some View {
-        ChatMessageTimelineView(
-            messages: viewModel.messages,
-            isGenerating: viewModel.isGenerating,
-            showDetailedStats: viewModel.showDetailedStats,
-            extractionPhase: viewModel.extractionPhase,
-            backgroundDiagnostics: viewModel.backgroundDiagnostics,
-            onEdit: { item in
-                beginEditing(item)
-            },
-            onDelete: { id in
-                Task { await viewModel.deleteMessage(id) }
-            },
-            onRegenerate: {
-                Task { await viewModel.regenerateLastResponse() }
-            },
-            onDismissExtraction: {
-                viewModel.dismissExtractionIndicator()
-            }
-        )
     }
 
     // MARK: - Helpers
@@ -207,13 +80,6 @@ struct ChatView: View {
         editingMessage = EditableMessage(id: item.id)
     }
 
-    private func binding<Value>(_ keyPath: ReferenceWritableKeyPath<ChatViewModel, Value>) -> Binding<Value> {
-        @Bindable var viewModel = viewModel
-        return Binding(
-            get: { viewModel[keyPath: keyPath] },
-            set: { viewModel[keyPath: keyPath] = $0 }
-        )
-    }
 }
 
 private struct EditableMessage: Identifiable {

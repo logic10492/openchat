@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MessageBubbleView: View {
+struct MessageBubbleView: View, Equatable {
     let item: MessageDisplayItem
     var isStreaming = false
     var showDetailedStats = false
@@ -13,6 +13,19 @@ struct MessageBubbleView: View {
 
     @State private var isHovering = false
     @State private var cursorVisible = false
+
+    nonisolated static func == (lhs: MessageBubbleView, rhs: MessageBubbleView) -> Bool {
+        lhs.item == rhs.item
+            && lhs.item.role == rhs.item.role
+            && lhs.item.originalContent == rhs.item.originalContent
+            && lhs.item.createdAt == rhs.item.createdAt
+            && lhs.item.speakerId == rhs.item.speakerId
+            && lhs.isStreaming == rhs.isStreaming
+            && lhs.showDetailedStats == rhs.showDetailedStats
+            && lhs.canEdit == rhs.canEdit
+            && lhs.isGroupedWithPrevious == rhs.isGroupedWithPrevious
+            && lhs.isGroupedWithNext == rhs.isGroupedWithNext
+    }
 
     private var isUser: Bool { item.role == "user" }
     private var isSystem: Bool { item.role == "system" }

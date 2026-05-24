@@ -14,6 +14,8 @@ struct ChatMessageTimelineView: View {
     @State private var shouldFollowStreaming = true
     @State private var followResumeGeneration = 0
     @State private var resumeFollowTask: Task<Void, Never>?
+    @State private var streamingScrollGeneration = 0
+    @State private var streamingScrollTask: Task<Void, Never>?
     @GestureState private var isTouchingMessageList = false
 
     var body: some View {
@@ -27,12 +29,12 @@ struct ChatMessageTimelineView: View {
             }
             .openChatScrollEdgeEffects()
             .simultaneousGesture(scrollPauseGesture)
-            .onChange(of: messages.map(\.id)) { oldIDs, newIDs in
-                guard newIDs.count > oldIDs.count, let lastID = newIDs.last else { return }
+            .onChange(of: messageListIdentity) { oldIdentity, newIdentity in
+                guard newIdentity.count > oldIdentity.count, let lastID = newIdentity.lastID else { return }
                 if isGenerating {
                     guard shouldFollowStreaming else { return }
                     proxy.scrollTo(lastID, anchor: .bottom)
-                } else if oldIDs.isEmpty || messages.last?.role == "user" {
+                } else if oldIdentity.count == 0 || messages.last?.role == "user" {
                     proxy.scrollTo(lastID, anchor: .bottom)
                 }
             }
@@ -43,10 +45,14 @@ struct ChatMessageTimelineView: View {
                     proxy.scrollTo(lastID, anchor: .bottom)
                 } else {
                     shouldFollowStreaming = false
+                    cancelStreamingScroll()
                     cancelFollowResume()
                 }
             }
             .onChange(of: latestStreamingRevision) { _, _ in
+                scheduleStreamingScroll()
+            }
+            .onChange(of: streamingScrollGeneration) { _, _ in
                 guard isGenerating, shouldFollowStreaming, let last = messages.last else { return }
                 proxy.scrollTo(last.id, anchor: .bottom)
             }
@@ -62,6 +68,7 @@ struct ChatMessageTimelineView: View {
                 }
             }
             .onDisappear {
+                cancelStreamingScroll()
                 cancelFollowResume()
             }
         }
@@ -92,6 +99,7 @@ struct ChatMessageTimelineView: View {
                     },
                     onRegenerate: onRegenerate
                 )
+                .equatable()
                 .id(item.id)
                 .padding(.top, rowTopPadding(at: index))
                 .accessibilityIdentifier("chat.message.\(item.role).\(item.id)")
@@ -130,6 +138,10 @@ struct ChatMessageTimelineView: View {
             return -1
         }
         return last.contentRenderRevision
+    }
+
+    private var messageListIdentity: ChatMessageListIdentity {
+        ChatMessageListIdentity(count: messages.count, lastID: messages.last?.id)
     }
 
     private func shouldShowDateSeparator(at index: Int) -> Bool {
@@ -183,6 +195,32 @@ struct ChatMessageTimelineView: View {
         resumeFollowTask = nil
     }
 
+    private func cancelStreamingScroll() {
+        streamingScrollTask?.cancel()
+        streamingScrollTask = nil
+    }
+
+    private func scheduleStreamingScroll() {
+        guard isGenerating, shouldFollowStreaming else {
+            cancelStreamingScroll()
+            return
+        }
+        guard streamingScrollTask == nil else { return }
+
+        streamingScrollTask = Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard isGenerating, shouldFollowStreaming else {
+                    streamingScrollTask = nil
+                    return
+                }
+                streamingScrollGeneration &+= 1
+                streamingScrollTask = nil
+            }
+        }
+    }
+
     private func scheduleFollowResume() {
         guard isGenerating else {
             cancelFollowResume()
@@ -203,6 +241,11 @@ struct ChatMessageTimelineView: View {
             }
         }
     }
+}
+
+private struct ChatMessageListIdentity: Equatable {
+    let count: Int
+    let lastID: String?
 }
 
 private struct ChatEmptyConversationView: View {

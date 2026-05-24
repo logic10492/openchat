@@ -21,7 +21,10 @@
 
 | 文件 | 职责 |
 |---|---|
-| `ChatView.swift` | 聊天页面 shell：绑定 `ChatViewModel`、导航栏角色胶囊、设置/编辑 sheet、输入栏和消息 timeline 组合 |
+| `ChatView.swift` | 聊天页面 shell：绑定 `ChatViewModel`、设置/编辑 sheet、输入栏和消息 timeline 组合 |
+| `ChatNavigationToolbar.swift` | 导航栏角色胶囊、Stage 胶囊和设置按钮，隔离 toolbar 对 `ChatViewModel` 的观察范围 |
+| `ChatTimelineHostView.swift` | 将 `ChatViewModel` 的消息/统计/诊断状态映射到 `ChatMessageTimelineView`，隔离流式消息刷新 |
+| `ChatInputBarHostView.swift` | 将输入文本、Stage responder 和生成状态绑定到 `InputBarView`，隔离 composer 刷新 |
 | `ChatMessageTimelineView.swift` | Telegram 式消息轨道：日期分隔、同发送者短间隔分组、流式自动跟随/用户拖动暂停、记忆提取提示和诊断 trace 插入 |
 | `ChatChromeViews.swift` | 聊天 chrome 组件：背景、日期分隔、顶部角色胶囊、角色/世界书 popover、编辑消息 sheet |
 | `ChatEdgeEffects.swift` | 消息 viewport 边缘效果：顶部/底部内容渐隐、iOS 26 系统 scroll edge soft style、iOS 17-25 material mask fallback |
@@ -78,7 +81,7 @@
 - popover 下半部分是“世界书可选角色”：展示当前世界书下的角色；“无世界书”筛选下展示未绑定世界书的角色。选择角色后更新 `selectedCharacterCardID` 并复用 `ChatViewModel.saveConversationSettings()` 保存到当前会话。
 - Stage 会话本轮只做简单兼容：胶囊显示 `Stage` 与当前 active/present participants 摘要，点击进入设置，不通过胶囊切换会话级角色卡。
 
-实现证据：`ChatView.swift` 只保留页面级 binding、toolbar、sheet 和 `ChatMessageTimelineView` / `InputBarView` 组合；principal toolbar 使用 `ChatHeaderCapsule` 渲染角色胶囊。`ChatChromeViews.swift` 的 `ChatHeaderGlassCapsuleStyle` 在 iOS 26+ 使用原生 `glassEffect(.regular.interactive(), in: Capsule())`，在 iOS 17-25 保留 `.ultraThinMaterial` fallback。非 Stage 分支通过 `Button + popover` 展示 `CharacterPickerPopover`，由 `availableWorldBooks` 与 `availableCharacterCards` 组成世界书筛选和角色列表，并在角色选择时调用 `selectCharacterCard(_:)`；Stage 分支仅作为设置入口。消息滚动、日期分隔、分组和流式跟随由 `ChatMessageTimelineView.swift` 承担，避免 `ChatView.swift` 再次膨胀为聊天行为大杂烩。顶部/底部控件下方的边缘视觉由 `ChatEdgeEffects.swift` 承担：`ChatView.swift` 只用 `ChatEdgeEffectViewport` 包住消息列表，实际输入栏仍由 `chatInputBar` 挂载在更高层；`ChatMessageTimelineView.swift` 在 ScrollView 上调用 `openChatScrollEdgeEffects()`，iOS 26+ 使用系统 `scrollEdgeEffectStyle(.soft, for: [.top, .bottom])`，iOS 17-25 由透明 `.ultraThinMaterial` 渐变 mask 作为 fallback。该实现只影响消息 viewport，不进入 `InputBarView`。
+实现证据：`ChatView.swift` 只保留页面级 lifecycle、sheet 和 shell 布局；toolbar、timeline、composer 分别由 `ChatNavigationToolbar.swift`、`ChatTimelineHostView.swift`、`ChatInputBarHostView.swift` 承担，避免流式消息刷新时把导航胶囊和输入栏一起卷入 `ChatView` 的主体重算。principal toolbar 使用 `ChatHeaderCapsule` 渲染角色胶囊。`ChatChromeViews.swift` 的 `ChatHeaderGlassCapsuleStyle` 在 iOS 26+ 使用原生 `glassEffect(.regular.interactive(), in: Capsule())`，在 iOS 17-25 保留 `.ultraThinMaterial` fallback。非 Stage 分支通过 `Button + popover` 展示 `CharacterPickerPopover`，由 `availableWorldBooks` 与 `availableCharacterCards` 组成世界书筛选和角色列表，并在角色选择时调用 `selectCharacterCard(_:)`；Stage 分支仅作为设置入口。消息滚动、日期分隔、分组和流式跟随由 `ChatMessageTimelineView.swift` 承担，避免 `ChatView.swift` 再次膨胀为聊天行为大杂烩。顶部/底部控件下方的边缘视觉由 `ChatEdgeEffects.swift` 承担：`ChatView.swift` 只用 `ChatEdgeEffectViewport` 包住消息列表，实际输入栏仍由 `chatInputBar` 挂载在更高层；`ChatMessageTimelineView.swift` 在 ScrollView 上调用 `openChatScrollEdgeEffects()`，iOS 26+ 使用系统 `scrollEdgeEffectStyle(.soft, for: [.top, .bottom])`，iOS 17-25 由透明 `.ultraThinMaterial` 渐变 mask 作为 fallback。该实现只影响消息 viewport，不进入 `InputBarView`。
 
 ### 3.2 MessageBubbleView
 
@@ -413,6 +416,7 @@ struct MessageDisplayItem: Identifiable {
 - `MessageDisplayItem.appendContentDelta(...)` 同步维护完整 `content` 与 `contentBlocks`
 - `TextContentBlock` 优先按自然换行切块，超长无换行文本按固定上限兜底切块
 - `MessageBubbleView` 传入 `contentBlocks`，由 `MarkdownTextView` 分块渲染，避免每个 SSE chunk 都让整条长回复重新参与 Markdown / Text 构建
+- `MessageBubbleView` 对值语义输入使用 `.equatable()`，旧消息在流式尾条更新时跳过无变化的子树重算
 - `contentRenderRevision` 只表达流式文本修订，不把完整 content 放入 Hashable diff 热路径
 
 ### 6.2 Markdown 延迟刷新与缓存
@@ -428,7 +432,7 @@ RP 文本默认以 plain Text 先显示；Markdown 渲染作为延迟增强，�
 
 - 消息列表使用 `ScrollViewReader`
 - 新用户消息到达和生成开始时滚动到底部
-- 流式内容更新时仅在 `viewModel.isGenerating && shouldFollowStreaming == true` 时跟随到底部
+- 流式内容更新时仅在 `isGenerating && shouldFollowStreaming == true` 时跟随到底部，并通过 50ms 合并任务降低逐 chunk `scrollTo` 触发频率
 - 用户上滑后暂停跟随；拖动/按住期间不恢复
 - 手势结束且 0.5s 内没有新的触摸事件后，仅当本轮仍在生成时恢复跟随并立即滚回底部
 - 生成结束会取消待恢复的跟随任务，不再触发最终跳底；用户可自由拖动历史消息
