@@ -43,6 +43,7 @@ struct ChatView: View {
                 await viewModel.loadMessages()
                 await viewModel.loadSettingsOptions()
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
             .onDisappear {
                 viewModel.triggerMemoryExtraction()
             }
@@ -73,9 +74,11 @@ struct ChatView: View {
     private var chatContent: some View {
         ZStack {
             ChatConversationBackground()
-            messageList
+            ChatEdgeEffectViewport {
+                messageList
+            }
         }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .chatInputBar {
                 InputBarView(
                     text: binding(\.inputText),
                     inputRole: binding(\.stageInputRole),

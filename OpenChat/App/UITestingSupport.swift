@@ -3,16 +3,21 @@ import GRDB
 
 enum UITestingSupport {
     static let launchArgument = "--ui-testing"
+    static let edgeEffectsLaunchArgument = "--ui-testing-chat-edge-effects"
 
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
+    }
+
+    private static var usesEdgeEffectFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains(edgeEffectsLaunchArgument)
     }
 
     @MainActor
     static func makeContainer() throws -> (DependencyContainer, AppState) {
         UITestingURLProtocol.register()
         let databaseManager = try DatabaseManager.inMemory()
-        seed(databaseManager)
+        seed(databaseManager, includeEdgeEffectMessages: usesEdgeEffectFixture)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestingURLProtocol.self]
         let apiClient = APIClient(session: URLSession(configuration: configuration))
@@ -26,7 +31,7 @@ enum UITestingSupport {
         return (container, appState)
     }
 
-    private static func seed(_ databaseManager: DatabaseManager) {
+    private static func seed(_ databaseManager: DatabaseManager, includeEdgeEffectMessages: Bool) {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let endpoint = APIEndpointRecord(
             id: Seed.endpointId,
@@ -143,10 +148,50 @@ enum UITestingSupport {
                 try stage.insert(db)
                 try maraParticipant.insert(db)
                 try ioParticipant.insert(db)
+                if includeEdgeEffectMessages {
+                    for message in edgeEffectMessages(conversationId: conversation.id, baseDate: now.addingTimeInterval(-7200)) {
+                        try message.insert(db)
+                    }
+                }
             }
         } catch {
             assertionFailure("Failed to seed UI testing database: \(error.localizedDescription)")
         }
+    }
+
+    private static func edgeEffectMessages(conversationId: String, baseDate: Date) -> [MessageRecord] {
+        (0..<28).map { index in
+            let isUser = index.isMultiple(of: 3)
+            let role = isUser ? "user" : "assistant"
+            let speakerName = isUser ? nil : (index.isMultiple(of: 2) ? "Mara" : "Io")
+            var record = MessageRecord(
+                id: "ui-edge-message-\(index)",
+                conversationId: conversationId,
+                role: role,
+                content: edgeEffectMessageContent(index: index, isUser: isUser, speakerName: speakerName),
+                tokenCount: 18,
+                isCompressed: false,
+                originalContent: nil,
+                sortOrder: index,
+                createdAt: baseDate.addingTimeInterval(Double(index * 73)),
+                reasoningContent: nil
+            )
+            if let speakerName {
+                record.stageId = Seed.stageId
+                record.speakerKind = MessageSpeakerKind.participant.rawValue
+                record.speakerId = speakerName == "Mara" ? Seed.maraParticipantId : Seed.ioParticipantId
+                record.speakerName = speakerName
+            }
+            return record
+        }
+    }
+
+    private static func edgeEffectMessageContent(index: Int, isUser: Bool, speakerName: String?) -> String {
+        if isUser {
+            return "Edge fixture turn \(index): keep the lantern low and describe what changes near the gate."
+        }
+        let speaker = speakerName ?? "Guide"
+        return "\(speaker) edge fixture reply \(index). The glass at the edge should soften this text without turning into a flat cover. The sentence is intentionally long enough to cross the top and bottom bands during scroll verification."
     }
 
     enum Seed {

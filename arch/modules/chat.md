@@ -24,6 +24,7 @@
 | `ChatView.swift` | 聊天页面 shell：绑定 `ChatViewModel`、导航栏角色胶囊、设置/编辑 sheet、输入栏和消息 timeline 组合 |
 | `ChatMessageTimelineView.swift` | Telegram 式消息轨道：日期分隔、同发送者短间隔分组、流式自动跟随/用户拖动暂停、记忆提取提示和诊断 trace 插入 |
 | `ChatChromeViews.swift` | 聊天 chrome 组件：背景、日期分隔、顶部角色胶囊、角色/世界书 popover、编辑消息 sheet |
+| `ChatEdgeEffects.swift` | 消息 viewport 边缘效果：顶部/底部内容渐隐、iOS 26 系统 scroll edge soft style、iOS 17-25 material mask fallback |
 | `MessageBubbleView.swift` | 单条消息行和气泡，支持 Markdown、长按菜单、分组尾部时间、流式光标和统计展示 |
 | `MessageBubbleChrome.swift` | 系统消息胶囊、时间脚等气泡辅助 chrome |
 | `ReasoningDisclosureView.swift` | AI 思考内容展示：折叠摘要、固定高度滚动预览、长文本尾部截断与系统复制 |
@@ -77,7 +78,7 @@
 - popover 下半部分是“世界书可选角色”：展示当前世界书下的角色；“无世界书”筛选下展示未绑定世界书的角色。选择角色后更新 `selectedCharacterCardID` 并复用 `ChatViewModel.saveConversationSettings()` 保存到当前会话。
 - Stage 会话本轮只做简单兼容：胶囊显示 `Stage` 与当前 active/present participants 摘要，点击进入设置，不通过胶囊切换会话级角色卡。
 
-实现证据：`ChatView.swift` 只保留页面级 binding、toolbar、sheet 和 `ChatMessageTimelineView` / `InputBarView` 组合；principal toolbar 使用 `ChatHeaderCapsule` 渲染角色胶囊。`ChatChromeViews.swift` 的 `ChatHeaderGlassCapsuleStyle` 在 iOS 26+ 使用原生 `glassEffect(.regular.interactive(), in: Capsule())`，在 iOS 17-25 保留 `.ultraThinMaterial` fallback。非 Stage 分支通过 `Button + popover` 展示 `CharacterPickerPopover`，由 `availableWorldBooks` 与 `availableCharacterCards` 组成世界书筛选和角色列表，并在角色选择时调用 `selectCharacterCard(_:)`；Stage 分支仅作为设置入口。消息滚动、日期分隔、分组和流式跟随由 `ChatMessageTimelineView.swift` 承担，避免 `ChatView.swift` 再次膨胀为聊天行为大杂烩。
+实现证据：`ChatView.swift` 只保留页面级 binding、toolbar、sheet 和 `ChatMessageTimelineView` / `InputBarView` 组合；principal toolbar 使用 `ChatHeaderCapsule` 渲染角色胶囊。`ChatChromeViews.swift` 的 `ChatHeaderGlassCapsuleStyle` 在 iOS 26+ 使用原生 `glassEffect(.regular.interactive(), in: Capsule())`，在 iOS 17-25 保留 `.ultraThinMaterial` fallback。非 Stage 分支通过 `Button + popover` 展示 `CharacterPickerPopover`，由 `availableWorldBooks` 与 `availableCharacterCards` 组成世界书筛选和角色列表，并在角色选择时调用 `selectCharacterCard(_:)`；Stage 分支仅作为设置入口。消息滚动、日期分隔、分组和流式跟随由 `ChatMessageTimelineView.swift` 承担，避免 `ChatView.swift` 再次膨胀为聊天行为大杂烩。顶部/底部控件下方的边缘视觉由 `ChatEdgeEffects.swift` 承担：`ChatView.swift` 只用 `ChatEdgeEffectViewport` 包住消息列表，实际输入栏仍由 `chatInputBar` 挂载在更高层；`ChatMessageTimelineView.swift` 在 ScrollView 上调用 `openChatScrollEdgeEffects()`，iOS 26+ 使用系统 `scrollEdgeEffectStyle(.soft, for: [.top, .bottom])`，iOS 17-25 由透明 `.ultraThinMaterial` 渐变 mask 作为 fallback。该实现只影响消息 viewport，不进入 `InputBarView`。
 
 ### 3.2 MessageBubbleView
 
@@ -126,7 +127,7 @@ struct InputBarView: View {
 }
 ```
 
-- 底部 composer 不再铺整宽 `.regularMaterial` 横条；`safeAreaInset` 中只放透明 dock、独立圆角输入 capsule、左侧工具按钮和右侧发送按钮，键盘弹出时避免出现额外灰色横栏。
+- 底部 composer 不再铺整宽 `.regularMaterial` 横条；底栏容器中只放透明 dock、独立圆角输入 capsule、左侧工具按钮和右侧发送按钮，键盘弹出时避免出现额外灰色横栏。
 - 多行文本输入框使用 SwiftUI `TextEditor` + 隐藏测量文本自适应高度，最大 6 行，保留 `chat.inputText` accessibility identifier。
 - 发送按钮：圆形 `arrow.up`，`text` 非空时启用
 - 停止按钮：生成中显示圆形 `stop.fill`，点击取消当前流式请求
@@ -134,7 +135,7 @@ struct InputBarView: View {
 - Stage 会话显示轻量 `ellipsis.circle` 工具按钮；展开后由 `DirectorResponderPanel.swift` 管理 responder 选择和上下排序。
 - `DirectorResponderPanel.swift` 同时提供 `StageInputRole` 的 segmented picker：`Participant` 会把输入作为用户消息并触发当前 responder 队列；`Director` 会把输入保存为 hidden stage instruction，不进入消息列表。
 
-实现证据：`ChatView.swift` 的 `safeAreaInset(edge: .bottom)` 直接挂载 `InputBarView`，不再额外添加底部 padding。`InputBarView.swift` 使用透明外层、`TextEditor`、`InputTextHeightPreferenceKey` 和独立圆角输入 capsule 实现 Telegram 式底部 composer；输入 capsule 与发送/停止圆形按钮在 iOS 26+ 使用 `glassEffect(.regular.interactive(), in:)`，在 iOS 17-25 使用 `.ultraThinMaterial` fallback，避免旧的实心白底输入槽观感。Stage 工具入口改为 `ellipsis.circle`。`DirectorResponderPanel.swift` 持有输入模式切换、director instruction 提示、responder 行、选择、上下移动和 accessibility identifiers。`UITestingSupport.swift` 的 `--ui-testing` 种子提供 Mara/Io 双角色 Stage 和 mock 流式回复，`StageUITests.swift` 验证 director 输入不显示为消息、participant 输入生成 Mara/Io 多轮回复，并保留 `telegram-style-stage-chat` 截图附件。
+实现证据：`ChatView.swift` 通过 `chatInputBar` 挂载 `InputBarView`：iOS 26+ 使用 `safeAreaBar(edge: .bottom, spacing: 0)`，让系统 scroll edge effect 纳入 custom bar 的 safe area 计算；iOS 17-25 fallback 到 `safeAreaInset(edge: .bottom, spacing: 0)`。`InputBarView.swift` 使用透明外层、`TextEditor`、`InputTextHeightPreferenceKey` 和独立圆角输入 capsule 实现 Telegram 式底部 composer；输入 capsule 与发送/停止圆形按钮在 iOS 26+ 使用 `glassEffect(.regular.interactive(), in:)`，在 iOS 17-25 使用 `.ultraThinMaterial` fallback，避免旧的实心白底输入槽观感。Stage 工具入口改为 `ellipsis.circle`。`DirectorResponderPanel.swift` 持有输入模式切换、director instruction 提示、responder 行、选择、上下移动和 accessibility identifiers。`UITestingSupport.swift` 的 `--ui-testing` 种子提供 Mara/Io 双角色 Stage 和 mock 流式回复，`--ui-testing-chat-edge-effects` 额外填充长消息用于顶部/底部边缘截图验证；`StageUITests.swift` 验证 director 输入不显示为消息、participant 输入生成 Mara/Io 多轮回复，并保留 `telegram-style-stage-chat` 截图附件。
 
 ### 3.4 ChatSettingsSheet
 

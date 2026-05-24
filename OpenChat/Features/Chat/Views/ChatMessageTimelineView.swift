@@ -25,6 +25,7 @@ struct ChatMessageTimelineView: View {
                     timelineStack
                 }
             }
+            .openChatScrollEdgeEffects()
             .simultaneousGesture(scrollPauseGesture)
             .onChange(of: messages.map(\.id)) { oldIDs, newIDs in
                 guard newIDs.count > oldIDs.count, let lastID = newIDs.last else { return }
