@@ -1,0 +1,41 @@
+# 聊天模块实现证据
+
+## 实现证据（更新至 2026-05-17）
+
+- 代码位置：
+  - `OpenChat/Features/Chat/Views/ChatView.swift` — 主界面 + 记忆更新 banner
+  - `OpenChat/Features/Chat/Views/MessageBubbleView.swift` — 气泡 + StatsBarView 集成
+  - `OpenChat/Features/Chat/Views/StatsBarView.swift` — 详细/精简统计展示
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
+  - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
+  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision）
+  - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
+  - `OpenChatUITests/MessageBubbleContextMenuUITests.swift` — 长按气泡菜单预览背景回归验证
+  - `OpenChat/ContentView.swift`
+  - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
+- 已完成功能：
+  - 聊天主路径：会话读取、消息发送、流式增量展示、数据库持久化
+  - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
+  - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
+  - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
+  - 超长流式输出 UI：每个 SSE chunk 仍更新 UI，但 assistant 正文按 block 分段渲染；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
+  - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
+  - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
+  - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
+  - Background Phase 6：Chat 主链路调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`
+  - 世界书 bounded rebuild 仍保留在 Chat pre-source stage；`BackgroundWorker` 不触发 rebuild、不写 DB、不联网、不生成 assistant message
+- 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证 packet selected memory/worldBook entries、semantic-only world book entry 和 worldBook source failure keyword fallback：
+  - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
+  - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
+  - `MemoryExtractionPhaseTests`（提取状态模型）
+  - `MemoryManagerRetrievalTests`
+  - `BackgroundManagerTests` / `BackgroundWorkerTests` / `BackgroundPacketTests` / `BackgroundDiagnosticsTests`
+  - `APIClientTests`
+  - `PromptAssemblerTests`
+  - `TruncationStrategyTests`
+  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略）
+  - `CompressionStrategyTests`
+  - `DatabaseManagerMemoryTests`
+- 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。

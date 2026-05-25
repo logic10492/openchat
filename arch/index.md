@@ -153,7 +153,7 @@ ChatViewModel
 | [modules/stage/index.md](modules/stage/index.md) | Stage 目标架构（多角色参与 / 导演 agent / 用户导演输入） |
 | [modules/prompt-assembly.md](modules/prompt-assembly.md) | Prompt 拼装引擎（顺序 / token 预算 / 接口） |
 | [modules/context-manager.md](modules/context-manager.md) | 上下文管理（40%策略 / 剔除 / 压缩） |
-| [modules/chat.md](modules/chat.md) | 聊天模块（消息展示 / 流式输出 / 交互） |
+| [modules/chat/index.md](modules/chat/index.md) | 聊天模块（消息展示 / 流式输出 / 交互） |
 | [modules/memory/index.md](modules/memory/index.md) | 跨对话记忆系统导航（架构 / 数据模型 / 提取 / 检索 / Hindsight-lite） |
 | [modules/settings/index.md](modules/settings/index.md) | 设置模块（API 配置 / 参数 / 数据管理） |
 | [AntiEntropy/index.md](AntiEntropy/index.md) | 传播审计与 arch-test / arch-src / src-test 三边一致性结论 |

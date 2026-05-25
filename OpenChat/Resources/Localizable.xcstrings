@@ -276,6 +276,17 @@
         }
       }
     },
+    "Character reply" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色回复"
+          }
+        }
+      }
+    },
     "Character card format is not supported." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1066,6 +1077,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息"
+          }
+        }
+      }
+    },
+    "Prefill dialogue" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预填充对话"
+          }
+        }
+      }
+    },
+    "Prefill mode: this send saves as a character reply; the next one saves as user input." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预填充模式：本次发送会保存为角色回复；下一次会保存为用户输入。"
+          }
+        }
+      }
+    },
+    "Prefill mode: this send saves as user input; the next one saves as a character reply." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预填充模式：本次发送会保存为用户输入；下一次会保存为角色回复。"
+          }
+        }
+      }
+    },
+    "User message" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户消息"
           }
         }
       }

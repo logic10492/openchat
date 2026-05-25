@@ -340,7 +340,7 @@
 
 ### 三边一致性
 
-- `arch-src`：`arch/modules/prompt-assembly.md`、`.github/instructions/prompt-engine.instructions.md`、`arch/index.md`、`arch/modules/chat.md`、`arch/modules/world-book.md`、`arch/modules/memory/index.md`、`arch/data-model.md` 已同步四层顺序、labeled blocks、world book position 兼容和 time-in-current-turn。
+- `arch-src`：`arch/modules/prompt-assembly.md`、`.github/instructions/prompt-engine.instructions.md`、`arch/index.md`、`arch/modules/chat/index.md`、`arch/modules/world-book.md`、`arch/modules/memory/index.md`、`arch/data-model.md` 已同步四层顺序、labeled blocks、world book position 兼容和 time-in-current-turn。
 - `arch-test`：`PromptAssemblerTests` 覆盖四层顺序、preview 四层结构、world book position 兼容、labeled blocks、time-in-current-turn；`ChatViewModelPromptAssemblyTests` 覆盖真实 API request 的 history -> example -> memory -> current turn 顺序和当前输入去重。
 - `src-test`：focused prompt suite 13 tests passed；focused chat prompt suite 9 tests passed；combined prompt/chat suite 22 tests passed；full suite 197 tests / 41 suites passed。
 
@@ -380,7 +380,7 @@
 
 ### 三边一致性
 
-- `arch-src`：`arch/modules/memory/index.md` 已更新 6.1 触发时机（前置同步提取）、6.2 提取步骤（sortOrder cutoff + 更新 lastExtractedSortOrder）、6.4 cutoff 策略（sortOrder 替代 createdAt）、6.5 UI 指示器（MemoryExtractionPhase + MemoryExtractionIndicator）。`arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列。`arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
+- `arch-src`：`arch/modules/memory/index.md` 已更新 6.1 触发时机（前置同步提取）、6.2 提取步骤（sortOrder cutoff + 更新 lastExtractedSortOrder）、6.4 cutoff 策略（sortOrder 替代 createdAt）、6.5 UI 指示器（MemoryExtractionPhase + MemoryExtractionIndicator）。`arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列。`arch/modules/chat/view-model.md` 已更新记忆提取触发说明。
 - `arch-test`：`MemoryExtractionCutoffTests` 覆盖 sortOrder cutoff、首次提取全量处理、消息不足跳过、并发消息不被跳过。`MemoryExtractionPhaseTests` 覆盖 isActive 和 Equatable 语义。`MigrationTests` 覆盖 v13 列存在性和 NULL 默认值。`ChatViewModelPromptAssemblyTests` 覆盖 ViewModel 重建后仍按 DB sortOrder 边界触发提取。
 - `src-test`：focused suite 49 tests / 4 suites passed；full suite 218 tests / 45 suites passed，`** TEST SUCCEEDED **`。
 

@@ -283,7 +283,7 @@ xcodebuild test -project OpenChat.xcodeproj -scheme OpenChat -destination 'platf
 
 - `arch/data-model.md` 已新增 `conversation.lastExtractedSortOrder` 列，字段与 `v13_add_last_extracted_sort_order` 一致。
 - `arch/modules/memory/` 已从单一 index 拆分为 `architecture.md`、`data-model.md`、`embedding-vector-store.md`、`extraction.md`、`retrieval-prompt.md`、`ui-management.md`、`testing.md` 和 `hindsight-lite.md`；触发时机、sortOrder cutoff、UI 指示器、Phase A retrieval-order-preserving prompt trim、Phase B recall trace / fallback tiers 与 Hindsight-lite 未实现边界均已回写。
-- `arch/modules/chat.md` 已更新 4.6 记忆提取触发说明。
+- `arch/modules/chat/view-model.md` 已更新记忆提取触发说明。
 
 ### arch-test
 

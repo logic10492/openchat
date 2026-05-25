@@ -6,8 +6,10 @@ struct ChatInputBarHostView: View {
     var body: some View {
         InputBarView(
             text: binding(\.inputText),
+            isPrefillModeEnabled: binding(\.isPrefillModeEnabled),
             inputRole: binding(\.stageInputRole),
             responderIds: binding(\.stageResponderIds),
+            prefillNextRole: viewModel.prefillNextRole,
             stageParticipants: viewModel.stageParticipants,
             showsDirectorTools: viewModel.isStageEnabled,
             isGenerating: viewModel.isGenerating,

@@ -5,6 +5,7 @@ enum UITestingSupport {
     static let launchArgument = "--ui-testing"
     static let edgeEffectsLaunchArgument = "--ui-testing-chat-edge-effects"
     static let contextMenuLaunchArgument = "--ui-testing-chat-context-menu"
+    static let prefillLaunchArgument = "--ui-testing-chat-prefill"
 
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -16,6 +17,10 @@ enum UITestingSupport {
 
     private static var usesContextMenuFixture: Bool {
         ProcessInfo.processInfo.arguments.contains(contextMenuLaunchArgument)
+    }
+
+    private static var usesPrefillFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains(prefillLaunchArgument)
     }
 
     @MainActor
@@ -36,7 +41,7 @@ enum UITestingSupport {
             apiKeyStore: InMemoryAPIKeyStore()
         )
         let appState = AppState()
-        appState.selectedConversationID = Seed.conversationId
+        appState.selectedConversationID = usesPrefillFixture ? Seed.prefillConversationId : Seed.conversationId
         return (container, appState)
     }
 
@@ -119,6 +124,23 @@ enum UITestingSupport {
             createdAt: now,
             updatedAt: now
         )
+        let prefillConversation = ConversationRecord(
+            id: Seed.prefillConversationId,
+            title: "UI Prefill Test",
+            characterCardId: Seed.maraCardId,
+            apiEndpointId: Seed.endpointId,
+            modelName: Seed.modelId,
+            contextStrategy: ContextStrategy.truncation.rawValue,
+            compressionMode: CompressionMode.standard.rawValue,
+            customScenario: nil,
+            modelParameters: nil,
+            slowPlotMode: false,
+            isTitleGenerated: true,
+            isPinned: false,
+            lastExtractedSortOrder: nil,
+            createdAt: now,
+            updatedAt: now
+        )
         let stage = StageRecord(
             id: Seed.stageId,
             conversationId: conversation.id,
@@ -158,9 +180,25 @@ enum UITestingSupport {
                 try mara.insert(db)
                 try io.insert(db)
                 try conversation.insert(db)
+                try prefillConversation.insert(db)
                 try stage.insert(db)
                 try maraParticipant.insert(db)
                 try ioParticipant.insert(db)
+                if usesPrefillFixture {
+                    let prefillSeed = MessageRecord(
+                        id: Seed.prefillSeedUserMessageId,
+                        conversationId: prefillConversation.id,
+                        role: "user",
+                        content: "Prefill fixture opener",
+                        tokenCount: 3,
+                        isCompressed: false,
+                        originalContent: nil,
+                        sortOrder: 0,
+                        createdAt: now.addingTimeInterval(-300),
+                        reasoningContent: nil
+                    )
+                    try prefillSeed.insert(db)
+                }
                 if includeEdgeEffectMessages {
                     for message in edgeEffectMessages(conversationId: conversation.id, baseDate: now.addingTimeInterval(-7200)) {
                         try message.insert(db)
@@ -245,6 +283,7 @@ enum UITestingSupport {
         static let modelRecordId = "ui-test-model-record"
         static let modelId = "ui-test-model"
         static let conversationId = "ui-test-conversation"
+        static let prefillConversationId = "ui-test-prefill-conversation"
         static let maraCardId = "ui-test-card-mara"
         static let ioCardId = "ui-test-card-io"
         static let stageId = "ui-test-stage"
@@ -252,6 +291,7 @@ enum UITestingSupport {
         static let ioParticipantId = "ui-test-participant-io"
         static let contextMenuUserMessageId = "ui-context-menu-user"
         static let contextMenuAssistantMessageId = "ui-context-menu-assistant"
+        static let prefillSeedUserMessageId = "ui-prefill-seed-user"
     }
 }
 

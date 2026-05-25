@@ -33,6 +33,23 @@ private final class RequestCapture: @unchecked Sendable {
     }
 }
 
+private final class RequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func increment() {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+    }
+
+    func load() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+}
+
 private struct ChatFailingEmbeddingProvider: EmbeddingProvider {
     func embed(_ text: String, isQuery: Bool) throws -> [Float] {
         throw MemoryError.modelLoadFailed(
@@ -576,6 +593,250 @@ struct ChatViewModelPromptAssemblyTests {
             $0.role == "user" && $0.content == "What is this?"
         }
         #expect(storedCurrentInputs.count == 1)
+    }
+
+    @Test func test_prefillMode_afterUserInputAlternatesAssistantAndUserWithoutNetworkRequest() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard(id: "prefill-card", name: "Mara")
+        var conversation = TestHelpers.makeConversation(id: "prefill-conversation", slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.isTitleGenerated = true
+        try await databaseManager.saveCharacterCard(card)
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMessage(
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "user",
+                content: "I step into the room.",
+                sortOrder: 1
+            )
+        )
+
+        let requestCounter = RequestCounter()
+        let session = MockURLProtocol.makeSession { _ in
+            requestCounter.increment()
+            throw URLError(.badServerResponse)
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        viewModel.isPrefillModeEnabled = true
+        viewModel.inputText = "Mara answers before the model is called."
+        await viewModel.sendMessage()
+        viewModel.inputText = "I answer the hand-authored reply."
+        await viewModel.sendMessage()
+        viewModel.inputText = "Mara continues the hand-authored exchange."
+        await viewModel.sendMessage()
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        #expect(storedMessages.map(\.role) == ["user", "assistant", "user", "assistant"])
+        #expect(storedMessages.map(\.content) == [
+            "I step into the room.",
+            "Mara answers before the model is called.",
+            "I answer the hand-authored reply.",
+            "Mara continues the hand-authored exchange.",
+        ])
+        #expect(storedMessages.map(\.speakerName) == [nil, "Mara", nil, "Mara"])
+        #expect(storedMessages.map(\.tokenCount) == [
+            TokenCounter.count("I step into the room."),
+            TokenCounter.count("Mara answers before the model is called."),
+            TokenCounter.count("I answer the hand-authored reply."),
+            TokenCounter.count("Mara continues the hand-authored exchange."),
+        ])
+        #expect(viewModel.messages.map(\.role) == ["user", "assistant", "user", "assistant"])
+        #expect(viewModel.prefillNextRole == .userMessage)
+        #expect(viewModel.inputText.isEmpty)
+        #expect(viewModel.isPrefillModeEnabled)
+        #expect(viewModel.streamTask == nil)
+        #expect(viewModel.isGenerating == false)
+        #expect(requestCounter.load() == 0)
+    }
+
+    @Test func test_prefillMode_withoutPriorUserInputStartsWithUserMessage() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard(id: "prefill-empty-card", name: "Mara")
+        var conversation = TestHelpers.makeConversation(id: "prefill-empty-conversation", slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.isTitleGenerated = true
+        try await databaseManager.saveCharacterCard(card)
+        try await databaseManager.saveConversation(conversation)
+
+        let requestCounter = RequestCounter()
+        let session = MockURLProtocol.makeSession { _ in
+            requestCounter.increment()
+            throw URLError(.badServerResponse)
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        #expect(viewModel.prefillNextRole == .userMessage)
+        viewModel.isPrefillModeEnabled = true
+        viewModel.inputText = "I start by writing the user side."
+        await viewModel.sendMessage()
+        viewModel.inputText = "Mara follows with the character side."
+        await viewModel.sendMessage()
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        #expect(storedMessages.map(\.role) == ["user", "assistant"])
+        #expect(storedMessages.map(\.content) == [
+            "I start by writing the user side.",
+            "Mara follows with the character side.",
+        ])
+        #expect(storedMessages.map(\.speakerName) == [nil, "Mara"])
+        #expect(viewModel.prefillNextRole == .userMessage)
+        #expect(viewModel.isPrefillModeEnabled)
+        #expect(requestCounter.load() == 0)
+    }
+
+    @Test func test_prefilledExchange_isIncludedInNextGenerationHistory() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "prefill-endpoint",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "prefill-model-record",
+            endpointId: endpoint.id,
+            modelId: "prefill-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(id: "prefill-history-card", name: "Mara")
+        var conversation = TestHelpers.makeConversation(id: "prefill-history-conversation", slowPlotMode: false)
+        conversation.characterCardId = card.id
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.saveCharacterCard(card)
+        try await databaseManager.saveConversation(conversation)
+        try await databaseManager.saveMessage(
+            TestHelpers.makeMessage(
+                conversationId: conversation.id,
+                role: "user",
+                content: "I provide the last ordinary user input.",
+                sortOrder: 1
+            )
+        )
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Generated after prefill"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: EmbeddingService(),
+                vectorStore: VectorStore(databaseManager: databaseManager),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        viewModel.isPrefillModeEnabled = true
+        viewModel.inputText = "Mara writes the hand-authored opening reply."
+        await viewModel.sendMessage()
+        viewModel.inputText = "I answer while prefill remains enabled."
+        await viewModel.sendMessage()
+        viewModel.inputText = "Mara keeps speaking in the hand-authored exchange."
+        await viewModel.sendMessage()
+        viewModel.isPrefillModeEnabled = false
+        viewModel.inputText = "Continue from that opening."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        let handAuthoredHistory = request.messages.filter {
+            $0.content == "Mara writes the hand-authored opening reply."
+                || $0.content == "I answer while prefill remains enabled."
+                || $0.content == "Mara keeps speaking in the hand-authored exchange."
+        }
+        #expect(handAuthoredHistory.map(\.role) == ["assistant", "user", "assistant"])
+        #expect(handAuthoredHistory.map(\.content) == [
+            "Mara writes the hand-authored opening reply.",
+            "I answer while prefill remains enabled.",
+            "Mara keeps speaking in the hand-authored exchange.",
+        ])
+        let currentInputs = request.messages.filter {
+            $0.role == "user" && $0.content.contains("Continue from that opening.")
+        }
+        #expect(currentInputs.count == 1)
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        #expect(storedMessages.map(\.role) == ["user", "assistant", "user", "assistant", "user", "assistant"])
+        #expect(storedMessages.map(\.content) == [
+            "I provide the last ordinary user input.",
+            "Mara writes the hand-authored opening reply.",
+            "I answer while prefill remains enabled.",
+            "Mara keeps speaking in the hand-authored exchange.",
+            "Continue from that opening.",
+            "Generated after prefill",
+        ])
     }
 
     @Test func test_directorInput_isPersistedAsStageInstructionNotUserMessage() async throws {

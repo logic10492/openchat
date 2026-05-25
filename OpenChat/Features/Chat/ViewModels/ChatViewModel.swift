@@ -40,6 +40,7 @@ final class ChatViewModel {
     private(set) var stageInstructions: [StageInstructionRecord] = []
 
     var inputText = ""
+    var isPrefillModeEnabled = false
     var stageInputRole: StageInputRole = .participant
     var stageResponderIds: [String] = []
     private var isStageResponderSelectionCustomized = false
@@ -70,6 +71,10 @@ final class ChatViewModel {
               let card = availableCharacterCards.first(where: { $0.id == id }),
               let worldBookId = card.worldBookId else { return nil }
         return availableWorldBooks.first(where: { $0.id == worldBookId })?.name
+    }
+
+    var prefillNextRole: PrefillInputRole {
+        messages.last?.role == "user" ? .assistantReply : .userMessage
     }
 
     var showsConversationCharacterPicker: Bool {
@@ -255,6 +260,11 @@ final class ChatViewModel {
         guard !trimmedInput.isEmpty, !isGenerating else { return }
 
         do {
+            if isPrefillModeEnabled, !isStageEnabled {
+                try await savePrefilledMessage(trimmedInput)
+                inputText = ""
+                return
+            }
             if stageInputRole.isDirectorInstructionInput {
                 try await saveDirectorInstruction(trimmedInput)
                 inputText = ""
@@ -269,6 +279,41 @@ final class ChatViewModel {
         } catch {
             appState.present(error: error.localizedDescription)
         }
+    }
+
+    private func savePrefilledMessage(_ content: String) async throws {
+        let role = nextPrefillRole
+        let characterCard: CharacterCardRecord?
+        if role == "assistant" {
+            characterCard = try await databaseManager.fetchCharacterCard(
+                id: selectedCharacterCardID ?? conversation.characterCardId
+            )
+        } else {
+            characterCard = nil
+        }
+        let sortOrder = try await databaseManager.nextSortOrder(conversationId: conversation.id)
+        var record = MessageRecord(
+            id: UUID().uuidString,
+            conversationId: conversation.id,
+            role: role,
+            content: content,
+            tokenCount: TokenCounter.count(content),
+            isCompressed: false,
+            originalContent: nil,
+            sortOrder: sortOrder,
+            createdAt: .now,
+            reasoningContent: nil
+        )
+        record.speakerName = characterCard?.name
+        try await databaseManager.saveMessage(record)
+        messages.append(MessageDisplayItem(record: record))
+        if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
+            conversation = refreshed
+        }
+    }
+
+    private var nextPrefillRole: String {
+        messages.last?.role == "user" ? "assistant" : "user"
     }
 
     func renameConversation(newTitle: String) async {
@@ -519,6 +564,11 @@ final class ChatViewModel {
         }
         usesCustomModelParameters = usesCustom
     }
+}
+
+enum PrefillInputRole: Equatable {
+    case userMessage
+    case assistantReply
 }
 
 private extension ModelParameters {

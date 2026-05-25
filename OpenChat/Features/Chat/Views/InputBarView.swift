@@ -2,8 +2,10 @@ import SwiftUI
 
 struct InputBarView: View {
     @Binding var text: String
+    @Binding var isPrefillModeEnabled: Bool
     @Binding var inputRole: StageInputRole
     @Binding var responderIds: [String]
+    var prefillNextRole: PrefillInputRole = .userMessage
     var stageParticipants: [StageParticipantRecord] = []
     var showsDirectorTools = false
     let isGenerating: Bool
@@ -37,6 +39,13 @@ struct InputBarView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
+            if !showsDirectorTools, isPrefillModeEnabled {
+                prefillModeHint
+                    .frame(maxWidth: 920, alignment: .leading)
+                    .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
             composerRow
                 .frame(maxWidth: 920)
                 .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
@@ -49,6 +58,8 @@ struct InputBarView: View {
             if !newValue {
                 isDirectorPanelExpanded = false
                 inputRole = .participant
+            } else {
+                isPrefillModeEnabled = false
             }
         }
     }
@@ -58,12 +69,32 @@ struct InputBarView: View {
             if showsDirectorTools {
                 directorToolButton
                     .padding(.bottom, 4)
+            } else {
+                prefillMenu
+                    .padding(.bottom, 4)
             }
 
             textInput
 
             sendButton
                 .padding(.bottom, 4)
+        }
+    }
+
+    private var prefillModeHint: some View {
+        Text(prefillModeHintText)
+            .font(.caption)
+            .foregroundStyle(Color.secondary)
+            .padding(.horizontal, 12)
+            .accessibilityIdentifier("chat.prefillModeHint")
+    }
+
+    private var prefillModeHintText: String {
+        switch prefillNextRole {
+        case .userMessage:
+            String(localized: "Prefill mode: this send saves as user input; the next one saves as a character reply.")
+        case .assistantReply:
+            String(localized: "Prefill mode: this send saves as a character reply; the next one saves as user input.")
         }
     }
 
@@ -149,6 +180,14 @@ struct InputBarView: View {
         if showsDirectorTools, inputRole.isDirectorInstructionInput {
             return String(localized: "Director instruction")
         }
+        if !showsDirectorTools, isPrefillModeEnabled {
+            switch prefillNextRole {
+            case .userMessage:
+                return String(localized: "User message")
+            case .assistantReply:
+                return String(localized: "Character reply")
+            }
+        }
         return String(localized: "Message")
     }
 
@@ -169,6 +208,45 @@ struct InputBarView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "Director Tools"))
         .accessibilityIdentifier("chat.directorToolsButton")
+    }
+
+    private var prefillMenu: some View {
+        Menu {
+            Button {
+                isPrefillModeEnabled = false
+            } label: {
+                Label(String(localized: "User message"), systemImage: "person")
+            }
+            .disabled(!isPrefillModeEnabled)
+            .accessibilityIdentifier("chat.inputMode.userMessage")
+
+            Button {
+                isPrefillModeEnabled = true
+            } label: {
+                Label(String(localized: "Prefill dialogue"), systemImage: "quote.bubble")
+            }
+            .disabled(isPrefillModeEnabled)
+            .accessibilityIdentifier("chat.inputMode.prefill")
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(isPrefillModeEnabled ? Color.accentColor : Color.secondary)
+                .frame(width: 34, height: 34)
+                .background {
+                    inputModeMenuGlassFill(isActive: isPrefillModeEnabled)
+                }
+                .overlay {
+                    inputModeMenuGlassStroke(isActive: isPrefillModeEnabled)
+                }
+                .inputLiquidGlass(in: Circle())
+                .shadow(color: Color.black.opacity(isPrefillModeEnabled ? 0.12 : 0.06), radius: 8, x: 0, y: 3)
+        }
+        .labelStyle(.iconOnly)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Input Mode"))
+        .accessibilityValue(isPrefillModeEnabled ? String(localized: "Prefill dialogue") : String(localized: "User message"))
+        .accessibilityIdentifier("chat.inputModeMenu")
     }
 
     private var directorPanel: some View {
@@ -248,6 +326,25 @@ struct InputBarView: View {
                 lineWidth: 0.8
             )
     }
+
+    @ViewBuilder
+    private func inputModeMenuGlassFill(isActive: Bool) -> some View {
+        if #available(iOS 26.0, *) {
+            Circle()
+                .fill((isActive ? Color.accentColor : Color.white).opacity(isActive ? 0.10 : 0.05))
+        } else {
+            Circle()
+                .fill(.ultraThinMaterial)
+        }
+    }
+
+    private func inputModeMenuGlassStroke(isActive: Bool) -> some View {
+        Circle()
+            .stroke(
+                isActive ? Color.accentColor.opacity(0.38) : Color.white.opacity(0.28),
+                lineWidth: 0.8
+            )
+    }
 }
 
 #Preview("Stage Composer") {
@@ -255,8 +352,10 @@ struct InputBarView: View {
         Spacer()
         InputBarView(
             text: .constant("Set the next beat, then let Mara answer."),
+            isPrefillModeEnabled: .constant(false),
             inputRole: .constant(.participant),
             responderIds: .constant(["stage-participant-mara", "stage-participant-io"]),
+            prefillNextRole: .userMessage,
             stageParticipants: [
                 StageParticipantRecord(
                     id: "stage-participant-mara",
