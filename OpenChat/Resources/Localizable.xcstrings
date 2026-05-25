@@ -167,6 +167,22 @@
         }
       }
     },
+    "Vibe Background (Beta)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Vibe Background (Beta)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "氛围背景（测试版）"
+          }
+        }
+      }
+    },
     "Assistant" : {
       "extractionState" : "stale",
       "localizations" : {

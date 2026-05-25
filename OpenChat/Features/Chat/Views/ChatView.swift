@@ -7,6 +7,7 @@ struct ChatView: View {
     @State private var editedMessageText = ""
     @State private var isShowingCharacterPicker = false
     @State private var selectedCharacterPickerWorldBookID: String?
+    @AppStorage(VibeBackgroundPreference.isEnabledKey) private var isVibeBackgroundEnabled = VibeBackgroundPreference.defaultIsEnabled
 
     init(viewModel: ChatViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -59,7 +60,10 @@ struct ChatView: View {
 
     private var chatContent: some View {
         ZStack {
-            ChatConversationBackground()
+            ChatConversationBackground(
+                isGenerating: viewModel.isGenerating,
+                isEnabled: isVibeBackgroundEnabled
+            )
             ChatEdgeEffectViewport {
                 ChatTimelineHostView(
                     viewModel: viewModel,

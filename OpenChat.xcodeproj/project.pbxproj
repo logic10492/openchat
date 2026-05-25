@@ -11,6 +11,7 @@
 		01075782254FFA880085A8FB /* BackgroundSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E0B2ABECC2D0824838EC1DE /* BackgroundSourceTests.swift */; };
 		019F01970A7ED84A4401FB92 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C90C70A1E69DCAFC55B0D97 /* ChatView.swift */; };
 		01A3C937AA4F4C61A1B64D00 /* ChatChromeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A3C937AA4F4C61A1B64C00 /* ChatChromeViews.swift */; };
+		A1B2C301D4E5F60718294001 /* ChatConversationBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293001 /* ChatConversationBackground.swift */; };
 		01A3C937AA4F4C61A1B64D01 /* ChatEdgeEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A3C937AA4F4C61A1B64C01 /* ChatEdgeEffects.swift */; };
 		01A3C937AA4F4C61A1B64D02 /* ChatInputBarHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A3C937AA4F4C61A1B64C02 /* ChatInputBarHostView.swift */; };
 		01A3C937AA4F4C61A1B64D03 /* ChatNavigationToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A3C937AA4F4C61A1B64C03 /* ChatNavigationToolbar.swift */; };
@@ -107,6 +108,20 @@
 		59D40693B2FA74FC966E0A3F /* ResponsesAPIResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F5B53AA65415CDAEE2DBBA /* ResponsesAPIResponse.swift */; };
 		5BA9C0A39D784350236493BF /* InputBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC7C7BC53398395272506E7 /* InputBarView.swift */; };
 		5BA9C0A39D784350236493C0 /* InputBarView+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC7C7BC53398395272506F0 /* InputBarView+Preview.swift */; };
+		A1B2C301D4E5F60718294002 /* VibeBackgroundBlob.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293002 /* VibeBackgroundBlob.swift */; };
+		A1B2C301D4E5F60718294003 /* VibeBackgroundCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293003 /* VibeBackgroundCanvas.swift */; };
+		A1B2C301D4E5F60718294009 /* VibeBackgroundDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293009 /* VibeBackgroundDriver.swift */; };
+		A1B2C301D4E5F60718294004 /* VibeBackgroundPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293004 /* VibeBackgroundPalette.swift */; };
+		A1B2C301D4E5F60718294005 /* VibeBackgroundPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293005 /* VibeBackgroundPhase.swift */; };
+		A1B2C301D4E5F6071829400A /* VibeBackgroundParticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F6071829300A /* VibeBackgroundParticle.swift */; };
+		A1B2C301D4E5F6071829400E /* VibeBackgroundPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F6071829300E /* VibeBackgroundPreference.swift */; };
+		A1B2C301D4E5F60718294006 /* VibeBackgroundRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293006 /* VibeBackgroundRenderer.swift */; };
+		A1B2C301D4E5F60718294007 /* VibeBackgroundShade.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293007 /* VibeBackgroundShade.swift */; };
+		A1B2C301D4E5F6071829400B /* VibeBackgroundUIKitPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F6071829300B /* VibeBackgroundUIKitPalette.swift */; };
+		A1B2C301D4E5F6071829400C /* VibeBackgroundUIKitRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F6071829300C /* VibeBackgroundUIKitRepresentable.swift */; };
+		A1B2C301D4E5F6071829400D /* VibeBackgroundUIKitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F6071829300D /* VibeBackgroundUIKitView.swift */; };
+		A1B2C301D4E5F60718294008 /* VibeBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718293008 /* VibeBackgroundView.swift */; };
+		A1B2C301D4E5F60718295001 /* VibeBackgroundDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301D4E5F60718295000 /* VibeBackgroundDriverTests.swift */; };
 		5C1BFA4F23866482EF582576 /* StageSpeakerBlockParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C9A001FF3F8410A90176F06 /* StageSpeakerBlockParserTests.swift */; };
 		5C84952112B1158B3BD9060C /* MemoryError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EFF3FF49F0CF6BB7AE7345A /* MemoryError.swift */; };
 		5D7F749FF7CDC0CD179E84A9 /* StageInstructionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97275F0F8F37FB005B2C710D /* StageInstructionRecord.swift */; };
@@ -298,6 +313,7 @@
 		0EEC252C23DA4B7D45F82ADE /* WorldBookError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookError.swift; sourceTree = "<group>"; };
 		0F30C0D529E1B6894B83606B /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		01A3C937AA4F4C61A1B64C00 /* ChatChromeViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatChromeViews.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293001 /* ChatConversationBackground.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatConversationBackground.swift; sourceTree = "<group>"; };
 		01A3C937AA4F4C61A1B64C01 /* ChatEdgeEffects.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatEdgeEffects.swift; sourceTree = "<group>"; };
 		01A3C937AA4F4C61A1B64C02 /* ChatInputBarHostView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatInputBarHostView.swift; sourceTree = "<group>"; };
 		01A3C937AA4F4C61A1B64C03 /* ChatNavigationToolbar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatNavigationToolbar.swift; sourceTree = "<group>"; };
@@ -307,6 +323,20 @@
 		1211871F0BCDCDEE249AD61D /* MemoryManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryManager.swift; sourceTree = "<group>"; };
 		1259E973DAD4573B74556FD8 /* MemoryEntryProvenanceRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryEntryProvenanceRecord.swift; sourceTree = "<group>"; };
 		134DF09C9333EFF04EE16505 /* StatsBarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatsBarView.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293002 /* VibeBackgroundBlob.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundBlob.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293003 /* VibeBackgroundCanvas.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundCanvas.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293009 /* VibeBackgroundDriver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundDriver.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293004 /* VibeBackgroundPalette.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundPalette.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293005 /* VibeBackgroundPhase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundPhase.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F6071829300A /* VibeBackgroundParticle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundParticle.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F6071829300E /* VibeBackgroundPreference.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundPreference.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293006 /* VibeBackgroundRenderer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundRenderer.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293007 /* VibeBackgroundShade.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundShade.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F6071829300B /* VibeBackgroundUIKitPalette.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundUIKitPalette.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F6071829300C /* VibeBackgroundUIKitRepresentable.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundUIKitRepresentable.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F6071829300D /* VibeBackgroundUIKitView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundUIKitView.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718293008 /* VibeBackgroundView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundView.swift; sourceTree = "<group>"; };
+		A1B2C301D4E5F60718295000 /* VibeBackgroundDriverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VibeBackgroundDriverTests.swift; sourceTree = "<group>"; };
 		13DACDAEAEDCEDE523478C99 /* DatabaseManager+EndpointModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "DatabaseManager+EndpointModels.swift"; sourceTree = "<group>"; };
 		15BFF1D5B372A783F7083828 /* AgentExecutionContext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentExecutionContext.swift; sourceTree = "<group>"; };
 		189DC4157D079B0CF9379519 /* MemoryExtractionIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryExtractionIndicator.swift; sourceTree = "<group>"; };
@@ -878,6 +908,7 @@
 			isa = PBXGroup;
 			children = (
 				01A3C937AA4F4C61A1B64C00 /* ChatChromeViews.swift */,
+				A1B2C301D4E5F60718293001 /* ChatConversationBackground.swift */,
 				01A3C937AA4F4C61A1B64C01 /* ChatEdgeEffects.swift */,
 				01A3C937AA4F4C61A1B64C02 /* ChatInputBarHostView.swift */,
 				579B31A57D574F0595987000 /* ChatMessageTimelineView.swift */,
@@ -896,6 +927,19 @@
 				1F9B7E2A4C6D8E901234ABCC /* ReasoningDisclosureView.swift */,
 				419159E2344BD0D099F24690 /* RetrievalTraceView.swift */,
 				134DF09C9333EFF04EE16505 /* StatsBarView.swift */,
+				A1B2C301D4E5F60718293002 /* VibeBackgroundBlob.swift */,
+				A1B2C301D4E5F60718293003 /* VibeBackgroundCanvas.swift */,
+				A1B2C301D4E5F60718293009 /* VibeBackgroundDriver.swift */,
+				A1B2C301D4E5F60718293004 /* VibeBackgroundPalette.swift */,
+				A1B2C301D4E5F60718293005 /* VibeBackgroundPhase.swift */,
+				A1B2C301D4E5F6071829300A /* VibeBackgroundParticle.swift */,
+				A1B2C301D4E5F6071829300E /* VibeBackgroundPreference.swift */,
+				A1B2C301D4E5F60718293006 /* VibeBackgroundRenderer.swift */,
+				A1B2C301D4E5F60718293007 /* VibeBackgroundShade.swift */,
+				A1B2C301D4E5F6071829300B /* VibeBackgroundUIKitPalette.swift */,
+				A1B2C301D4E5F6071829300C /* VibeBackgroundUIKitRepresentable.swift */,
+				A1B2C301D4E5F6071829300D /* VibeBackgroundUIKitView.swift */,
+				A1B2C301D4E5F60718293008 /* VibeBackgroundView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1067,6 +1111,7 @@
 				AD10D94630F7F1751B4FB06A /* ChatViewModelPromptAssemblyTests.swift */,
 				1D08C65D307DE834C755022D /* MemoryExtractionPhaseTests.swift */,
 				484862F6795AE797A24D2763 /* StreamingRenderSegmentationTests.swift */,
+				A1B2C301D4E5F60718295000 /* VibeBackgroundDriverTests.swift */,
 			);
 			path = ChatTests;
 			sourceTree = "<group>";
@@ -1616,6 +1661,7 @@
 				F929E8BDD44AB9F8D66ED1AB /* ChatViewModel+Support.swift in Sources */,
 				578AB3C37EDAA3CC667DF65D /* ChatViewModel.swift in Sources */,
 				01A3C937AA4F4C61A1B64D00 /* ChatChromeViews.swift in Sources */,
+				A1B2C301D4E5F60718294001 /* ChatConversationBackground.swift in Sources */,
 				01A3C937AA4F4C61A1B64D01 /* ChatEdgeEffects.swift in Sources */,
 				01A3C937AA4F4C61A1B64D02 /* ChatInputBarHostView.swift in Sources */,
 				579B31A57D574F0595987100 /* ChatMessageTimelineView.swift in Sources */,
@@ -1630,6 +1676,19 @@
 				BB27C1DEB4097F6825B821FB /* MessageActionBar.swift in Sources */,
 				01C4A87DEED04ADDB0D0F110 /* MessageBubbleChrome.swift in Sources */,
 				7EBCFAA7C27643E380DB627A /* MessageBubbleView.swift in Sources */,
+				A1B2C301D4E5F60718294002 /* VibeBackgroundBlob.swift in Sources */,
+				A1B2C301D4E5F60718294003 /* VibeBackgroundCanvas.swift in Sources */,
+				A1B2C301D4E5F60718294009 /* VibeBackgroundDriver.swift in Sources */,
+				A1B2C301D4E5F60718294004 /* VibeBackgroundPalette.swift in Sources */,
+				A1B2C301D4E5F60718294005 /* VibeBackgroundPhase.swift in Sources */,
+				A1B2C301D4E5F6071829400A /* VibeBackgroundParticle.swift in Sources */,
+				A1B2C301D4E5F6071829400E /* VibeBackgroundPreference.swift in Sources */,
+				A1B2C301D4E5F60718294006 /* VibeBackgroundRenderer.swift in Sources */,
+				A1B2C301D4E5F60718294007 /* VibeBackgroundShade.swift in Sources */,
+				A1B2C301D4E5F6071829400B /* VibeBackgroundUIKitPalette.swift in Sources */,
+				A1B2C301D4E5F6071829400C /* VibeBackgroundUIKitRepresentable.swift in Sources */,
+				A1B2C301D4E5F6071829400D /* VibeBackgroundUIKitView.swift in Sources */,
+				A1B2C301D4E5F60718294008 /* VibeBackgroundView.swift in Sources */,
 				7EBCFAA7C27643E380DB6280 /* MessageBubbleView+Preview.swift in Sources */,
 				1F9B7E2A4C6D8E901234ABCD /* ReasoningDisclosureView.swift in Sources */,
 				649018A05E7715878E4F8AAE /* RetrievalTraceView.swift in Sources */,
@@ -1737,6 +1796,7 @@
 				2D88AC324374366AD8EA0235 /* ChatViewModelPromptAssemblyTests.swift in Sources */,
 				734152F8702F50ED74A15033 /* MemoryExtractionPhaseTests.swift in Sources */,
 				4CDC87486D199F0340D79DA6 /* StreamingRenderSegmentationTests.swift in Sources */,
+				A1B2C301D4E5F60718295001 /* VibeBackgroundDriverTests.swift in Sources */,
 				2CF82728ECEC59AD63C3A8FD /* APIEndpointEditorViewModelSecurityTests.swift in Sources */,
 				B5D13E81D3631B0C5B2B4EF5 /* SettingsViewModelWorldBookIndexTests.swift in Sources */,
 				AEAD5ADA2700CD9139E3E177 /* StageManagementViewModelTests.swift in Sources */,

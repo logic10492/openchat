@@ -271,7 +271,7 @@ private struct ChatEmptyConversationView: View {
 
 #Preview("Telegram Stage Timeline") {
     ZStack {
-        ChatConversationBackground()
+        ChatConversationBackground(isGenerating: false, isEnabled: true)
         ChatMessageTimelineView(
             messages: MessageDisplayItem.stagePreviewMessages(),
             isGenerating: false,

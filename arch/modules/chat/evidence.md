@@ -1,9 +1,12 @@
 # 聊天模块实现证据
 
-## 实现证据（更新至 2026-05-17）
+## 实现证据（更新至 2026-05-26）
 
 - 代码位置：
   - `OpenChat/Features/Chat/Views/ChatView.swift` — 主界面 + 记忆更新 banner
+  - `OpenChat/Features/Chat/Views/ChatConversationBackground.swift` — 聊天背景入口
+  - `OpenChat/Features/Chat/Views/VibeBackgroundView.swift`、`VibeBackgroundUIKitRepresentable.swift`、`VibeBackgroundUIKitView.swift`、`VibeBackgroundDriver.swift`、`VibeBackgroundUIKitPalette.swift`、`VibeBackgroundParticle.swift` — 状态驱动动态背景首版（当前渲染路径）
+  - `OpenChat/Features/Chat/Views/VibeBackgroundRenderer.swift`、`VibeBackgroundCanvas.swift`、`VibeBackgroundPalette.swift`、`VibeBackgroundPhase.swift`、`VibeBackgroundBlob.swift`、`VibeBackgroundShade.swift` — 旧版 SwiftUI demo 资产与参数定义，保留作对照
   - `OpenChat/Features/Chat/Views/MessageBubbleView.swift` — 气泡 + StatsBarView 集成
   - `OpenChat/Features/Chat/Views/StatsBarView.swift` — 详细/精简统计展示
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
@@ -26,6 +29,7 @@
   - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
   - Background Phase 6：Chat 主链路调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`
   - 世界书 bounded rebuild 仍保留在 Chat pre-source stage；`BackgroundWorker` 不触发 rebuild、不写 DB、不联网、不生成 assistant message
+  - Vibe Background 首版：`ChatView` 通过 `viewModel.isGenerating` 驱动 `ChatConversationBackground`，背景状态在 idle / waiting / streaming / completing 之间切换；当前 active path 由 `VibeBackgroundView` 进入 `UIViewRepresentable`，再由 `VibeBackgroundUIKitView` 用 `CADisplayLink` + 低分辨率 Core Graphics 绘制、模糊和色彩调整完成。`VibeBackgroundDriver` 保持 phase 切换时的连续 motion state，减少 streaming 期间的抖动和闪烁。`ChatSettingsSheet` 在 `Appearance` section 提供 `Vibe Background (Beta)` / `氛围背景（测试版）` 开关，通过 `VibeBackgroundPreference.isEnabledKey` 持久化到 `UserDefaults`；关闭时 `ChatConversationBackground` 不挂载动画层，只保留页面背景色。该首版不接入内容 watcher，不分析对话内容，不改变 `InputBarView` 布局。
 - 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证 packet selected memory/worldBook entries、semantic-only world book entry 和 worldBook source failure keyword fallback：
   - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
   - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
@@ -39,3 +43,4 @@
   - `CompressionStrategyTests`
   - `DatabaseManagerMemoryTests`
 - 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。
+- `OpenChatTests/Features/ChatTests/VibeBackgroundDriverTests.swift` 验证 phase 切换时 `flow` 和 `bandT` 保持连续，且 reduce motion 会清空粒子状态。

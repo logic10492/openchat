@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State var viewModel: ChatViewModel
+    @AppStorage(VibeBackgroundPreference.isEnabledKey) private var isVibeBackgroundEnabled = VibeBackgroundPreference.defaultIsEnabled
 
     var body: some View {
         NavigationStack {
@@ -65,6 +66,11 @@ struct ChatSettingsSheet: View {
                     TextField(String(localized: "Custom Scenario"), text: scenarioBinding, axis: .vertical)
 
                     Toggle(String(localized: "Slow Plot Progression (Beta)"), isOn: slowPlotModeBinding)
+                }
+
+                Section(String(localized: "Appearance")) {
+                    Toggle(String(localized: "Vibe Background (Beta)"), isOn: $isVibeBackgroundEnabled)
+                        .accessibilityIdentifier("chatSettings.vibeBackgroundToggle")
                 }
 
                 Section(String(localized: "Model")) {

@@ -6,6 +6,7 @@ enum UITestingSupport {
     static let edgeEffectsLaunchArgument = "--ui-testing-chat-edge-effects"
     static let contextMenuLaunchArgument = "--ui-testing-chat-context-menu"
     static let prefillLaunchArgument = "--ui-testing-chat-prefill"
+    static let vibeWaitingDelayLaunchArgument = "--ui-testing-vibe-waiting-delay"
 
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -21,6 +22,10 @@ enum UITestingSupport {
 
     private static var usesPrefillFixture: Bool {
         ProcessInfo.processInfo.arguments.contains(prefillLaunchArgument)
+    }
+
+    static var usesVibeWaitingDelay: Bool {
+        ProcessInfo.processInfo.arguments.contains(vibeWaitingDelayLaunchArgument)
     }
 
     @MainActor
@@ -314,6 +319,10 @@ final class UITestingURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func startLoading() {
+        if UITestingSupport.usesVibeWaitingDelay {
+            Thread.sleep(forTimeInterval: 3.5)
+        }
+
         let response = HTTPURLResponse(
             url: request.url!,
             statusCode: 200,

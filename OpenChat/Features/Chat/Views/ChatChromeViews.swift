@@ -1,19 +1,5 @@
 import SwiftUI
 
-struct ChatConversationBackground: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                OpenChatDesignSystem.Surface.pageBackground,
-                Color(.systemBackground),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
-    }
-}
-
 struct ChatDateSeparator: View {
     let date: Date
 

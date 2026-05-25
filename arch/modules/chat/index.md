@@ -24,6 +24,7 @@
 | [views.md](views.md) | ChatView、消息气泡、输入栏、设置 Sheet 的视图设计与实现证据 |
 | [view-model.md](view-model.md) | `ChatViewModel` 状态、发送/重新生成/编辑/预填充语义、记忆提取和 Background 主链路 |
 | [streaming.md](streaming.md) | `MessageDisplayItem`、流式分块渲染、Markdown 延迟刷新、滚动跟随、Token 使用展示 |
+| [vibe-background.md](vibe-background.md) | 状态驱动的聊天动态背景概念草案，预留内容 watcher 与 Liquid Glass chrome 视觉关系 |
 | [evidence.md](evidence.md) | 当前实现证据、已完成功能和自动化测试覆盖 |
 
 ## 3. 文件清单与职责
