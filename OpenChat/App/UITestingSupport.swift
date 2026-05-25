@@ -4,6 +4,7 @@ import GRDB
 enum UITestingSupport {
     static let launchArgument = "--ui-testing"
     static let edgeEffectsLaunchArgument = "--ui-testing-chat-edge-effects"
+    static let contextMenuLaunchArgument = "--ui-testing-chat-context-menu"
 
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -13,11 +14,19 @@ enum UITestingSupport {
         ProcessInfo.processInfo.arguments.contains(edgeEffectsLaunchArgument)
     }
 
+    private static var usesContextMenuFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains(contextMenuLaunchArgument)
+    }
+
     @MainActor
     static func makeContainer() throws -> (DependencyContainer, AppState) {
         UITestingURLProtocol.register()
         let databaseManager = try DatabaseManager.inMemory()
-        seed(databaseManager, includeEdgeEffectMessages: usesEdgeEffectFixture)
+        seed(
+            databaseManager,
+            includeEdgeEffectMessages: usesEdgeEffectFixture,
+            includeContextMenuMessages: usesContextMenuFixture
+        )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestingURLProtocol.self]
         let apiClient = APIClient(session: URLSession(configuration: configuration))
@@ -31,7 +40,11 @@ enum UITestingSupport {
         return (container, appState)
     }
 
-    private static func seed(_ databaseManager: DatabaseManager, includeEdgeEffectMessages: Bool) {
+    private static func seed(
+        _ databaseManager: DatabaseManager,
+        includeEdgeEffectMessages: Bool,
+        includeContextMenuMessages: Bool
+    ) {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let endpoint = APIEndpointRecord(
             id: Seed.endpointId,
@@ -152,6 +165,10 @@ enum UITestingSupport {
                     for message in edgeEffectMessages(conversationId: conversation.id, baseDate: now.addingTimeInterval(-7200)) {
                         try message.insert(db)
                     }
+                } else if includeContextMenuMessages {
+                    for message in contextMenuMessages(conversationId: conversation.id, baseDate: now.addingTimeInterval(-600)) {
+                        try message.insert(db)
+                    }
                 }
             }
         } catch {
@@ -194,6 +211,35 @@ enum UITestingSupport {
         return "\(speaker) edge fixture reply \(index). The glass at the edge should soften this text without turning into a flat cover. The sentence is intentionally long enough to cross the top and bottom bands during scroll verification."
     }
 
+    private static func contextMenuMessages(conversationId: String, baseDate: Date) -> [MessageRecord] {
+        [
+            MessageRecord(
+                id: Seed.contextMenuUserMessageId,
+                conversationId: conversationId,
+                role: "user",
+                content: "Context menu bubble background fixture",
+                tokenCount: 6,
+                isCompressed: false,
+                originalContent: nil,
+                sortOrder: 0,
+                createdAt: baseDate,
+                reasoningContent: nil
+            ),
+            MessageRecord(
+                id: Seed.contextMenuAssistantMessageId,
+                conversationId: conversationId,
+                role: "assistant",
+                content: "Context menu assistant reply fixture.",
+                tokenCount: 5,
+                isCompressed: false,
+                originalContent: nil,
+                sortOrder: 1,
+                createdAt: baseDate.addingTimeInterval(45),
+                reasoningContent: nil
+            ),
+        ]
+    }
+
     enum Seed {
         static let endpointId = "ui-test-endpoint"
         static let modelRecordId = "ui-test-model-record"
@@ -204,6 +250,8 @@ enum UITestingSupport {
         static let stageId = "ui-test-stage"
         static let maraParticipantId = "ui-test-participant-mara"
         static let ioParticipantId = "ui-test-participant-io"
+        static let contextMenuUserMessageId = "ui-context-menu-user"
+        static let contextMenuAssistantMessageId = "ui-context-menu-assistant"
     }
 }
 

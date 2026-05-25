@@ -78,6 +78,32 @@ struct MessageBubbleView: View, Equatable {
     }
 
     private var contentBubble: some View {
+        contentBubbleBody
+            .padding(.horizontal, isUser ? OpenChatDesignSystem.Spacing.sm : OpenChatDesignSystem.Spacing.md)
+            .padding(.vertical, 7)
+            .background {
+                UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
+                    .fill(bubbleFill)
+            }
+            .overlay {
+                UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
+                    .stroke(bubbleStroke, lineWidth: isUser ? 0 : 0.5)
+            }
+            .shadow(
+                color: Color.black.opacity(isUser ? 0.05 : 0.035),
+                radius: isGroupedWithPrevious || isGroupedWithNext ? 1 : 3,
+                x: 0,
+                y: 1
+            )
+            .contentShape(UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous))
+            .contentShape(.contextMenuPreview, UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous))
+            .contextMenu {
+                contextMenuItems
+            }
+    }
+
+    @ViewBuilder
+    private var contentBubbleBody: some View {
         Group {
             if isUser {
                 VStack(alignment: .trailing, spacing: OpenChatDesignSystem.Spacing.xxs) {
@@ -86,20 +112,6 @@ struct MessageBubbleView: View, Equatable {
                         .foregroundStyle(.white)
                         .textSelection(.enabled)
                     bubbleFooter
-                }
-                .contextMenu {
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label(String(localized: "Edit"), systemImage: "pencil")
-                    }
-                    .disabled(!canEdit)
-
-                    Button {
-                        UIPasteboard.general.string = item.content
-                    } label: {
-                        Label(String(localized: "Copy"), systemImage: "doc.on.doc")
-                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: OpenChatDesignSystem.Spacing.xs) {
@@ -112,45 +124,46 @@ struct MessageBubbleView: View, Equatable {
                     }
                     bubbleFooter
                 }
-                .contextMenu {
-                    Button {
-                        UIPasteboard.general.string = item.content
-                    } label: {
-                        Label(String(localized: "Copy"), systemImage: "doc.on.doc")
-                    }
-
-                    Button {
-                        onRegenerate()
-                    } label: {
-                        Label(String(localized: "Regenerate"), systemImage: "arrow.clockwise")
-                    }
-                    .disabled(isStreaming)
-
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label(String(localized: "Delete"), systemImage: "trash")
-                    }
-                    .disabled(isStreaming)
-                }
             }
         }
-        .padding(.horizontal, isUser ? OpenChatDesignSystem.Spacing.sm : OpenChatDesignSystem.Spacing.md)
-        .padding(.vertical, 7)
-        .background {
-            UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
-                .fill(bubbleFill)
+    }
+
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        if isUser {
+            Button {
+                onEdit()
+            } label: {
+                Label(String(localized: "Edit"), systemImage: "pencil")
+            }
+            .disabled(!canEdit)
+
+            Button {
+                UIPasteboard.general.string = item.content
+            } label: {
+                Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+            }
+        } else {
+            Button {
+                UIPasteboard.general.string = item.content
+            } label: {
+                Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+            }
+
+            Button {
+                onRegenerate()
+            } label: {
+                Label(String(localized: "Regenerate"), systemImage: "arrow.clockwise")
+            }
+            .disabled(isStreaming)
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label(String(localized: "Delete"), systemImage: "trash")
+            }
+            .disabled(isStreaming)
         }
-        .overlay {
-            UnevenRoundedRectangle(cornerRadii: bubbleCorners, style: .continuous)
-                .stroke(bubbleStroke, lineWidth: isUser ? 0 : 0.5)
-        }
-        .shadow(
-            color: Color.black.opacity(isUser ? 0.05 : 0.035),
-            radius: isGroupedWithPrevious || isGroupedWithNext ? 1 : 3,
-            x: 0,
-            y: 1
-        )
     }
 
     private var systemMessage: some View {

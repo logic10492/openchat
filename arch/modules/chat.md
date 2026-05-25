@@ -112,7 +112,7 @@
 | assistant | 底部动作栏与长按菜单：复制、重新生成、删除 |
 | system (压缩) | 查看原始内容 |
 
-实现证据：`ChatMessageTimelineView.swift` 用 `MessageDisplayItem.createdAt` 插入 `ChatDateSeparator`，用 role/speaker/day/5 分钟窗口计算分组，并在用户拖动时暂停流式自动跟随。`MessageBubbleView.swift` 接收 `isGroupedWithPrevious` / `isGroupedWithNext`，不再渲染头像轨道；user 气泡使用 `Color.accentColor`，assistant 气泡使用 `Color(.secondarySystemGroupedBackground)`，两者都不使用 `.ultraThinMaterial`，并通过 `UnevenRoundedRectangle` 形成左右非对称 Telegram 式气泡尾角。`MarkdownTextView` 保持默认撑满宽度，但 chat bubble 调用 `fillsAvailableWidth: false`，让短回复按内容自然收缩。`MessageBubbleChrome.swift` 提供系统消息胶囊和内嵌时间脚；user 气泡挂载 `Edit` / `Copy` 长按菜单；assistant 气泡保留 `MessageActionBar` 并提供复制、重新生成、删除菜单。`ChatView.swift` 通过 `EditMessageSheet` 收集编辑后的文本并调用 `ChatViewModel.editMessage(...)`。
+实现证据：`ChatMessageTimelineView.swift` 用 `MessageDisplayItem.createdAt` 插入 `ChatDateSeparator`，用 role/speaker/day/5 分钟窗口计算分组，并在用户拖动时暂停流式自动跟随。`MessageBubbleView.swift` 接收 `isGroupedWithPrevious` / `isGroupedWithNext`，不再渲染头像轨道；user 气泡使用 `Color.accentColor`，assistant 气泡使用 `Color(.secondarySystemGroupedBackground)`，两者都不使用 `.ultraThinMaterial`，并通过 `UnevenRoundedRectangle` 形成左右非对称 Telegram 式气泡尾角。`MarkdownTextView` 保持默认撑满宽度，但 chat bubble 调用 `fillsAvailableWidth: false`，让短回复按内容自然收缩。`MessageBubbleChrome.swift` 提供系统消息胶囊和内嵌时间脚；user 气泡挂载 `Edit` / `Copy` 长按菜单；assistant 气泡保留 `MessageActionBar` 并提供复制、重新生成、删除菜单。长按菜单挂载在完整气泡容器上，而不是内部文本 `VStack` 上；气泡容器在 `.contextMenu` 之前完成 padding、圆角背景、描边和阴影，并对 `.contextMenuPreview` 使用同一个 `UnevenRoundedRectangle`，保证系统长按预览包含气泡背景。`ChatView.swift` 通过 `EditMessageSheet` 收集编辑后的文本并调用 `ChatViewModel.editMessage(...)`。
 
 ### 3.3 InputBarView
 
@@ -497,6 +497,7 @@ RP 文本默认以 plain Text 先显示；Markdown 渲染作为延迟增强，�
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
   - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision）
   - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
+  - `OpenChatUITests/MessageBubbleContextMenuUITests.swift` — 长按气泡菜单预览背景回归验证
   - `OpenChat/ContentView.swift`
   - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
@@ -523,3 +524,4 @@ RP 文本默认以 plain Text 先显示；Markdown 渲染作为延迟增强，�
   - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略）
   - `CompressionStrategyTests`
   - `DatabaseManagerMemoryTests`
+- 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。
