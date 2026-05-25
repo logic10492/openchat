@@ -10,3 +10,5 @@ OpenChat/Resources/Models/
 character_cards/
 worldbooks/
 harness/
+.agents/
+skills-lock.json
