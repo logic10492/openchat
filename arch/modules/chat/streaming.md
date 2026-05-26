@@ -23,6 +23,7 @@ struct MessageDisplayItem: Identifiable {
 
 流式 SSE 事件仍然逐 chunk 进入 UI，保证用户看到实时输出；但 assistant 正文不再作为单个大文本整体重算：
 
+- `ChatViewModel+Support` 使用 `StreamingRenderBuffer` 在普通生成和 Stage 多角色生成两条路径合并高频 delta；默认约 50ms 或累计 520 字符刷新一次，结束时强制 flush，降低超长回复期间 `messages[index]` 修改和 SwiftUI diff 频率
 - `MessageDisplayItem.appendContentDelta(...)` 同步维护完整 `content` 与 `contentBlocks`
 - `TextContentBlock` 优先按自然换行切块，超长无换行文本按固定上限兜底切块
 - `MessageBubbleView` 传入 `contentBlocks`，由 `MarkdownTextView` 分块渲染，避免每个 SSE chunk 都让整条长回复重新参与 Markdown / Text 构建

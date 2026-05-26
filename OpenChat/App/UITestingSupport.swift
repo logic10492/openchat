@@ -6,6 +6,7 @@ enum UITestingSupport {
     static let edgeEffectsLaunchArgument = "--ui-testing-chat-edge-effects"
     static let contextMenuLaunchArgument = "--ui-testing-chat-context-menu"
     static let prefillLaunchArgument = "--ui-testing-chat-prefill"
+    static let performanceLaunchArgument = "--ui-testing-chat-performance"
     static let vibeWaitingDelayLaunchArgument = "--ui-testing-vibe-waiting-delay"
 
     static var isEnabled: Bool {
@@ -24,6 +25,10 @@ enum UITestingSupport {
         ProcessInfo.processInfo.arguments.contains(prefillLaunchArgument)
     }
 
+    private static var usesPerformanceFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains(performanceLaunchArgument)
+    }
+
     static var usesVibeWaitingDelay: Bool {
         ProcessInfo.processInfo.arguments.contains(vibeWaitingDelayLaunchArgument)
     }
@@ -35,7 +40,8 @@ enum UITestingSupport {
         seed(
             databaseManager,
             includeEdgeEffectMessages: usesEdgeEffectFixture,
-            includeContextMenuMessages: usesContextMenuFixture
+            includeContextMenuMessages: usesContextMenuFixture,
+            includePerformanceMessages: usesPerformanceFixture
         )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestingURLProtocol.self]
@@ -46,14 +52,21 @@ enum UITestingSupport {
             apiKeyStore: InMemoryAPIKeyStore()
         )
         let appState = AppState()
-        appState.selectedConversationID = usesPrefillFixture ? Seed.prefillConversationId : Seed.conversationId
+        appState.selectedConversationID = if usesPrefillFixture {
+            Seed.prefillConversationId
+        } else if usesPerformanceFixture {
+            Seed.performanceConversationId
+        } else {
+            Seed.conversationId
+        }
         return (container, appState)
     }
 
     private static func seed(
         _ databaseManager: DatabaseManager,
         includeEdgeEffectMessages: Bool,
-        includeContextMenuMessages: Bool
+        includeContextMenuMessages: Bool,
+        includePerformanceMessages: Bool
     ) {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let endpoint = APIEndpointRecord(
@@ -146,6 +159,23 @@ enum UITestingSupport {
             createdAt: now,
             updatedAt: now
         )
+        let performanceConversation = ConversationRecord(
+            id: Seed.performanceConversationId,
+            title: "UI Performance Long Chat",
+            characterCardId: Seed.maraCardId,
+            apiEndpointId: Seed.endpointId,
+            modelName: Seed.modelId,
+            contextStrategy: ContextStrategy.truncation.rawValue,
+            compressionMode: CompressionMode.standard.rawValue,
+            customScenario: nil,
+            modelParameters: nil,
+            slowPlotMode: false,
+            isTitleGenerated: true,
+            isPinned: false,
+            lastExtractedSortOrder: 999_999,
+            createdAt: now,
+            updatedAt: now
+        )
         let stage = StageRecord(
             id: Seed.stageId,
             conversationId: conversation.id,
@@ -186,6 +216,7 @@ enum UITestingSupport {
                 try io.insert(db)
                 try conversation.insert(db)
                 try prefillConversation.insert(db)
+                try performanceConversation.insert(db)
                 try stage.insert(db)
                 try maraParticipant.insert(db)
                 try ioParticipant.insert(db)
@@ -210,6 +241,14 @@ enum UITestingSupport {
                     }
                 } else if includeContextMenuMessages {
                     for message in contextMenuMessages(conversationId: conversation.id, baseDate: now.addingTimeInterval(-600)) {
+                        try message.insert(db)
+                    }
+                }
+                if includePerformanceMessages {
+                    for message in performanceMessages(
+                        conversationId: performanceConversation.id,
+                        baseDate: now.addingTimeInterval(-72_000)
+                    ) {
                         try message.insert(db)
                     }
                 }
@@ -283,12 +322,48 @@ enum UITestingSupport {
         ]
     }
 
+    private static func performanceMessages(conversationId: String, baseDate: Date) -> [MessageRecord] {
+        (0..<420).map { index in
+            let isUser = index.isMultiple(of: 4)
+            let role = isUser ? "user" : "assistant"
+            var record = MessageRecord(
+                id: "ui-performance-message-\(index)",
+                conversationId: conversationId,
+                role: role,
+                content: performanceMessageContent(index: index, isUser: isUser),
+                tokenCount: 72,
+                isCompressed: false,
+                originalContent: nil,
+                sortOrder: index,
+                createdAt: baseDate.addingTimeInterval(Double(index * 67)),
+                reasoningContent: nil
+            )
+            if !isUser {
+                record.speakerName = index.isMultiple(of: 2) ? "Mara" : "Io"
+            }
+            return record
+        }
+    }
+
+    private static func performanceMessageContent(index: Int, isUser: Bool) -> String {
+        if isUser {
+            return "Performance fixture turn \(index): keep the same scene active, mention the lamp, the gate, and one small movement so the long chat has realistic row heights."
+        }
+
+        return """
+        Performance fixture reply \(index). The reply is intentionally long enough to exercise Markdown text layout, bubble sizing, date grouping, and lazy scrolling in a long conversation with the ambience background enabled.
+
+        Mara watches the old gate, Io checks the archive mark, and the narration keeps a steady rhythm across multiple lines so the timeline has the same shape every time this UI performance fixture runs.
+        """
+    }
+
     enum Seed {
         static let endpointId = "ui-test-endpoint"
         static let modelRecordId = "ui-test-model-record"
         static let modelId = "ui-test-model"
         static let conversationId = "ui-test-conversation"
         static let prefillConversationId = "ui-test-prefill-conversation"
+        static let performanceConversationId = "ui-test-performance-conversation"
         static let maraCardId = "ui-test-card-mara"
         static let ioCardId = "ui-test-card-io"
         static let stageId = "ui-test-stage"
@@ -377,13 +452,7 @@ final class UITestingURLProtocol: URLProtocol, @unchecked Sendable {
 
     private var payload: String {
         if isStreamingRequest {
-            let content = streamingContent
-            return """
-            data: {"id":"ui-test","choices":[{"index":0,"delta":{"content":"\(content)"},"finish_reason":"stop"}]}
-
-            data: [DONE]
-
-            """
+            return streamingPayload
         }
         let participantId = directorParticipantId ?? ""
         return """
@@ -406,6 +475,34 @@ final class UITestingURLProtocol: URLProtocol, @unchecked Sendable {
           }
         }
         """
+    }
+
+    private var streamingPayload: String {
+        let chunks = streamingContentChunks
+        let events = chunks.enumerated().map { index, chunk in
+            let finishReason = index == chunks.count - 1 ? #","finish_reason":"stop""# : #","finish_reason":null"#
+            return #"data: {"id":"ui-test","choices":[{"index":0,"delta":{"content":"\#(chunk)"}\#(finishReason)}]}"#
+        }
+        return (events + ["data: [DONE]"]).joined(separator: "\n\n") + "\n\n"
+    }
+
+    private var streamingContentChunks: [String] {
+        if isPerformanceRequest {
+            return (0..<120).map { index in
+                "Perf stream chunk \(index): the reply keeps flowing while the long chat and ambience background remain active. "
+            }
+        }
+        return [streamingContent]
+    }
+
+    private var isPerformanceRequest: Bool {
+        guard let messages = requestJSON?["messages"] as? [[String: Any]] else {
+            return false
+        }
+        return messages.contains { message in
+            guard let content = message["content"] as? String else { return false }
+            return content.contains("performance generation probe")
+        }
     }
 
     private var streamingContent: String {

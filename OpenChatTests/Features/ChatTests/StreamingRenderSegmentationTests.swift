@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 
 @testable import OpenChat
 
@@ -84,5 +85,26 @@ struct StreamingRenderSegmentationTests {
         #expect(MarkdownRenderPolicy.refreshDelay(forCharacterCount: 800) == .milliseconds(50))
         #expect(MarkdownRenderPolicy.refreshDelay(forCharacterCount: 2_000) == .milliseconds(75))
         #expect(MarkdownRenderPolicy.refreshDelay(forCharacterCount: 5_000) == .milliseconds(100))
+    }
+
+    @Test func test_streamingRenderBuffer_coalescesSmallDeltasUntilInterval() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var buffer = StreamingRenderBuffer(
+            minimumFlushInterval: 0.05,
+            maximumBufferedCharacters: 20,
+            now: start
+        )
+
+        buffer.append(content: "a")
+        #expect(buffer.flushIfNeeded(now: start.addingTimeInterval(0.02)) == nil)
+
+        let timedBatch = buffer.flushIfNeeded(now: start.addingTimeInterval(0.06))
+        #expect(timedBatch?.content == "a")
+        #expect(timedBatch?.reasoningContent == "")
+
+        buffer.append(content: "01234567890123456789", reasoningContent: "r")
+        let sizeBatch = buffer.flushIfNeeded(now: start.addingTimeInterval(0.07))
+        #expect(sizeBatch?.content == "01234567890123456789")
+        #expect(sizeBatch?.reasoningContent == "r")
     }
 }

@@ -1,4 +1,5 @@
 import CoreImage.CIFilterBuiltins
+import QuartzCore
 import SwiftUI
 import UIKit
 
@@ -7,11 +8,12 @@ final class VibeBackgroundUIKitView: UIView {
     private let renderScale: CGFloat = 0.28
     private let horizontalOverscan: CGFloat = 1.14
     private let verticalOverscan: CGFloat = 1.14
-    private let blurRadius: CGFloat = 24
+    private let blurRadius: CGFloat = 18
 
     private var driver = VibeBackgroundDriver()
     private let displayLinkBox = VibeBackgroundDisplayLinkBox()
-    private var lastFrameTimestamp: CFTimeInterval?
+    private var lastRenderedTargetTimestamp: CFTimeInterval?
+    private var appliedFrameRatePolicy: VibeBackgroundFrameRatePolicy?
     private var sequenceTask: Task<Void, Never>?
     private var isGenerating = false
     private var reduceMotion = false
@@ -144,17 +146,17 @@ final class VibeBackgroundUIKitView: UIView {
 
     private func setPhase(_ phase: VibeBackgroundPhase) {
         driver.setPhase(phase, reduceMotion: reduceMotion)
+        appliedFrameRatePolicy = nil
+        if let displayLink = displayLinkBox.displayLink {
+            updateFrameRatePolicy(for: displayLink)
+        }
         setNeedsDisplay()
     }
 
     private func startDisplayLinkIfNeeded() {
         guard displayLinkBox.displayLink == nil, !reduceMotion else { return }
         let link = CADisplayLink(target: self, selector: #selector(displayLinkDidTick(_:)))
-        link.preferredFrameRateRange = CAFrameRateRange(
-            minimum: 18,
-            maximum: 30,
-            preferred: Float(driver.phase.preferredFramesPerSecond)
-        )
+        updateFrameRatePolicy(for: link)
         link.add(to: .main, forMode: .common)
         displayLinkBox.displayLink = link
     }
@@ -162,18 +164,18 @@ final class VibeBackgroundUIKitView: UIView {
     private func stopDisplayLink() {
         displayLinkBox.displayLink?.invalidate()
         displayLinkBox.displayLink = nil
-        lastFrameTimestamp = nil
+        lastRenderedTargetTimestamp = nil
+        appliedFrameRatePolicy = nil
     }
 
     @objc
     private func displayLinkDidTick(_ link: CADisplayLink) {
-        let deltaTime = lastFrameTimestamp.map { link.timestamp - $0 } ?? (1 / 30)
-        lastFrameTimestamp = link.timestamp
-        link.preferredFrameRateRange = CAFrameRateRange(
-            minimum: 18,
-            maximum: 30,
-            preferred: Float(driver.phase.preferredFramesPerSecond)
-        )
+        updateFrameRatePolicy(for: link)
+        guard shouldDrawFrame(for: link) else { return }
+
+        let targetTimestamp = link.targetTimestamp
+        let deltaTime = frameDeltaTime(for: link, targetTimestamp: targetTimestamp)
+        lastRenderedTargetTimestamp = targetTimestamp
         driver.update(
             deltaTime: deltaTime,
             size: currentRenderSize == .zero ? renderSize(for: bounds.size) : currentRenderSize,
@@ -183,11 +185,41 @@ final class VibeBackgroundUIKitView: UIView {
         setNeedsDisplay()
     }
 
+    private func updateFrameRatePolicy(for link: CADisplayLink) {
+        let policy = driver.phase.frameRatePolicy(maximumFramesPerSecond: maximumFramesPerSecond)
+        guard appliedFrameRatePolicy != policy else { return }
+        link.preferredFrameRateRange = policy.range
+        appliedFrameRatePolicy = policy
+    }
+
+    private var maximumFramesPerSecond: Float {
+        let screenMaximum = window?.screen.maximumFramesPerSecond ?? UIScreen.main.maximumFramesPerSecond
+        return Float(max(60, screenMaximum))
+    }
+
+    private func frameDeltaTime(for link: CADisplayLink, targetTimestamp: CFTimeInterval) -> TimeInterval {
+        if let lastRenderedTargetTimestamp {
+            return targetTimestamp - lastRenderedTargetTimestamp
+        }
+        return max(0.001, targetTimestamp - link.timestamp)
+    }
+
     private func renderSize(for visibleSize: CGSize) -> CGSize {
         CGSize(
-            width: max(192, ceil(visibleSize.width * renderScale * horizontalOverscan)),
-            height: max(220, ceil(visibleSize.height * renderScale * verticalOverscan))
+            width: max(168, ceil(visibleSize.width * renderScale)),
+            height: max(196, ceil(visibleSize.height * renderScale))
         )
+    }
+
+    private func shouldDrawFrame(for link: CADisplayLink) -> Bool {
+        guard let lastRenderedTargetTimestamp else { return true }
+
+        let policy = appliedFrameRatePolicy
+            ?? driver.phase.frameRatePolicy(maximumFramesPerSecond: maximumFramesPerSecond)
+        let displayInterval = max(0.001, link.targetTimestamp - link.timestamp)
+        let elapsed = link.targetTimestamp - lastRenderedTargetTimestamp
+        let timingTolerance = min(displayInterval * 0.1, 0.001)
+        return elapsed + timingTolerance >= policy.minimumRenderInterval
     }
 
     private func palette() -> VibeBackgroundUIKitPalette {
@@ -217,8 +249,12 @@ final class VibeBackgroundUIKitView: UIView {
         }
 
         guard !reduceTransparency else { return rawImage }
-        return rawImage.applyingBlur(radius: blurRadius, context: ciContext)?
-            .adjusting(saturation: palette.saturation, brightness: palette.brightness, context: ciContext)
+        return rawImage.applyingVibePostprocessing(
+            blurRadius: blurRadius,
+            saturation: palette.saturation,
+            brightness: palette.brightness,
+            context: ciContext
+        )
     }
 
     private func drawBase(in context: CGContext, size: CGSize, palette: VibeBackgroundUIKitPalette) {
@@ -336,8 +372,8 @@ final class VibeBackgroundUIKitView: UIView {
         palette: VibeBackgroundUIKitPalette
     ) {
         let streamLength = radius * (2.4 + CGFloat(driver.flow) * 4.0)
-        for index in 0..<9 {
-            let progress = CGFloat(index) / 8
+        for index in 0..<5 {
+            let progress = CGFloat(index) / 4
             let sway = sin(driver.bandT * 0.92 + seed * 3 + Double(progress) * 4) * radius * 0.45 * CGFloat(driver.flow)
             let center = CGPoint(
                 x: origin.x + sway + (progress - 0.5) * radius * 0.35,
@@ -470,37 +506,78 @@ private final class VibeBackgroundDisplayLinkBox {
     }
 }
 
+private struct VibeBackgroundFrameRatePolicy: Equatable {
+    let minimum: Float
+    let maximum: Float
+    let preferred: Float
+    let maximumDrawsPerSecond: Float
+
+    var range: CAFrameRateRange {
+        CAFrameRateRange(minimum: minimum, maximum: maximum, preferred: preferred)
+    }
+
+    var minimumRenderInterval: TimeInterval {
+        TimeInterval(1 / maximumDrawsPerSecond)
+    }
+}
+
 private extension VibeBackgroundPhase {
-    var preferredFramesPerSecond: Int {
+    func frameRatePolicy(maximumFramesPerSecond screenMaximum: Float) -> VibeBackgroundFrameRatePolicy {
+        let screenMaximum = max(60, screenMaximum)
+
         switch self {
         case .idle, .completing:
-            18
+            return VibeBackgroundFrameRatePolicy(
+                minimum: 10,
+                maximum: min(24, screenMaximum),
+                preferred: min(24, screenMaximum),
+                maximumDrawsPerSecond: 24
+            )
         case .waiting:
-            20
+            return VibeBackgroundFrameRatePolicy(
+                minimum: 15,
+                maximum: min(30, screenMaximum),
+                preferred: min(30, screenMaximum),
+                maximumDrawsPerSecond: 30
+            )
         case .streaming:
-            30
+            return VibeBackgroundFrameRatePolicy(
+                minimum: 24,
+                maximum: min(60, screenMaximum),
+                preferred: min(60, screenMaximum),
+                maximumDrawsPerSecond: 60
+            )
         }
     }
 }
 
 private extension UIImage {
-    func applyingBlur(radius: CGFloat, context: CIContext) -> UIImage? {
+    func applyingVibePostprocessing(
+        blurRadius: CGFloat,
+        saturation: CGFloat,
+        brightness: CGFloat,
+        context: CIContext
+    ) -> UIImage? {
         guard let inputImage = CIImage(image: self) else { return nil }
-        let clampedImage = inputImage.clampedToExtent()
-        let filter = CIFilter.gaussianBlur()
-        filter.inputImage = clampedImage
-        filter.radius = Float(radius)
-        guard let outputImage = filter.outputImage?.cropped(to: inputImage.extent) else { return nil }
-        return UIImage.render(ciImage: outputImage, size: size, context: context)
-    }
+        var outputImage = inputImage
 
-    func adjusting(saturation: CGFloat, brightness: CGFloat, context: CIContext) -> UIImage? {
-        guard let inputImage = CIImage(image: self) else { return nil }
-        let filter = CIFilter.colorControls()
-        filter.inputImage = inputImage
-        filter.saturation = Float(saturation)
-        filter.brightness = Float(brightness)
-        guard let outputImage = filter.outputImage else { return nil }
+        if blurRadius > 0 {
+            let blurFilter = CIFilter.gaussianBlur()
+            blurFilter.inputImage = inputImage.clampedToExtent()
+            blurFilter.radius = Float(blurRadius)
+            if let blurred = blurFilter.outputImage?.cropped(to: inputImage.extent) {
+                outputImage = blurred
+            }
+        }
+
+        let colorFilter = CIFilter.colorControls()
+        colorFilter.inputImage = outputImage
+        colorFilter.saturation = Float(saturation)
+        colorFilter.brightness = Float(brightness)
+        if let adjusted = colorFilter.outputImage {
+            outputImage = adjusted
+        }
+
         return UIImage.render(ciImage: outputImage, size: size, context: context)
     }
 

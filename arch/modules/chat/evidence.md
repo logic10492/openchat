@@ -12,9 +12,11 @@
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
+  - `OpenChat/Features/Chat/Models/StreamingRenderBuffer.swift` — 合并高频 SSE delta，降低长流式回复期间的 UI invalidation 频率
   - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision）
   - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
   - `OpenChatUITests/MessageBubbleContextMenuUITests.swift` — 长按气泡菜单预览背景回归验证
+  - `OpenChatUITests/ChatVibePerformanceUITests.swift` — 长会话 + 氛围背景滑动/生成性能 fixture 与指标采集
   - `OpenChat/ContentView.swift`
   - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
@@ -23,13 +25,13 @@
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
-  - 超长流式输出 UI：每个 SSE chunk 仍更新 UI，但 assistant 正文按 block 分段渲染；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
+  - 超长流式输出 UI：SSE delta 先由 `StreamingRenderBuffer` 按约 50ms / 520 字符合并后再更新 assistant 展示项；assistant 正文按 block 分段渲染；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
   - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
   - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
   - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
   - Background Phase 6：Chat 主链路调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`
   - 世界书 bounded rebuild 仍保留在 Chat pre-source stage；`BackgroundWorker` 不触发 rebuild、不写 DB、不联网、不生成 assistant message
-  - Vibe Background 首版：`ChatView` 通过 `viewModel.isGenerating` 驱动 `ChatConversationBackground`，背景状态在 idle / waiting / streaming / completing 之间切换；当前 active path 由 `VibeBackgroundView` 进入 `UIViewRepresentable`，再由 `VibeBackgroundUIKitView` 用 `CADisplayLink` + 低分辨率 Core Graphics 绘制、模糊和色彩调整完成。`VibeBackgroundDriver` 保持 phase 切换时的连续 motion state，减少 streaming 期间的抖动和闪烁。`ChatSettingsSheet` 在 `Appearance` section 提供 `Vibe Background (Beta)` / `氛围背景（测试版）` 开关，通过 `VibeBackgroundPreference.isEnabledKey` 持久化到 `UserDefaults`；关闭时 `ChatConversationBackground` 不挂载动画层，只保留页面背景色。该首版不接入内容 watcher，不分析对话内容，不改变 `InputBarView` 布局。
+  - Vibe Background 首版：`ChatView` 通过 `viewModel.isGenerating` 驱动 `ChatConversationBackground`，背景状态在 idle / waiting / streaming / completing 之间切换；当前 active path 由 `VibeBackgroundView` 进入 `UIViewRepresentable`，再由 `VibeBackgroundUIKitView` 用 `CADisplayLink` + 低分辨率 Core Graphics 绘制、一次 Core Image 后处理和放大绘制完成。`VibeBackgroundDriver` 保持 phase 切换时的连续 motion state，减少 streaming 期间的抖动和闪烁；渲染层使用 ProMotion 友好的 `preferredFrameRateRange` 范围提示，但按 phase 把调度上限限制到 idle/completing 24fps、waiting 30fps、streaming 60fps，动画 delta 来自 `targetTimestamp`，同时以 phase 内部 draw budget 控制实际绘制频率，并限制 streaming 粒子上限。`ChatSettingsSheet` 在 `Appearance` section 提供 `Vibe Background (Beta)` / `氛围背景（测试版）` 开关，通过 `VibeBackgroundPreference.isEnabledKey` 持久化到 `UserDefaults`；关闭时 `ChatConversationBackground` 不挂载动画层，只保留页面背景色。该首版不接入内容 watcher，不分析对话内容，不改变 `InputBarView` 布局。
 - 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证 packet selected memory/worldBook entries、semantic-only world book entry 和 worldBook source failure keyword fallback：
   - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
   - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
@@ -39,8 +41,9 @@
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
-  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略）
+  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略、`StreamingRenderBuffer` 合并策略）
   - `CompressionStrategyTests`
   - `DatabaseManagerMemoryTests`
 - 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。
 - `OpenChatTests/Features/ChatTests/VibeBackgroundDriverTests.swift` 验证 phase 切换时 `flow` 和 `bandT` 保持连续，且 reduce motion 会清空粒子状态。
+- `OpenChatUITests/ChatVibePerformanceUITests.swift` 使用 `--ui-testing-chat-performance` 生成 420 条长会话历史和 120 个 SSE chunk 的可重复场景，用 `XCTCPUMetric`、`XCTMemoryMetric`、`XCTClockMetric`、`XCTOSSignpostMetric.scrollingAndDecelerationMetric` 采集氛围背景开启时的长会话滑动和生成指标。2026-05-26 的 before/after 数字记录在 `arch/modules/chat/performance-report-2026-05-26.md`。

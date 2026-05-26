@@ -25,6 +25,7 @@
 | [view-model.md](view-model.md) | `ChatViewModel` 状态、发送/重新生成/编辑/预填充语义、记忆提取和 Background 主链路 |
 | [streaming.md](streaming.md) | `MessageDisplayItem`、流式分块渲染、Markdown 延迟刷新、滚动跟随、Token 使用展示 |
 | [vibe-background.md](vibe-background.md) | 状态驱动的聊天动态背景概念草案，预留内容 watcher 与 Liquid Glass chrome 视觉关系 |
+| [performance-report-2026-05-26.md](performance-report-2026-05-26.md) | 长会话 + 氛围背景的滑动/生成性能审计、优化证据和 before/after 指标 |
 | [evidence.md](evidence.md) | 当前实现证据、已完成功能和自动化测试覆盖 |
 
 ## 3. 文件清单与职责
@@ -47,6 +48,7 @@
 | `ChatViewModel.swift` | 核心 ViewModel，管理消息状态、调度 API 请求 |
 | `ChatViewModel+Support.swift` | 生成/流式/记忆提取的实现细节 |
 | `MessageDisplayItem.swift` | 消息展示用 DTO（含可选 StreamingStats） |
+| `StreamingRenderBuffer.swift` | 合并高频 SSE delta，降低长流式回复期间的 UI invalidation 频率 |
 | `StreamingStats.swift` | 流式输出统计数据（输入/输出 token、TPS、上下文余量） |
 | `StatsBarView.swift` | 统计数据展示组件（详细/精简两种模式） |
 

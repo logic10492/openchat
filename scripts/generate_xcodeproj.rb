@@ -174,6 +174,7 @@ app_target.build_configurations.each do |config|
   config.build_settings['INFOPLIST_KEY_CFBundleDisplayName'] = PROJECT_NAME
   config.build_settings['INFOPLIST_KEY_CFBundleDevelopmentRegion'] = 'en'
   config.build_settings['INFOPLIST_KEY_CFBundleLocalizations'] = 'en zh-Hans'
+  config.build_settings['INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone'] = 'YES'
   config.build_settings['INFOPLIST_KEY_NSPhotoLibraryUsageDescription'] = 'OpenChat uses the photo library to pick character avatars.'
   config.build_settings['INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription'] = 'OpenChat exports generated content and attachments when requested.'
   config.build_settings['INFOPLIST_KEY_NSCameraUsageDescription'] = 'OpenChat uses the camera to capture character avatars.'

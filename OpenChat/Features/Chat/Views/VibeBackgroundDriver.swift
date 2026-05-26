@@ -9,6 +9,7 @@ struct VibeBackgroundDriver {
     private(set) var pulse: Double = 0
     private(set) var particles: [VibeBackgroundParticle] = []
 
+    private let maximumParticleCount = 54
     private var randomSeed: UInt64 = 0x4d2c_6f91_8a73_b5e1
 
     mutating func setPhase(_ nextPhase: VibeBackgroundPhase, reduceMotion: Bool) {
@@ -55,9 +56,10 @@ struct VibeBackgroundDriver {
         palette: VibeBackgroundUIKitPalette
     ) {
         guard phase == .streaming else { return }
-        let rate = 24 + 0.62 * 90
+        guard particles.count < maximumParticleCount else { return }
+        let rate = 16 + 0.46 * 72
         let expectedCount = rate * deltaTime + nextRandom() * 1.4
-        let count = Int(expectedCount)
+        let count = min(Int(expectedCount), maximumParticleCount - particles.count)
 
         guard count > 0 else { return }
 

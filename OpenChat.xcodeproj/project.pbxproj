@@ -95,6 +95,7 @@
 		4CC09C91CE9EBD819276FBC7 /* AgentDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505A4BCC5EC895572A9F200B /* AgentDescriptor.swift */; };
 		4CCD356C9177F632BDBF7A3B /* MemoryRecallModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892811DBD19C857910C1E469 /* MemoryRecallModels.swift */; };
 		4CDC87486D199F0340D79DA6 /* StreamingRenderSegmentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484862F6795AE797A24D2763 /* StreamingRenderSegmentationTests.swift */; };
+		4D153371D8E0A5C3B7091F44 /* StreamingRenderBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D153370D8E0A5C3B7091F44 /* StreamingRenderBuffer.swift */; };
 		4D6B20E8D8E3A84B8DCE95B4 /* TruncationStrategyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4763138B0FD7E98C9FD84DCC /* TruncationStrategyTests.swift */; };
 		4E2BAA308F1AE7A5891F9E4F /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BD2167ACBC96079E970F084 /* SettingsViewModel.swift */; };
 		5066F955EB1BAA6D6D1368C3 /* MemoryBackgroundSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 634C32906BECA18396C81158 /* MemoryBackgroundSource.swift */; };
@@ -238,6 +239,7 @@
 		C86AE3FA74F9FF1CCFAF4815 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 5332285E156557EEB04328CA /* GRDB */; };
 		C996FE5B7004E76F7A239B23 /* StageManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7413C733DC4D1655F7D36D4 /* StageManagementView.swift */; };
 		CB980114C610157D3F8738EE /* SSEStreamParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6A22E60DCDD8DEE174FCF2 /* SSEStreamParserTests.swift */; };
+		CC31E03CC652DC85252780E7 /* ChatVibePerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC31E03BC652DC85252780E7 /* ChatVibePerformanceUITests.swift */; };
 		D0BE62B854A3CD53C15092D0 /* DatabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B200C84298C8418FF0F59F /* DatabaseManager.swift */; };
 		D10E24EBEE522E20A788CD20 /* AgentCapability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65FC5ABD88FED31DCCAE5B1F /* AgentCapability.swift */; };
 		D47FBBABF9DB5A094CBF3536 /* ModelParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D5134B3CCF88D8BE6B94C71 /* ModelParameters.swift */; };
@@ -417,6 +419,7 @@
 		690648300414BC42E2791B7D /* MemoryExtractionCutoffTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryExtractionCutoffTests.swift; sourceTree = "<group>"; };
 		6AB14239FAB473F1620DDB6F /* DependencyContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DependencyContainer.swift; sourceTree = "<group>"; };
 		6C90C70A1E69DCAFC55B0D97 /* ChatView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		4D153370D8E0A5C3B7091F44 /* StreamingRenderBuffer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingRenderBuffer.swift; sourceTree = "<group>"; };
 		6CA752AC52AE6D96A5E8910C /* AgentDescriptorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentDescriptorTests.swift; sourceTree = "<group>"; };
 		6E5FD0A4E59859EEE61B6174 /* WorldBookEditorViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorldBookEditorViewModel.swift; sourceTree = "<group>"; };
 		6E9324DB44FB8C131373C3B6 /* KeywordMatcher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeywordMatcher.swift; sourceTree = "<group>"; };
@@ -527,6 +530,7 @@
 		C87561F6B7556CC6B824148F /* CharacterCardEditorViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CharacterCardEditorViewModel.swift; sourceTree = "<group>"; };
 		C9B200C84298C8418FF0F59F /* DatabaseManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DatabaseManager.swift; sourceTree = "<group>"; };
 		CC6A22E60DCDD8DEE174FCF2 /* SSEStreamParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SSEStreamParserTests.swift; sourceTree = "<group>"; };
+		CC31E03BC652DC85252780E7 /* ChatVibePerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatVibePerformanceUITests.swift; sourceTree = "<group>"; };
 		CE91F0D5773AF63CE16578CF /* MessageBubbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		CE91F0D5773AF63CE16578D0 /* MessageBubbleView+Preview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "MessageBubbleView+Preview.swift"; sourceTree = "<group>"; };
 		CEC79427B58B066482A667B9 /* CompressionSourceHasher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CompressionSourceHasher.swift; sourceTree = "<group>"; };
@@ -703,6 +707,7 @@
 		192F646BCAA6DE1ED698FC43 /* OpenChatUITests */ = {
 			isa = PBXGroup;
 			children = (
+				CC31E03BC652DC85252780E7 /* ChatVibePerformanceUITests.swift */,
 				01A3C937AA4F4C61A1B64C05 /* MessageBubbleContextMenuUITests.swift */,
 				01A3C937AA4F4C61A1B64C06 /* PrefillModeUITests.swift */,
 				A6F87672B26ABE224F88679C /* StageUITests.swift */,
@@ -899,6 +904,7 @@
 			children = (
 				4662F971A024BA88226753AF /* MemoryExtractionPhase.swift */,
 				E1C8DBE2CBCE4CF61D5E29C2 /* MessageDisplayItem.swift */,
+				4D153370D8E0A5C3B7091F44 /* StreamingRenderBuffer.swift */,
 				BEA70F9B486AA6557DDF1936 /* StreamingStats.swift */,
 			);
 			path = Models;
@@ -1657,6 +1663,7 @@
 				3CEDFC556FB5047A456B4AA9 /* MemoryListView.swift in Sources */,
 				A849A3B387F26DF9308B1132 /* MemoryExtractionPhase.swift in Sources */,
 				6E587FC1FAB6031C06FBF970 /* MessageDisplayItem.swift in Sources */,
+				4D153371D8E0A5C3B7091F44 /* StreamingRenderBuffer.swift in Sources */,
 				0DACBE6688339601CABF825C /* StreamingStats.swift in Sources */,
 				F929E8BDD44AB9F8D66ED1AB /* ChatViewModel+Support.swift in Sources */,
 				578AB3C37EDAA3CC667DF65D /* ChatViewModel.swift in Sources */,
@@ -1728,6 +1735,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC31E03CC652DC85252780E7 /* ChatVibePerformanceUITests.swift in Sources */,
 				01A3C937AA4F4C61A1B64D05 /* MessageBubbleContextMenuUITests.swift in Sources */,
 				01A3C937AA4F4C61A1B64D06 /* PrefillModeUITests.swift in Sources */,
 				76C8F7CD1FDBE3A1C9D3EBAB /* StageUITests.swift in Sources */,
@@ -1944,6 +1952,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GZAC7644XS;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDevelopmentRegion = en;
 				INFOPLIST_KEY_CFBundleDisplayName = OpenChat;
 				INFOPLIST_KEY_CFBundleLocalizations = "en zh-Hans";
@@ -2081,6 +2090,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = GZAC7644XS;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDevelopmentRegion = en;
 				INFOPLIST_KEY_CFBundleDisplayName = OpenChat;
 				INFOPLIST_KEY_CFBundleLocalizations = "en zh-Hans";

@@ -293,16 +293,15 @@ extension ChatViewModel {
                 streamTask = nil
             }
             do {
+                var renderBuffer = StreamingRenderBuffer()
                 for try await delta in apiClient.streamMessage(
                     messages: assembly.messages,
                     endpoint: endpoint,
                     parameters: currentParameters
                 ) {
-                    if !delta.content.isEmpty {
-                        appendAssistantDelta(delta.content, messageID: assistantRecord.id)
-                    }
-                    if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                        appendReasoningDelta(reasoning, messageID: assistantRecord.id)
+                    renderBuffer.append(content: delta.content, reasoningContent: delta.reasoningContent)
+                    if let batch = renderBuffer.flushIfNeeded() {
+                        appendStreamingBatch(batch, messageID: assistantRecord.id)
                     }
                     if let usage = delta.usage {
                         lastUsage = usage
@@ -310,6 +309,9 @@ extension ChatViewModel {
                     if delta.finishReason != nil {
                         break
                     }
+                }
+                if let batch = renderBuffer.flushIfNeeded(force: true) {
+                    appendStreamingBatch(batch, messageID: assistantRecord.id)
                 }
 
                 let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
@@ -370,14 +372,14 @@ extension ChatViewModel {
         return try APIEndpointConfig(from: endpoint, model: model, apiKey: storedKey ?? endpoint.apiKey)
     }
 
-    private func appendAssistantDelta(_ delta: String, messageID: String) {
+    private func appendStreamingBatch(_ batch: StreamingRenderBatch, messageID: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-        messages[index].appendContentDelta(delta)
-    }
-
-    private func appendReasoningDelta(_ delta: String, messageID: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-        messages[index].reasoningContent = (messages[index].reasoningContent ?? "") + delta
+        if !batch.content.isEmpty {
+            messages[index].appendContentDelta(batch.content)
+        }
+        if !batch.reasoningContent.isEmpty {
+            messages[index].reasoningContent = (messages[index].reasoningContent ?? "") + batch.reasoningContent
+        }
     }
 
     private func setAssistantStats(_ stats: StreamingStats, messageID: String) {
@@ -639,16 +641,15 @@ extension ChatViewModel {
         var lastUsage: StreamUsage?
         let streamStart = ContinuousClock.now
         do {
+            var renderBuffer = StreamingRenderBuffer()
             for try await delta in apiClient.streamMessage(
                 messages: assembly.messages,
                 endpoint: endpoint,
                 parameters: currentParameters
             ) {
-                if !delta.content.isEmpty {
-                    appendAssistantDelta(delta.content, messageID: assistantRecord.id)
-                }
-                if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
-                    appendReasoningDelta(reasoning, messageID: assistantRecord.id)
+                renderBuffer.append(content: delta.content, reasoningContent: delta.reasoningContent)
+                if let batch = renderBuffer.flushIfNeeded() {
+                    appendStreamingBatch(batch, messageID: assistantRecord.id)
                 }
                 if let usage = delta.usage {
                     lastUsage = usage
@@ -656,6 +657,9 @@ extension ChatViewModel {
                 if delta.finishReason != nil {
                     break
                 }
+            }
+            if let batch = renderBuffer.flushIfNeeded(force: true) {
+                appendStreamingBatch(batch, messageID: assistantRecord.id)
             }
 
             let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
