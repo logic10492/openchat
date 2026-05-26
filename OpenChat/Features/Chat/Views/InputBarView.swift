@@ -16,6 +16,7 @@ struct InputBarView: View {
     @State private var isDirectorPanelExpanded = false
     @State private var measuredInputHeight: CGFloat = 22
     @FocusState private var isFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     private let minimumInputHeight: CGFloat = 22
     private let maximumInputHeight: CGFloat = 118
@@ -28,6 +29,10 @@ struct InputBarView: View {
         stageParticipants
             .filter { $0.isActive && $0.visibilityValue == .present }
             .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var chromeAppearance: ChatChromeAppearance {
+        ChatChromeAppearance(colorScheme: colorScheme)
     }
 
     var body: some View {
@@ -105,7 +110,7 @@ struct InputBarView: View {
             if text.isEmpty {
                 Text(placeholder)
                     .font(OpenChatDesignSystem.Typography.body)
-                    .foregroundStyle(Color(.placeholderText))
+                    .foregroundStyle(chromeAppearance.placeholderText)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
                     .allowsHitTesting(false)
@@ -113,7 +118,7 @@ struct InputBarView: View {
 
             TextEditor(text: $text)
                 .font(OpenChatDesignSystem.Typography.body)
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(chromeAppearance.primaryText)
                 .frame(minHeight: editorHeight, maxHeight: editorHeight)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
@@ -123,13 +128,12 @@ struct InputBarView: View {
                 .accessibilityIdentifier("chat.inputText")
         }
         .background {
-            inputGlassFill(shape: inputShape)
+            inputChromeBackground(shape: inputShape)
         }
         .overlay {
             inputShape
                 .stroke(inputStroke, lineWidth: isFocused ? 1 : 0.5)
         }
-        .inputLiquidGlass(in: inputShape)
         .shadow(color: Color.black.opacity(0.08), radius: 9, x: 0, y: 3)
         .onPreferenceChange(InputTextHeightPreferenceKey.self) { height in
             measuredInputHeight = min(max(height, minimumInputHeight), maximumInputHeight)
@@ -168,11 +172,13 @@ struct InputBarView: View {
     }
 
     @ViewBuilder
-    private func inputGlassFill<S: Shape>(shape: S) -> some View {
+    private func inputChromeBackground<S: Shape>(shape: S) -> some View {
         if #available(iOS 26.0, *) {
-            shape.fill(Color.white.opacity(isFocused ? 0.06 : 0.04))
+            shape
+                .fill(inputGlassTint(appearance: chromeAppearance))
+                .glassEffect(.regular.tint(inputGlassTint(appearance: chromeAppearance)).interactive(), in: shape)
         } else {
-            shape.fill(.ultraThinMaterial)
+            shape.fill(chromeAppearance.fallbackFill)
         }
     }
 
@@ -192,7 +198,7 @@ struct InputBarView: View {
     }
 
     private var inputStroke: Color {
-        isFocused ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.30)
+        isFocused ? Color.accentColor.opacity(0.34) : chromeAppearance.stroke
     }
 
     private var directorToolButton: some View {
@@ -202,7 +208,7 @@ struct InputBarView: View {
         } label: {
             Image(systemName: isDirectorPanelExpanded ? "ellipsis.circle.fill" : "ellipsis.circle")
                 .font(.system(size: 29, weight: .regular))
-                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isDirectorPanelExpanded ? Color.accentColor : chromeAppearance.secondaryText)
                 .frame(width: 32, height: 32)
         }
         .buttonStyle(.plain)
@@ -230,7 +236,7 @@ struct InputBarView: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(isPrefillModeEnabled ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isPrefillModeEnabled ? Color.accentColor : chromeAppearance.secondaryText)
                 .frame(width: 34, height: 34)
                 .background {
                     inputModeMenuGlassFill(isActive: isPrefillModeEnabled)
@@ -238,8 +244,7 @@ struct InputBarView: View {
                 .overlay {
                     inputModeMenuGlassStroke(isActive: isPrefillModeEnabled)
                 }
-                .inputLiquidGlass(in: Circle())
-                .shadow(color: Color.black.opacity(isPrefillModeEnabled ? 0.12 : 0.06), radius: 8, x: 0, y: 3)
+                .shadow(color: chromeAppearance.shadow.opacity(isPrefillModeEnabled ? 1.2 : 0.7), radius: 8, x: 0, y: 3)
         }
         .labelStyle(.iconOnly)
         .menuStyle(.button)
@@ -270,7 +275,7 @@ struct InputBarView: View {
             }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: OpenChatDesignSystem.IconSize.sm, weight: .bold))
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(chromeAppearance.primaryText)
                     .frame(width: 34, height: 34)
                     .background {
                         sendButtonGlassFill(isEnabled: true)
@@ -278,8 +283,7 @@ struct InputBarView: View {
                     .overlay {
                         sendButtonGlassStroke(isEnabled: true)
                     }
-                    .inputLiquidGlass(in: Circle())
-                    .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 3)
+                    .shadow(color: chromeAppearance.shadow, radius: 8, x: 0, y: 3)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(String(localized: "Stop generating"))
@@ -290,7 +294,7 @@ struct InputBarView: View {
             }) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: OpenChatDesignSystem.IconSize.md, weight: .bold))
-                    .foregroundStyle(canSend ? Color.accentColor : Color.secondary.opacity(0.75))
+                    .foregroundStyle(canSend ? Color.accentColor : chromeAppearance.secondaryText)
                     .frame(width: 34, height: 34)
                     .background {
                         sendButtonGlassFill(isEnabled: canSend)
@@ -298,8 +302,7 @@ struct InputBarView: View {
                     .overlay {
                         sendButtonGlassStroke(isEnabled: canSend)
                     }
-                    .inputLiquidGlass(in: Circle())
-                    .shadow(color: Color.black.opacity(canSend ? 0.12 : 0.06), radius: 8, x: 0, y: 3)
+                    .shadow(color: chromeAppearance.shadow.opacity(canSend ? 1.2 : 0.7), radius: 8, x: 0, y: 3)
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
@@ -312,17 +315,18 @@ struct InputBarView: View {
     private func sendButtonGlassFill(isEnabled: Bool) -> some View {
         if #available(iOS 26.0, *) {
             Circle()
-                .fill((isEnabled ? Color.accentColor : Color.white).opacity(isEnabled ? 0.08 : 0.05))
+                .fill(sendButtonGlassTint(isEnabled: isEnabled, appearance: chromeAppearance))
+                .glassEffect(.regular.tint(sendButtonGlassTint(isEnabled: isEnabled, appearance: chromeAppearance)).interactive(), in: Circle())
         } else {
             Circle()
-                .fill(.ultraThinMaterial)
+                .fill(chromeAppearance.fallbackFill)
         }
     }
 
     private func sendButtonGlassStroke(isEnabled: Bool) -> some View {
         Circle()
             .stroke(
-                isEnabled ? Color.accentColor.opacity(0.34) : Color.white.opacity(0.28),
+                isEnabled ? Color.accentColor.opacity(0.34) : chromeAppearance.stroke,
                 lineWidth: 0.8
             )
     }
@@ -331,19 +335,41 @@ struct InputBarView: View {
     private func inputModeMenuGlassFill(isActive: Bool) -> some View {
         if #available(iOS 26.0, *) {
             Circle()
-                .fill((isActive ? Color.accentColor : Color.white).opacity(isActive ? 0.10 : 0.05))
+                .fill(inputModeMenuGlassTint(isActive: isActive, appearance: chromeAppearance))
+                .glassEffect(.regular.tint(inputModeMenuGlassTint(isActive: isActive, appearance: chromeAppearance)).interactive(), in: Circle())
         } else {
             Circle()
-                .fill(.ultraThinMaterial)
+                .fill(chromeAppearance.fallbackFill)
         }
     }
 
     private func inputModeMenuGlassStroke(isActive: Bool) -> some View {
         Circle()
             .stroke(
-                isActive ? Color.accentColor.opacity(0.38) : Color.white.opacity(0.28),
+                isActive ? Color.accentColor.opacity(0.38) : chromeAppearance.stroke,
                 lineWidth: 0.8
             )
+    }
+
+    private func inputGlassTint(appearance: ChatChromeAppearance) -> Color {
+        if colorScheme == .dark {
+            return Color.black.opacity(isFocused ? 0.34 : 0.28)
+        }
+        return Color.white.opacity(isFocused ? 0.34 : 0.28)
+    }
+
+    private func sendButtonGlassTint(isEnabled: Bool, appearance: ChatChromeAppearance) -> Color {
+        if isEnabled {
+            return Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.18)
+        }
+        return appearance.glassTint
+    }
+
+    private func inputModeMenuGlassTint(isActive: Bool, appearance: ChatChromeAppearance) -> Color {
+        if isActive {
+            return Color.accentColor.opacity(colorScheme == .dark ? 0.26 : 0.20)
+        }
+        return appearance.glassTint
     }
 }
 
@@ -395,16 +421,5 @@ private struct InputTextHeightPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func inputLiquidGlass<S: Shape>(in shape: S) -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: shape)
-        } else {
-            self
-        }
     }
 }

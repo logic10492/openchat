@@ -1,5 +1,35 @@
 import SwiftUI
 
+struct ChatChromeAppearance {
+    let glassTint: Color
+    let fallbackFill: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let placeholderText: Color
+    let stroke: Color
+    let shadow: Color
+
+    init(colorScheme: ColorScheme) {
+        if colorScheme == .dark {
+            glassTint = Color.black.opacity(0.38)
+            fallbackFill = Color(.secondarySystemBackground).opacity(0.82)
+            primaryText = Color.white.opacity(0.94)
+            secondaryText = Color.white.opacity(0.66)
+            placeholderText = Color.white.opacity(0.42)
+            stroke = Color.white.opacity(0.16)
+            shadow = Color.black.opacity(0.28)
+        } else {
+            glassTint = Color.white.opacity(0.46)
+            fallbackFill = Color(.secondarySystemBackground).opacity(0.76)
+            primaryText = Color.black.opacity(0.86)
+            secondaryText = Color.black.opacity(0.54)
+            placeholderText = Color.black.opacity(0.34)
+            stroke = Color.white.opacity(0.38)
+            shadow = Color.black.opacity(0.10)
+        }
+    }
+}
+
 struct ChatDateSeparator: View {
     let date: Date
 
@@ -20,10 +50,15 @@ struct ChatDateSeparator: View {
 struct ChatHeaderCapsule: View {
     let title: String
     let subtitle: String?
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         capsuleContent
-            .modifier(ChatHeaderGlassCapsuleStyle())
+            .modifier(ChatHeaderGlassCapsuleStyle(appearance: appearance))
+    }
+
+    private var appearance: ChatChromeAppearance {
+        ChatChromeAppearance(colorScheme: colorScheme)
     }
 
     private var capsuleContent: some View {
@@ -31,14 +66,14 @@ struct ChatHeaderCapsule: View {
             VStack(spacing: 1) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(appearance.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(OpenChatDesignSystem.Typography.badge)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(appearance.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -48,6 +83,8 @@ struct ChatHeaderCapsule: View {
 }
 
 private struct ChatHeaderGlassCapsuleStyle: ViewModifier {
+    let appearance: ChatChromeAppearance
+
     func body(content: Content) -> some View {
         let capsule = Capsule()
         content
@@ -55,34 +92,25 @@ private struct ChatHeaderGlassCapsuleStyle: ViewModifier {
             .padding(.vertical, OpenChatDesignSystem.Spacing.xs)
             .frame(minWidth: 156, maxWidth: 252, minHeight: 48)
             .background {
-                if #available(iOS 26.0, *) {
-                    Color.clear
-                } else {
-                    capsule.fill(.ultraThinMaterial)
-                }
+                headerBackground(capsule)
             }
             .overlay {
-                if #available(iOS 26.0, *) {
-                    EmptyView()
-                } else {
-                    capsule
-                        .stroke(Color.white.opacity(0.22), lineWidth: 0.5)
-                        .blendMode(.overlay)
-                }
+                capsule
+                    .stroke(appearance.stroke, lineWidth: 0.7)
+                    .blendMode(.overlay)
             }
-            .ifAvailableGlassEffect(in: capsule)
-            .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
+            .shadow(color: appearance.shadow, radius: 10, x: 0, y: 4)
             .contentShape(capsule)
     }
-}
 
-private extension View {
     @ViewBuilder
-    func ifAvailableGlassEffect<S: Shape>(in shape: S) -> some View {
+    private func headerBackground(_ capsule: Capsule) -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: shape)
+            capsule
+                .fill(appearance.glassTint)
+                .glassEffect(.regular.tint(appearance.glassTint).interactive(), in: capsule)
         } else {
-            self
+            capsule.fill(appearance.fallbackFill)
         }
     }
 }
