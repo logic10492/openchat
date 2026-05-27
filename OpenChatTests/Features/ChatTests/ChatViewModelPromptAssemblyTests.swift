@@ -127,6 +127,242 @@ private func restore(_ defaults: UserDefaults, key: String, value: Any?) {
 @MainActor
 @Suite("Chat prompt assembly")
 struct ChatViewModelPromptAssemblyTests {
+    @Test func test_loadMessages_exposesRecentWindowAndSentinelHasEarlierState() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let exactWindowConversation = TestHelpers.makeConversation(id: "timeline-window-exact")
+        let overflowConversation = TestHelpers.makeConversation(id: "timeline-window-overflow")
+        try await database.saveConversation(exactWindowConversation)
+        try await database.saveConversation(overflowConversation)
+        try await insertTimelineMessages(database: database, conversationId: exactWindowConversation.id, count: 120)
+        try await insertTimelineMessages(database: database, conversationId: overflowConversation.id, count: 121)
+
+        let exactWindowViewModel = makeTimelineWindowViewModel(
+            conversation: exactWindowConversation,
+            database: database
+        )
+        await exactWindowViewModel.loadMessages()
+
+        #expect(exactWindowViewModel.messages.count == 120)
+        #expect(exactWindowViewModel.messages.map(\.sortOrder) == Array(0..<120))
+        #expect(exactWindowViewModel.hasEarlierMessages == false)
+
+        let overflowViewModel = makeTimelineWindowViewModel(
+            conversation: overflowConversation,
+            database: database
+        )
+        await overflowViewModel.loadMessages()
+
+        #expect(overflowViewModel.messages.count == 120)
+        #expect(overflowViewModel.messages.map(\.sortOrder) == Array(1...120))
+        #expect(overflowViewModel.hasEarlierMessages == true)
+
+        await overflowViewModel.loadEarlierMessagesIfNeeded()
+
+        #expect(overflowViewModel.messages.count == 121)
+        #expect(overflowViewModel.messages.map(\.sortOrder) == Array(0...120))
+        #expect(overflowViewModel.hasEarlierMessages == false)
+    }
+
+    @Test func test_promptHistoryUsesDatabaseBeyondVisibleTimelineWindow() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "timeline-window-endpoint",
+            name: "Timeline Window Endpoint",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "timeline-window-model",
+            endpointId: endpoint.id,
+            modelId: "timeline-window-model",
+            maxContextTokens: 24_000,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(id: "timeline-window-prompt", slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        try await database.saveEndpoint(endpoint)
+        try await database.saveEndpointModel(model)
+        try await database.saveConversation(conversation)
+        try await insertTimelineMessages(database: database, conversationId: conversation.id, count: 150)
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Window-safe response"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: database, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        #expect(viewModel.messages.count == 120)
+        #expect(viewModel.messages.first?.sortOrder == 30)
+        #expect(viewModel.hasEarlierMessages)
+
+        viewModel.inputText = "Continue after the windowed timeline."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        #expect(request.messages.contains { $0.content == "timeline message 0" })
+        #expect(request.messages.contains { $0.content == "timeline message 29" })
+        #expect(request.messages.contains { $0.content == "timeline message 149" })
+        #expect(request.messages.contains { $0.role == "user" && $0.content.contains("Continue after the windowed timeline.") })
+    }
+
+    @Test func test_deleteMessage_removesVisibleTimelineItemWithoutReloadingWindow() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let conversation = TestHelpers.makeConversation(id: "timeline-window-delete")
+        try await database.saveConversation(conversation)
+        try await insertTimelineMessages(database: database, conversationId: conversation.id, count: 150)
+        let viewModel = makeTimelineWindowViewModel(conversation: conversation, database: database)
+
+        await viewModel.loadMessages()
+        #expect(viewModel.messages.count == 120)
+        #expect(viewModel.messages.first?.sortOrder == 30)
+
+        await viewModel.deleteMessage("timeline-window-\(conversation.id)-149")
+
+        #expect(viewModel.messages.count == 119)
+        #expect(viewModel.messages.first?.sortOrder == 30)
+        #expect(!viewModel.messages.contains { $0.sortOrder == 149 })
+        #expect(viewModel.hasEarlierMessages)
+
+        let records = try await database.fetchMessages(conversationId: conversation.id)
+        #expect(records.count == 149)
+        #expect(!records.contains { $0.sortOrder == 149 })
+    }
+
+    @Test func test_editMessage_truncatesVisibleTimelineTailWithoutReloadingWindow() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "timeline-window-edit-endpoint",
+            name: "Timeline Window Edit Endpoint",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "timeline-window-edit-model",
+            endpointId: endpoint.id,
+            modelId: "timeline-window-edit-model",
+            maxContextTokens: 24_000,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(id: "timeline-window-edit", slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+        try await database.saveEndpoint(endpoint)
+        try await database.saveEndpointModel(model)
+        try await database.saveConversation(conversation)
+        try await insertTimelineMessages(database: database, conversationId: conversation.id, count: 150)
+
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Edited window response"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: database, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        await viewModel.loadMessages()
+        #expect(viewModel.messages.count == 120)
+        #expect(viewModel.messages.first?.sortOrder == 30)
+
+        await viewModel.editMessage(
+            "timeline-window-\(conversation.id)-100",
+            newContent: "edited visible timeline message 100"
+        )
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(viewModel.messages.first?.sortOrder == 30)
+        #expect(viewModel.messages.map(\.sortOrder).last == 101)
+        #expect(viewModel.messages.count == 72)
+        #expect(viewModel.messages.contains { $0.sortOrder == 100 && $0.content == "edited visible timeline message 100" })
+        #expect(viewModel.messages.last?.content == "Edited window response")
+
+        let records = try await database.fetchMessages(conversationId: conversation.id)
+        #expect(records.map(\.sortOrder) == Array(0...101))
+        #expect(records.first(where: { $0.sortOrder == 100 })?.content == "edited visible timeline message 100")
+        #expect(records.last?.content == "Edited window response")
+    }
+
     @Test func test_current_parameters_preserve_reasoning_effort() async throws {
         let database = try TestHelpers.makeDatabaseManager()
         let conversation = TestHelpers.makeConversation()
@@ -1225,6 +1461,84 @@ struct ChatViewModelPromptAssemblyTests {
         let assistant = storedMessages.first { $0.role == "assistant" }
         #expect(assistant?.content == "Partial reply")
         #expect(viewModel.messages.contains { $0.role == "assistant" && $0.content == "Partial reply" })
+        #expect(viewModel.isGenerating == false)
+        #expect(viewModel.streamTask == nil)
+    }
+
+    @Test func test_stream_failure_without_delta_restores_prefillNextRoleFromRemainingTail() async throws {
+        let databaseManager = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "endpoint-empty-stream-failure",
+            name: "Local",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "model-empty-stream-failure",
+            endpointId: endpoint.id,
+            modelId: "test-model",
+            maxContextTokens: 4096,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        var conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.isTitleGenerated = true
+
+        try await databaseManager.saveEndpoint(endpoint)
+        try await databaseManager.saveEndpointModel(model)
+        try await databaseManager.saveConversation(conversation)
+
+        let session = MockURLProtocol.makeSession { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"invalid":
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: databaseManager,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: databaseManager, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: databaseManager,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Continue."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let storedMessages = try await databaseManager.fetchMessages(conversationId: conversation.id)
+        #expect(storedMessages.map(\.role) == ["user"])
+        #expect(viewModel.messages.map(\.role) == ["user"])
+        #expect(viewModel.prefillNextRole == .assistantReply)
         #expect(viewModel.isGenerating == false)
         #expect(viewModel.streamTask == nil)
     }
@@ -2588,6 +2902,51 @@ private final class RequestSequenceCapture: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return requests
+    }
+}
+
+@MainActor
+private func makeTimelineWindowViewModel(
+    conversation: ConversationRecord,
+    database: DatabaseManager
+) -> ChatViewModel {
+    let apiClient = APIClient()
+    return ChatViewModel(
+        conversation: conversation,
+        databaseManager: database,
+        apiClient: apiClient,
+        contextManager: ContextManager(databaseManager: database, apiClient: apiClient),
+        memoryManager: MemoryManager(
+            databaseManager: database,
+            embeddingService: ChatFailingEmbeddingProvider(),
+            vectorStore: ChatEmptyVectorStore(),
+            apiClient: apiClient
+        ),
+        titleGenerator: TitleGenerator(apiClient: apiClient),
+        appState: AppState()
+    )
+}
+
+private func insertTimelineMessages(
+    database: DatabaseManager,
+    conversationId: String,
+    count: Int
+) async throws {
+    for index in 0..<count {
+        try await database.saveMessage(
+            MessageRecord(
+                id: "timeline-window-\(conversationId)-\(index)",
+                conversationId: conversationId,
+                role: index.isMultiple(of: 2) ? "user" : "assistant",
+                content: "timeline message \(index)",
+                tokenCount: 3,
+                isCompressed: false,
+                originalContent: nil,
+                sortOrder: index,
+                createdAt: Date(timeIntervalSince1970: Double(index)),
+                reasoningContent: nil
+            )
+        )
     }
 }
 

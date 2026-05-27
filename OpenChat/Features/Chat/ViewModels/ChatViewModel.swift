@@ -23,6 +23,8 @@ final class ChatViewModel {
 
     var conversation: ConversationRecord
     var messages: [MessageDisplayItem] = []
+    var hasEarlierMessages = false
+    var isLoadingEarlierMessages = false
     var isGenerating = false
     var isGeneratingTitle = false
     var extractionPhase: MemoryExtractionPhase = .idle
@@ -73,9 +75,7 @@ final class ChatViewModel {
         return availableWorldBooks.first(where: { $0.id == worldBookId })?.name
     }
 
-    var prefillNextRole: PrefillInputRole {
-        messages.last?.role == "user" ? .assistantReply : .userMessage
-    }
+    var prefillNextRole: PrefillInputRole = .userMessage
 
     var showsConversationCharacterPicker: Bool {
         !isStageEnabled
@@ -108,6 +108,8 @@ final class ChatViewModel {
     @ObservationIgnored
     var streamTask: Task<Void, Never>?
     static let minimumPendingMessagesForExtraction = MemoryManager.minimumMessagesForExtraction
+    private static let initialTimelineWindowSize = 120
+    private static let earlierTimelinePageSize = 80
 
     init(
         conversation: ConversationRecord,
@@ -167,8 +169,43 @@ final class ChatViewModel {
 
     func loadMessages() async {
         do {
-            let records = try await databaseManager.fetchMessages(conversationId: conversation.id)
-            messages = records.map(MessageDisplayItem.init(record:))
+            let records = try await databaseManager.fetchRecentMessages(
+                conversationId: conversation.id,
+                limit: Self.initialTimelineWindowSize + 1
+            )
+            let visibleRecords = records.suffix(Self.initialTimelineWindowSize)
+            messages = visibleRecords.map(MessageDisplayItem.init(record:))
+            hasEarlierMessages = records.count > Self.initialTimelineWindowSize
+            syncPrefillNextRole()
+        } catch {
+            appState.present(error: error.localizedDescription)
+        }
+    }
+
+    func loadEarlierMessagesIfNeeded() async {
+        guard !isLoadingEarlierMessages, hasEarlierMessages else { return }
+        guard let firstSortOrder = messages.first?.sortOrder else {
+            hasEarlierMessages = false
+            return
+        }
+
+        isLoadingEarlierMessages = true
+        defer { isLoadingEarlierMessages = false }
+
+        do {
+            let records = try await databaseManager.fetchMessages(
+                conversationId: conversation.id,
+                beforeSortOrder: firstSortOrder,
+                limit: Self.earlierTimelinePageSize + 1
+            )
+            let visibleRecords = records.suffix(Self.earlierTimelinePageSize)
+            hasEarlierMessages = records.count > Self.earlierTimelinePageSize
+            guard !visibleRecords.isEmpty else { return }
+            let existingIDs = Set(messages.map(\.id))
+            let olderItems = visibleRecords
+                .filter { !existingIDs.contains($0.id) }
+                .map(MessageDisplayItem.init(record:))
+            messages.insert(contentsOf: olderItems, at: 0)
         } catch {
             appState.present(error: error.localizedDescription)
         }
@@ -307,13 +344,14 @@ final class ChatViewModel {
         record.speakerName = characterCard?.name
         try await databaseManager.saveMessage(record)
         messages.append(MessageDisplayItem(record: record))
+        syncPrefillNextRole(afterAppendingRole: record.role)
         if let refreshed = try await databaseManager.fetchConversation(id: conversation.id) {
             conversation = refreshed
         }
     }
 
     private var nextPrefillRole: String {
-        messages.last?.role == "user" ? "assistant" : "user"
+        prefillNextRole == .assistantReply ? "assistant" : "user"
     }
 
     func renameConversation(newTitle: String) async {
@@ -402,7 +440,8 @@ final class ChatViewModel {
                 conversationId: conversation.id,
                 afterSortOrder: target.sortOrder
             )
-            await loadMessages()
+            replaceTimelineMessage(with: target)
+            removeTimelineMessages(afterSortOrder: target.sortOrder)
             try await generateResponse(for: trimmedContent, persistUserMessage: false)
         } catch {
             appState.present(error: error.localizedDescription)
@@ -420,7 +459,7 @@ final class ChatViewModel {
                 )
             }
             try await databaseManager.deleteMessage(id: messageId)
-            await loadMessages()
+            removeTimelineMessage(id: messageId)
         } catch {
             appState.present(error: error.localizedDescription)
         }
@@ -563,6 +602,42 @@ final class ChatViewModel {
             reasoningEffort = inherited.reasoningEffort
         }
         usesCustomModelParameters = usesCustom
+    }
+
+    func syncPrefillNextRole() {
+        let nextRole: PrefillInputRole = messages.last?.role == "user" ? .assistantReply : .userMessage
+        if prefillNextRole != nextRole {
+            prefillNextRole = nextRole
+        }
+    }
+
+    func syncPrefillNextRole(afterAppendingRole role: String) {
+        let nextRole: PrefillInputRole = role == "user" ? .assistantReply : .userMessage
+        if prefillNextRole != nextRole {
+            prefillNextRole = nextRole
+        }
+    }
+
+    private func replaceTimelineMessage(with record: MessageRecord) {
+        guard let index = messages.firstIndex(where: { $0.id == record.id }) else { return }
+        messages[index] = MessageDisplayItem(record: record)
+        syncPrefillNextRole()
+    }
+
+    private func removeTimelineMessage(id: String) {
+        let originalCount = messages.count
+        messages.removeAll { $0.id == id }
+        if messages.count != originalCount {
+            syncPrefillNextRole()
+        }
+    }
+
+    private func removeTimelineMessages(afterSortOrder sortOrder: Int) {
+        let originalCount = messages.count
+        messages.removeAll { $0.sortOrder > sortOrder }
+        if messages.count != originalCount {
+            syncPrefillNextRole()
+        }
     }
 }
 

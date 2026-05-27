@@ -893,6 +893,17 @@
         }
       }
     },
+    "Extracting memories…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提取记忆…"
+          }
+        }
+      }
+    },
     "High" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1015,6 +1026,17 @@
         }
       }
     },
+    "Load earlier messages" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载更早消息"
+          }
+        }
+      }
+    },
     "Loading" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1066,6 +1088,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最大 Token 数"
+          }
+        }
+      }
+    },
+    "Memorized %lld entries" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已记忆 %lld 条"
+          }
+        }
+      }
+    },
+    "Memory extraction failed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记忆提取失败"
           }
         }
       }
@@ -1612,6 +1656,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "恢复默认值"
+          }
+        }
+      }
+    },
+    "Retrieval Trace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检索追踪"
           }
         }
       }

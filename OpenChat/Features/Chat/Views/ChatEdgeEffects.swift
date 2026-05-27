@@ -16,20 +16,34 @@ struct ChatEdgeEffectViewport<Content: View>: View {
                 let topHeight = min(56, proxy.size.height * 0.12)
                 let bottomHeight = min(68, proxy.size.height * 0.14)
 
-                content
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .mask {
-                        ChatEdgeContentFadeMask(topHeight: topHeight, bottomHeight: bottomHeight)
-                    }
-                    .overlay(alignment: .top) {
-                        ChatFallbackEdgeBlurBand(edge: .top, height: topHeight)
-                    }
-                    .overlay(alignment: .bottom) {
-                        ChatFallbackEdgeBlurBand(edge: .bottom, height: bottomHeight)
-                    }
+                fadedContent(
+                    width: proxy.size.width,
+                    height: proxy.size.height,
+                    topHeight: topHeight,
+                    bottomHeight: bottomHeight
+                )
+                .overlay(alignment: .top) {
+                    ChatFallbackEdgeBlurBand(edge: .top, height: topHeight)
+                }
+                .overlay(alignment: .bottom) {
+                    ChatFallbackEdgeBlurBand(edge: .bottom, height: bottomHeight)
+                }
             }
             .accessibilityIdentifier("chat.edgeEffectViewport")
         }
+    }
+
+    private func fadedContent(
+        width: CGFloat,
+        height: CGFloat,
+        topHeight: CGFloat,
+        bottomHeight: CGFloat
+    ) -> some View {
+        content
+            .frame(width: width, height: height)
+            .mask {
+                ChatEdgeContentFadeMask(topHeight: topHeight, bottomHeight: bottomHeight)
+            }
     }
 }
 

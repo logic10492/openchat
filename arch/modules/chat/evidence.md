@@ -13,8 +13,10 @@
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
   - `OpenChat/Features/Chat/Models/StreamingRenderBuffer.swift` — 合并高频 SSE delta，降低长流式回复期间的 UI invalidation 频率
-  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision）
+  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision、reasoningRenderRevision）
+  - `OpenChat/Core/Database/DatabaseManager+Conversations.swift` — 会话消息读取、最近窗口读取和 before-sort-order 向上分页读取
   - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
+  - `OpenChat/Features/Chat/Views/UIKitTimeline/` — UIKit collection timeline core，用于替换超长会话里的 SwiftUI `ScrollView + LazyVStack` 热路径
   - `OpenChatUITests/MessageBubbleContextMenuUITests.swift` — 长按气泡菜单预览背景回归验证
   - `OpenChatUITests/ChatVibePerformanceUITests.swift` — 长会话 + 氛围背景滑动/生成性能 fixture 与指标采集
   - `OpenChat/ContentView.swift`
@@ -25,13 +27,15 @@
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
-  - 超长流式输出 UI：SSE delta 先由 `StreamingRenderBuffer` 按约 50ms / 520 字符合并后再更新 assistant 展示项；assistant 正文按 block 分段渲染；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
+  - 超长流式输出 UI：SSE delta 先由 `StreamingRenderBuffer` 按约 50ms / 520 字符合并后再更新 assistant 展示项，结束和错误路径都会强制 flush，避免失败前已收到但尚未到刷新阈值的 partial delta 丢失；assistant 正文按 block 分段渲染；reasoning 使用独立 revision 参与 diff 与滚动跟随，不把完整长字符串放入 equality/hash 热路径；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
+  - 超长历史窗口化：`ChatViewModel.loadMessages()` 只加载最近 120 条，向上滚动时通过 `loadEarlierMessagesIfNeeded()` 每页追加 80 条更早消息；`hasEarlierMessages` 用 `pageSize + 1` sentinel row 判定，只展示窗口大小内的记录，避免刚好 120/80 条时误认为还有更早历史；`DatabaseManager.fetchRecentMessages` / `fetchMessages(beforeSortOrder:)` 均按 sortOrder 返回升序展示窗口，避免 100K+ 上下文历史一次性进入 timeline 热路径；`editMessage(...)` / `deleteMessage(...)` 在 DB mutation 后只局部替换、移除或截断当前可见 window，不再调用 `loadMessages()` 回填旧消息；Prompt/context 仍由 `databaseManager.fetchMessages(conversationId:)` + `ContextManager.prepareHistory(...)` 读取 DB/Core 历史，不依赖 UI window
+  - UIKit timeline core：`ChatMessageTimelineView` 只保留 SwiftUI bridge，消息列表由 `ChatTimelineViewController` 的 `UICollectionView` 承担；`ChatTimelineDataSource` 维护 stable item id，并在 id 顺序不变时用 `reconfigureItems` 处理流式尾条/content-only 局部更新，apply 后 invalidate layout 以覆盖 streaming row 增高；`ChatTimelineViewController` 在 diffable snapshot apply completion 后执行非 prepend 跳底/流式跟随，prepend 则恢复旧 content offset，避免 data source 尚未提交时滚动到新 indexPath；`ChatTimelineLayout` 负责 layout 和 bubble metrics，流式滚动跟随以 50ms 合并任务节流；真实拖拽、鼠标/触控板滚动和 DEBUG autoscroll 通过 `onScrollingChanged` 暂停 vibe background display link，idle 恢复任务约 50ms 节流；`ChatTimelineItemBuilder` 无更多历史时不生成隐藏 load-earlier item，避免顶部空行；`ChatTimelineTextCache` / `ChatTimelineHeightCache` 按 messageID/revision/width/style 缓存文本和高度，`ChatMessageCell` 使用 viewport-relative 宽度约束保持 flat bubble 视觉；DEBUG-only `--ui-testing-chat-performance-autoscroll` probe 在 10K fixture 下输出 `loaded_timeline_items=122`，证明 UI hot path 没有随总历史线性加载
   - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
   - 发送链路内前置同步记忆提取：按 DB 中 `conversation.lastExtractedSortOrder` 计算待处理消息，达到 4 条后在检索记忆前提取
   - 记忆链路修复：增强 JSON 解析容错、sortOrder cutoff 增量提取、os.Logger 日志、语义检索失败 fallback 到 keyword / high-value 记忆
   - Background Phase 6：Chat 主链路调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)`
   - 世界书 bounded rebuild 仍保留在 Chat pre-source stage；`BackgroundWorker` 不触发 rebuild、不写 DB、不联网、不生成 assistant message
-  - Vibe Background 首版：`ChatView` 通过 `viewModel.isGenerating` 驱动 `ChatConversationBackground`，背景状态在 idle / waiting / streaming / completing 之间切换；当前 active path 由 `VibeBackgroundView` 进入 `UIViewRepresentable`，再由 `VibeBackgroundUIKitView` 用 `CADisplayLink` + 低分辨率 Core Graphics 绘制、一次 Core Image 后处理和放大绘制完成。`VibeBackgroundDriver` 保持 phase 切换时的连续 motion state，减少 streaming 期间的抖动和闪烁；渲染层使用 ProMotion 友好的 `preferredFrameRateRange` 范围提示，但按 phase 把调度上限限制到 idle/completing 24fps、waiting 30fps、streaming 60fps，动画 delta 来自 `targetTimestamp`，同时以 phase 内部 draw budget 控制实际绘制频率，并限制 streaming 粒子上限。`ChatSettingsSheet` 在 `Appearance` section 提供 `Vibe Background (Beta)` / `氛围背景（测试版）` 开关，通过 `VibeBackgroundPreference.isEnabledKey` 持久化到 `UserDefaults`；关闭时 `ChatConversationBackground` 不挂载动画层，只保留页面背景色。该首版不接入内容 watcher，不分析对话内容，不改变 `InputBarView` 布局。
+  - Vibe Background 首版：`ChatView` 通过 `viewModel.isGenerating` 和 `isTimelineScrolling` 驱动 `ChatConversationBackground`，背景状态在 idle / waiting / streaming / completing 之间切换，timeline 滚动期间冻结在最后一帧；当前 active path 由 `VibeBackgroundView` 进入 `UIViewRepresentable`，再由 `VibeBackgroundUIKitView` 用 `CADisplayLink` + 低分辨率 Core Graphics 绘制、一次 Core Image 后处理和放大绘制完成。`VibeBackgroundDriver` 保持 phase 切换时的连续 motion state，减少 streaming 期间的抖动和闪烁；渲染层使用 ProMotion 友好的 `preferredFrameRateRange` 范围提示，但按 phase 把调度上限限制到 idle/completing 24fps、waiting 30fps、streaming 60fps，动画 delta 来自 `targetTimestamp`，同时以 phase 内部 draw budget 控制实际绘制频率，并限制 streaming 粒子上限。`ChatSettingsSheet` 在 `Appearance` section 提供 `Vibe Background (Beta)` / `氛围背景（测试版）` 开关，通过 `VibeBackgroundPreference.isEnabledKey` 持久化到 `UserDefaults`；关闭时 `ChatConversationBackground` 不挂载动画层，只保留页面背景色。该首版不接入内容 watcher，不分析对话内容，不改变 `InputBarView` 布局。
 - 该模块的核心依赖和 Chat prompt 链路已通过自动化测试验证，其中 `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift` 锁定当前输入只进入 API request 一次，并验证 packet selected memory/worldBook entries、semantic-only world book entry 和 worldBook source failure keyword fallback：
   - `MemoryExtractionParsingTests`（JSON 容错、legacy `latestMemoryDate` 查询、StreamDelta usage）
   - `MemoryExtractionCutoffTests`（sortOrder cutoff、消息不足跳过、并发消息不跳过）
@@ -41,9 +45,13 @@
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
-  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略、`StreamingRenderBuffer` 合并策略）
+  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略、reasoning revision、`StreamingRenderBuffer` 合并策略）
+  - `MessageWindowPaginationTests`（最近窗口、before-sort-order 向上分页、zero-limit 空页）
+  - `ChatViewModelPromptAssemblyTests.test_loadMessages_exposesRecentWindowAndSentinelHasEarlierState`（刚好 120 条没有更多历史、121 条只展示 1...120 并可 prepend sortOrder 0）
+  - `ChatViewModelPromptAssemblyTests.test_promptHistoryUsesDatabaseBeyondVisibleTimelineWindow`（150 条 DB 历史只暴露 120 条 timeline window 后，发送请求仍包含窗口外早期历史）
+  - `ChatViewModelPromptAssemblyTests.test_deleteMessage_removesVisibleTimelineItemWithoutReloadingWindow` / `test_editMessage_truncatesVisibleTimelineTailWithoutReloadingWindow`（删除或编辑 visible row 后，当前 120 条窗口只局部变更，不通过 `loadMessages()` 重新补入更早消息）
   - `CompressionStrategyTests`
   - `DatabaseManagerMemoryTests`
 - 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。
 - `OpenChatTests/Features/ChatTests/VibeBackgroundDriverTests.swift` 验证 phase 切换时 `flow` 和 `bandT` 保持连续，且 reduce motion 会清空粒子状态。
-- `OpenChatUITests/ChatVibePerformanceUITests.swift` 使用 `--ui-testing-chat-performance` 生成 420 条长会话历史和 120 个 SSE chunk 的可重复场景，用 `XCTCPUMetric`、`XCTMemoryMetric`、`XCTClockMetric`、`XCTOSSignpostMetric.scrollingAndDecelerationMetric` 采集氛围背景开启时的长会话滑动和生成指标。2026-05-26 的 before/after 数字记录在 `arch/modules/chat/performance-report-2026-05-26.md`。
+- `OpenChatUITests/ChatVibePerformanceUITests.swift` 使用 `--ui-testing-chat-performance` 生成可配置长会话历史和 120 个 SSE chunk 的可重复场景；`--ui-testing-chat-performance-count` 默认 1,000、上限 10,000。用例以 `XCTCPUMetric`、`XCTMemoryMetric`、`XCTClockMetric`、`XCTOSSignpostMetric.scrollingAndDecelerationMetric` 采集氛围背景开启时的长会话滑动和生成指标，并覆盖 1,000 / 3,000 / 10,000 条历史。`ChatTimelineViewController` 的 DEBUG-only autoscroll probe 作为补充，用于无 UI test runner 的连续滚动和窗口化证明。2026-05-26/27 的 before/after、UIKit timeline、截图和 autoscroll 数字记录在 `arch/modules/chat/performance-report-2026-05-26.md`。

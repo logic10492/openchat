@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatTimelineHostView: View {
     let viewModel: ChatViewModel
     let onEdit: (MessageDisplayItem) -> Void
+    let onScrollingChanged: (Bool) -> Void
 
     var body: some View {
         ChatMessageTimelineView(
@@ -11,6 +12,11 @@ struct ChatTimelineHostView: View {
             showDetailedStats: viewModel.showDetailedStats,
             extractionPhase: viewModel.extractionPhase,
             backgroundDiagnostics: viewModel.backgroundDiagnostics,
+            hasEarlierMessages: viewModel.hasEarlierMessages,
+            isLoadingEarlierMessages: viewModel.isLoadingEarlierMessages,
+            onLoadEarlier: {
+                Task { await viewModel.loadEarlierMessagesIfNeeded() }
+            },
             onEdit: onEdit,
             onDelete: { id in
                 Task { await viewModel.deleteMessage(id) }
@@ -20,7 +26,8 @@ struct ChatTimelineHostView: View {
             },
             onDismissExtraction: {
                 viewModel.dismissExtractionIndicator()
-            }
+            },
+            onScrollingChanged: onScrollingChanged
         )
     }
 }

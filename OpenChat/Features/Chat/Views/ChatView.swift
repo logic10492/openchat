@@ -7,6 +7,7 @@ struct ChatView: View {
     @State private var editedMessageText = ""
     @State private var isShowingCharacterPicker = false
     @State private var selectedCharacterPickerWorldBookID: String?
+    @State private var isTimelineScrolling = false
     @AppStorage(VibeBackgroundPreference.isEnabledKey) private var isVibeBackgroundEnabled = VibeBackgroundPreference.defaultIsEnabled
 
     init(viewModel: ChatViewModel) {
@@ -62,14 +63,17 @@ struct ChatView: View {
         ZStack {
             ChatConversationBackground(
                 isGenerating: viewModel.isGenerating,
-                isEnabled: isVibeBackgroundEnabled
+                isEnabled: isVibeBackgroundEnabled,
+                isTimelineScrolling: isTimelineScrolling
             )
             ChatEdgeEffectViewport {
                 ChatTimelineHostView(
                     viewModel: viewModel,
-                    onEdit: beginEditing
+                    onEdit: beginEditing,
+                    onScrollingChanged: { isTimelineScrolling = $0 }
                 )
             }
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
             .chatInputBar {
                 ChatInputBarHostView(viewModel: viewModel)

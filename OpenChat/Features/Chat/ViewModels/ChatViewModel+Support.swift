@@ -80,6 +80,7 @@ extension ChatViewModel {
             record.speakerName = String(localized: "You")
             try await databaseManager.saveMessage(record)
             messages.append(MessageDisplayItem(record: record))
+            syncPrefillNextRole(afterAppendingRole: record.role)
             userMessageRecord = record
         }
 
@@ -281,6 +282,7 @@ extension ChatViewModel {
         assistantRecord.speakerId = stageTurnPlan?.participant?.id
         assistantRecord.speakerName = stageTurnPlan?.participant?.displayName ?? characterCard?.name
         messages.append(MessageDisplayItem(record: assistantRecord))
+        syncPrefillNextRole(afterAppendingRole: assistantRecord.role)
 
         isGenerating = true
         let capturedTokenUsage = assembly.tokenUsage
@@ -288,12 +290,12 @@ extension ChatViewModel {
             guard let self else { return }
             var lastUsage: StreamUsage?
             let streamStart = ContinuousClock.now
+            var renderBuffer = StreamingRenderBuffer()
             defer {
                 isGenerating = false
                 streamTask = nil
             }
             do {
-                var renderBuffer = StreamingRenderBuffer()
                 for try await delta in apiClient.streamMessage(
                     messages: assembly.messages,
                     endpoint: endpoint,
@@ -351,6 +353,9 @@ extension ChatViewModel {
                     conversation = refreshed
                 }
             } catch {
+                if let batch = renderBuffer.flushIfNeeded(force: true) {
+                    appendStreamingBatch(batch, messageID: assistantRecord.id)
+                }
                 try? await persistOrRemovePartialAssistant(assistantRecord)
                 appState.present(error: error.localizedDescription)
             }
@@ -378,7 +383,7 @@ extension ChatViewModel {
             messages[index].appendContentDelta(batch.content)
         }
         if !batch.reasoningContent.isEmpty {
-            messages[index].reasoningContent = (messages[index].reasoningContent ?? "") + batch.reasoningContent
+            messages[index].appendReasoningContentDelta(batch.reasoningContent)
         }
     }
 
@@ -440,6 +445,7 @@ extension ChatViewModel {
                     assistantRecord.speakerId = speaker.id
                     assistantRecord.speakerName = speaker.displayName
                     messages.append(MessageDisplayItem(record: assistantRecord))
+                    syncPrefillNextRole(afterAppendingRole: assistantRecord.role)
 
                     let result = try await streamAssistantResponse(
                         assistantRecord: assistantRecord,
@@ -640,8 +646,8 @@ extension ChatViewModel {
     ) async throws -> StreamedAssistantResult {
         var lastUsage: StreamUsage?
         let streamStart = ContinuousClock.now
+        var renderBuffer = StreamingRenderBuffer()
         do {
-            var renderBuffer = StreamingRenderBuffer()
             for try await delta in apiClient.streamMessage(
                 messages: assembly.messages,
                 endpoint: endpoint,
@@ -673,6 +679,9 @@ extension ChatViewModel {
                 elapsedSeconds: elapsedSeconds
             )
         } catch {
+            if let batch = renderBuffer.flushIfNeeded(force: true) {
+                appendStreamingBatch(batch, messageID: assistantRecord.id)
+            }
             try? await persistOrRemovePartialAssistant(assistantRecord)
             throw error
         }
@@ -772,6 +781,7 @@ extension ChatViewModel {
         messages.removeAll { $0.id == assistantRecord.id }
         messages.append(contentsOf: records.map(MessageDisplayItem.init(record:)))
         messages.sort { $0.sortOrder < $1.sortOrder }
+        syncPrefillNextRole()
         for record in records {
             try await databaseManager.saveMessage(record)
         }
@@ -786,6 +796,7 @@ extension ChatViewModel {
             messages.append(item)
             messages.sort { $0.sortOrder < $1.sortOrder }
         }
+        syncPrefillNextRole()
     }
 
     private func shouldExtractMemories(for conversation: ConversationRecord) async throws -> Bool {
@@ -854,6 +865,7 @@ extension ChatViewModel {
 
     private func removeAssistantPlaceholder(id: String) {
         messages.removeAll { $0.id == id && $0.content.isEmpty }
+        syncPrefillNextRole()
     }
 
     private func persistOrRemovePartialAssistant(_ assistantRecord: MessageRecord) async throws {

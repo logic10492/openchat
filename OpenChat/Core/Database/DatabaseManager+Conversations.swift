@@ -38,6 +38,39 @@ extension DatabaseManager {
         }
     }
 
+    func fetchRecentMessages(
+        conversationId: String,
+        limit: Int
+    ) async throws -> [MessageRecord] {
+        let normalizedLimit = max(limit, 0)
+        guard normalizedLimit > 0 else { return [] }
+        return try await read { db in
+            let records = try MessageRecord
+                .filter(Column("conversationId") == conversationId)
+                .order(Column("sortOrder").desc)
+                .limit(normalizedLimit)
+                .fetchAll(db)
+            return Array(records.reversed())
+        }
+    }
+
+    func fetchMessages(
+        conversationId: String,
+        beforeSortOrder sortOrder: Int,
+        limit: Int
+    ) async throws -> [MessageRecord] {
+        let normalizedLimit = max(limit, 0)
+        guard normalizedLimit > 0 else { return [] }
+        return try await read { db in
+            let records = try MessageRecord
+                .filter(Column("conversationId") == conversationId && Column("sortOrder") < sortOrder)
+                .order(Column("sortOrder").desc)
+                .limit(normalizedLimit)
+                .fetchAll(db)
+            return Array(records.reversed())
+        }
+    }
+
     func saveMessage(_ message: MessageRecord) async throws {
         try await write { db in
             try message.save(db)

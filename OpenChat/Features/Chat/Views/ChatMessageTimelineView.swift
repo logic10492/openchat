@@ -6,282 +6,57 @@ struct ChatMessageTimelineView: View {
     let showDetailedStats: Bool
     let extractionPhase: MemoryExtractionPhase
     let backgroundDiagnostics: BackgroundDiagnostics?
+    let hasEarlierMessages: Bool
+    let isLoadingEarlierMessages: Bool
+    let onLoadEarlier: () -> Void
     let onEdit: (MessageDisplayItem) -> Void
     let onDelete: (String) -> Void
     let onRegenerate: () -> Void
     let onDismissExtraction: () -> Void
-
-    @State private var shouldFollowStreaming = true
-    @State private var followResumeGeneration = 0
-    @State private var resumeFollowTask: Task<Void, Never>?
-    @State private var streamingScrollGeneration = 0
-    @State private var streamingScrollTask: Task<Void, Never>?
-    @GestureState private var isTouchingMessageList = false
+    let onScrollingChanged: (Bool) -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                if messages.isEmpty && !isGenerating {
-                    ChatEmptyConversationView()
-                } else {
-                    timelineStack
-                }
-            }
-            .openChatScrollEdgeEffects()
-            .simultaneousGesture(scrollPauseGesture)
-            .onChange(of: messageListIdentity) { oldIdentity, newIdentity in
-                guard newIdentity.count > oldIdentity.count, let lastID = newIdentity.lastID else { return }
-                if isGenerating {
-                    guard shouldFollowStreaming else { return }
-                    proxy.scrollTo(lastID, anchor: .bottom)
-                } else if oldIdentity.count == 0 || messages.last?.role == "user" {
-                    proxy.scrollTo(lastID, anchor: .bottom)
-                }
-            }
-            .onChange(of: isGenerating) { _, isGenerating in
-                if isGenerating {
-                    shouldFollowStreaming = true
-                    guard let lastID = messages.last?.id else { return }
-                    proxy.scrollTo(lastID, anchor: .bottom)
-                } else {
-                    shouldFollowStreaming = false
-                    cancelStreamingScroll()
-                    cancelFollowResume()
-                }
-            }
-            .onChange(of: latestStreamingRevision) { _, _ in
-                scheduleStreamingScroll()
-            }
-            .onChange(of: streamingScrollGeneration) { _, _ in
-                guard isGenerating, shouldFollowStreaming, let last = messages.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
-            }
-            .onChange(of: followResumeGeneration) { _, _ in
-                guard isGenerating, shouldFollowStreaming, let last = messages.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
-            }
-            .onChange(of: isTouchingMessageList) { _, isTouching in
-                if isTouching {
-                    cancelFollowResume()
-                } else if isGenerating {
-                    scheduleFollowResume()
-                }
-            }
-            .onDisappear {
-                cancelStreamingScroll()
-                cancelFollowResume()
-            }
-        }
-    }
-
-    private var timelineStack: some View {
-        LazyVStack(spacing: 0) {
-            ForEach(Array(messages.enumerated()), id: \.element.id) { index, item in
-                if shouldShowDateSeparator(at: index) {
-                    ChatDateSeparator(date: item.createdAt)
-                        .id("date-separator-\(item.id)")
-                        .padding(.top, index == 0 ? OpenChatDesignSystem.Spacing.sm : OpenChatDesignSystem.Spacing.lg)
-                        .padding(.bottom, OpenChatDesignSystem.Spacing.sm)
-                }
-
-                MessageBubbleView(
-                    item: item,
-                    isStreaming: isStreamingMessage(item),
-                    showDetailedStats: showDetailedStats,
-                    canEdit: !isGenerating,
-                    isGroupedWithPrevious: isGroupedWithPrevious(at: index),
-                    isGroupedWithNext: isGroupedWithNext(at: index),
-                    onEdit: {
-                        onEdit(item)
-                    },
-                    onDelete: {
-                        onDelete(item.id)
-                    },
-                    onRegenerate: onRegenerate
-                )
-                .equatable()
-                .id(item.id)
-                .padding(.top, rowTopPadding(at: index))
-                .accessibilityIdentifier("chat.message.\(item.role).\(item.id)")
-            }
-
-            if extractionPhase.isActive {
-                MemoryExtractionIndicator(
-                    phase: extractionPhase,
-                    onDismiss: {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            onDismissExtraction()
-                        }
-                    }
-                )
-                .id("extraction-indicator")
-            }
-
-            if showDetailedStats, let backgroundDiagnostics {
-                RetrievalTraceView(diagnostics: backgroundDiagnostics)
-                    .id("retrieval-trace")
-            }
-        }
-        .frame(maxWidth: 920)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, OpenChatDesignSystem.Spacing.sm)
-        .padding(.top, OpenChatDesignSystem.Spacing.sm)
-        .padding(.bottom, OpenChatDesignSystem.Spacing.lg)
-    }
-
-    private func isStreamingMessage(_ item: MessageDisplayItem) -> Bool {
-        isGenerating && item.id == messages.last?.id && item.role == "assistant"
-    }
-
-    private var latestStreamingRevision: Int {
-        guard isGenerating, let last = messages.last, last.role == "assistant" else {
-            return -1
-        }
-        return last.contentRenderRevision
-    }
-
-    private var messageListIdentity: ChatMessageListIdentity {
-        ChatMessageListIdentity(count: messages.count, lastID: messages.last?.id)
-    }
-
-    private func shouldShowDateSeparator(at index: Int) -> Bool {
-        guard messages.indices.contains(index) else { return false }
-        guard index > 0 else { return true }
-        return !Calendar.current.isDate(messages[index].createdAt, inSameDayAs: messages[index - 1].createdAt)
-    }
-
-    private func isGroupedWithPrevious(at index: Int) -> Bool {
-        guard messages.indices.contains(index), index > 0 else { return false }
-        return shouldGroup(messages[index], with: messages[index - 1])
-    }
-
-    private func isGroupedWithNext(at index: Int) -> Bool {
-        guard messages.indices.contains(index), messages.indices.contains(index + 1) else { return false }
-        return shouldGroup(messages[index], with: messages[index + 1])
-    }
-
-    private func rowTopPadding(at index: Int) -> CGFloat {
-        isGroupedWithPrevious(at: index) ? 2 : 7
-    }
-
-    private func shouldGroup(_ lhs: MessageDisplayItem, with rhs: MessageDisplayItem) -> Bool {
-        guard lhs.role == rhs.role,
-              lhs.speakerId == rhs.speakerId,
-              lhs.speakerName == rhs.speakerName,
-              Calendar.current.isDate(lhs.createdAt, inSameDayAs: rhs.createdAt)
-        else { return false }
-        return abs(lhs.createdAt.timeIntervalSince(rhs.createdAt)) < 5 * 60
-    }
-
-    private var scrollPauseGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
-            .updating($isTouchingMessageList) { _, state, _ in
-                state = true
-            }
-            .onChanged { _ in
-                if isGenerating {
-                    shouldFollowStreaming = false
-                }
-            }
-            .onEnded { _ in
-                if isGenerating {
-                    scheduleFollowResume()
-                }
-            }
-    }
-
-    private func cancelFollowResume() {
-        resumeFollowTask?.cancel()
-        resumeFollowTask = nil
-    }
-
-    private func cancelStreamingScroll() {
-        streamingScrollTask?.cancel()
-        streamingScrollTask = nil
-    }
-
-    private func scheduleStreamingScroll() {
-        guard isGenerating, shouldFollowStreaming else {
-            cancelStreamingScroll()
-            return
-        }
-        guard streamingScrollTask == nil else { return }
-
-        streamingScrollTask = Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard isGenerating, shouldFollowStreaming else {
-                    streamingScrollTask = nil
-                    return
-                }
-                streamingScrollGeneration &+= 1
-                streamingScrollTask = nil
-            }
-        }
-    }
-
-    private func scheduleFollowResume() {
-        guard isGenerating else {
-            cancelFollowResume()
-            return
-        }
-        cancelFollowResume()
-        resumeFollowTask = Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard isGenerating else {
-                    resumeFollowTask = nil
-                    return
-                }
-                shouldFollowStreaming = true
-                followResumeGeneration &+= 1
-                resumeFollowTask = nil
-            }
-        }
-    }
-}
-
-private struct ChatMessageListIdentity: Equatable {
-    let count: Int
-    let lastID: String?
-}
-
-private struct ChatEmptyConversationView: View {
-    var body: some View {
-        VStack(spacing: OpenChatDesignSystem.Spacing.md) {
-            Spacer()
-            VStack(spacing: OpenChatDesignSystem.Spacing.sm) {
-                Image(systemName: "bubble.left.and.text.bubble.right")
-                    .font(.system(size: 42, weight: .light))
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "Send a message to start the conversation."))
-                    .font(OpenChatDesignSystem.Typography.secondary)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: 360)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.top, 80)
-        .accessibilityIdentifier("chat.emptyState")
+        ChatTimelineUIKitRepresentable(
+            configuration: ChatTimelineConfiguration(
+                messages: messages,
+                isGenerating: isGenerating,
+                showDetailedStats: showDetailedStats,
+                extractionPhase: extractionPhase,
+                backgroundDiagnostics: backgroundDiagnostics,
+                hasEarlierMessages: hasEarlierMessages,
+                isLoadingEarlierMessages: isLoadingEarlierMessages,
+                onLoadEarlier: onLoadEarlier,
+                onEdit: onEdit,
+                onDelete: onDelete,
+                onRegenerate: onRegenerate,
+                onDismissExtraction: onDismissExtraction,
+                onScrollingChanged: onScrollingChanged
+            )
+        )
     }
 }
 
 #Preview("Telegram Stage Timeline") {
     ZStack {
-        ChatConversationBackground(isGenerating: false, isEnabled: true)
+        ChatConversationBackground(
+            isGenerating: false,
+            isEnabled: true,
+            isTimelineScrolling: false
+        )
         ChatMessageTimelineView(
             messages: MessageDisplayItem.stagePreviewMessages(),
             isGenerating: false,
             showDetailedStats: false,
             extractionPhase: .idle,
             backgroundDiagnostics: nil,
+            hasEarlierMessages: false,
+            isLoadingEarlierMessages: false,
+            onLoadEarlier: {},
             onEdit: { _ in },
             onDelete: { _ in },
             onRegenerate: {},
-            onDismissExtraction: {}
+            onDismissExtraction: {},
+            onScrollingChanged: { _ in }
         )
     }
 }

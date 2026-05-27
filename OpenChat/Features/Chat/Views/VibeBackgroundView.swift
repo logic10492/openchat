@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VibeBackgroundView: View {
     let isGenerating: Bool
+    let isTimelineScrolling: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -10,6 +11,7 @@ struct VibeBackgroundView: View {
     var body: some View {
         VibeBackgroundUIKitRepresentable(
             isGenerating: isGenerating,
+            isTimelineScrolling: isTimelineScrolling,
             reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency,
             colorScheme: colorScheme
@@ -20,11 +22,11 @@ struct VibeBackgroundView: View {
 }
 
 #Preview("Night") {
-    VibeBackgroundView(isGenerating: true)
+    VibeBackgroundView(isGenerating: true, isTimelineScrolling: false)
         .preferredColorScheme(.dark)
 }
 
 #Preview("Day") {
-    VibeBackgroundView(isGenerating: true)
+    VibeBackgroundView(isGenerating: true, isTimelineScrolling: false)
         .preferredColorScheme(.light)
 }

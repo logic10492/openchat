@@ -7,6 +7,8 @@ enum UITestingSupport {
     static let contextMenuLaunchArgument = "--ui-testing-chat-context-menu"
     static let prefillLaunchArgument = "--ui-testing-chat-prefill"
     static let performanceLaunchArgument = "--ui-testing-chat-performance"
+    static let performanceAutoScrollLaunchArgument = "--ui-testing-chat-performance-autoscroll"
+    static let performanceAutoExitLaunchArgument = "--ui-testing-chat-performance-autoexit"
     static let vibeWaitingDelayLaunchArgument = "--ui-testing-vibe-waiting-delay"
 
     static var isEnabled: Bool {
@@ -27,6 +29,17 @@ enum UITestingSupport {
 
     private static var usesPerformanceFixture: Bool {
         ProcessInfo.processInfo.arguments.contains(performanceLaunchArgument)
+    }
+
+    private static var performanceFixtureMessageCount: Int {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--ui-testing-chat-performance-count"),
+              arguments.indices.contains(index + 1),
+              let count = Int(arguments[index + 1])
+        else {
+            return 1_000
+        }
+        return min(max(count, 1), 10_000)
     }
 
     static var usesVibeWaitingDelay: Bool {
@@ -247,7 +260,8 @@ enum UITestingSupport {
                 if includePerformanceMessages {
                     for message in performanceMessages(
                         conversationId: performanceConversation.id,
-                        baseDate: now.addingTimeInterval(-72_000)
+                        baseDate: now.addingTimeInterval(-72_000),
+                        count: performanceFixtureMessageCount
                     ) {
                         try message.insert(db)
                     }
@@ -322,8 +336,8 @@ enum UITestingSupport {
         ]
     }
 
-    private static func performanceMessages(conversationId: String, baseDate: Date) -> [MessageRecord] {
-        (0..<420).map { index in
+    private static func performanceMessages(conversationId: String, baseDate: Date, count: Int) -> [MessageRecord] {
+        (0..<count).map { index in
             let isUser = index.isMultiple(of: 4)
             let role = isUser ? "user" : "assistant"
             var record = MessageRecord(

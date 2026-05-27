@@ -7,6 +7,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
     var contentBlocks: [TextContentBlock]
     var contentRenderRevision: Int
     var reasoningContent: String?
+    var reasoningRenderRevision: Int
     var tokenCount: Int?
     var isCompressed: Bool
     var originalContent: String?
@@ -25,6 +26,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
         contentBlocks = TextContentBlock.makeDisplayBlocks(from: record.content)
         contentRenderRevision = record.content.hashValue
         reasoningContent = record.reasoningContent
+        reasoningRenderRevision = record.reasoningContent?.hashValue ?? 0
         tokenCount = record.tokenCount
         isCompressed = record.isCompressed
         originalContent = record.originalContent
@@ -44,10 +46,20 @@ struct MessageDisplayItem: Identifiable, Hashable {
         contentRenderRevision &+= 1
     }
 
+    mutating func appendReasoningContentDelta(_ delta: String) {
+        guard !delta.isEmpty else { return }
+        reasoningContent = (reasoningContent ?? "") + delta
+        reasoningRenderRevision &+= 1
+    }
+
+    var streamingRenderRevision: Int {
+        contentRenderRevision &+ reasoningRenderRevision
+    }
+
     static func == (lhs: MessageDisplayItem, rhs: MessageDisplayItem) -> Bool {
         lhs.id == rhs.id
             && lhs.contentRenderRevision == rhs.contentRenderRevision
-            && lhs.reasoningContent == rhs.reasoningContent
+            && lhs.reasoningRenderRevision == rhs.reasoningRenderRevision
             && lhs.streamingStats == rhs.streamingStats
             && lhs.speakerName == rhs.speakerName
             && lhs.speakerKind == rhs.speakerKind
@@ -56,7 +68,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(contentRenderRevision)
-        hasher.combine(reasoningContent)
+        hasher.combine(reasoningRenderRevision)
         hasher.combine(speakerName)
         hasher.combine(speakerKind)
     }

@@ -47,6 +47,31 @@ struct StreamingRenderSegmentationTests {
         #expect(item.contentRenderRevision != originalRevision)
     }
 
+    @Test func test_messageDisplayItem_appendReasoningDelta_updatesReasoningRevisionOnly() {
+        let record = MessageRecord(
+            id: "assistant-reasoning",
+            conversationId: "conversation-1",
+            role: "assistant",
+            content: "",
+            tokenCount: nil,
+            isCompressed: false,
+            originalContent: nil,
+            sortOrder: 1,
+            createdAt: .now,
+            reasoningContent: nil
+        )
+        var item = MessageDisplayItem(record: record)
+        let originalContentRevision = item.contentRenderRevision
+        let originalStreamingRevision = item.streamingRenderRevision
+
+        item.appendReasoningContentDelta("Thinking")
+
+        #expect(item.content.isEmpty)
+        #expect(item.reasoningContent == "Thinking")
+        #expect(item.contentRenderRevision == originalContentRevision)
+        #expect(item.streamingRenderRevision != originalStreamingRevision)
+    }
+
     @Test func test_markdownLayout_joinsNewlineBlocksIntoSingleRenderSurface() {
         let blocks = TextContentBlock.makeBlocks(from: "动作一\n台词一")
         let layout = MarkdownTextLayoutPlan(blocks: blocks)

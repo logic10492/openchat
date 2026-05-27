@@ -36,9 +36,9 @@
 | `ChatNavigationToolbar.swift` | 导航栏角色胶囊、Stage 胶囊和设置按钮，隔离 toolbar 对 `ChatViewModel` 的观察范围 |
 | `ChatTimelineHostView.swift` | 将 `ChatViewModel` 的消息/统计/诊断状态映射到 `ChatMessageTimelineView`，隔离流式消息刷新 |
 | `ChatInputBarHostView.swift` | 将输入文本、Stage responder 和生成状态绑定到 `InputBarView`，隔离 composer 刷新 |
-| `ChatMessageTimelineView.swift` | Telegram 式消息轨道：日期分隔、同发送者短间隔分组、流式自动跟随/用户拖动暂停、记忆提取提示和诊断 trace 插入 |
+| `ChatMessageTimelineView.swift` | UIKit `UICollectionView` 消息轨道 SwiftUI bridge：日期分隔、同发送者短间隔分组、流式自动跟随/用户拖动暂停、记忆提取提示和诊断 trace 插入 |
 | `ChatChromeViews.swift` | 聊天 chrome 组件：背景、日期分隔、顶部角色胶囊、角色/世界书 popover、编辑消息 sheet |
-| `ChatEdgeEffects.swift` | 消息 viewport 边缘效果：顶部/底部内容渐隐、iOS 26 系统 scroll edge soft style、iOS 17-25 material mask fallback |
+| `ChatEdgeEffects.swift` | `chatInputBar` safe-area bridge 与 iOS 17-25 消息 viewport fade/material fallback；iOS 26+ 边缘 soft effect 由 UIKit timeline 的 native scroll edge effect 承担，视觉权威为 2026-05-27 用户截图和 `e1c17f6` |
 | `MessageBubbleView.swift` | 单条消息行和气泡，支持 Markdown、长按菜单、分组尾部时间、流式光标和统计展示 |
 | `MessageBubbleChrome.swift` | 系统消息胶囊、时间脚等气泡辅助 chrome |
 | `ReasoningDisclosureView.swift` | AI 思考内容展示：折叠摘要、固定高度滚动预览、长文本尾部截断与系统复制 |

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VibeBackgroundUIKitRepresentable: UIViewRepresentable {
     let isGenerating: Bool
+    let isTimelineScrolling: Bool
     let reduceMotion: Bool
     let reduceTransparency: Bool
     let colorScheme: ColorScheme
@@ -10,6 +11,7 @@ struct VibeBackgroundUIKitRepresentable: UIViewRepresentable {
         let view = VibeBackgroundUIKitView()
         view.configure(
             isGenerating: isGenerating,
+            isTimelineScrolling: isTimelineScrolling,
             colorScheme: colorScheme,
             reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency
@@ -20,6 +22,7 @@ struct VibeBackgroundUIKitRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: VibeBackgroundUIKitView, context: Context) {
         uiView.configure(
             isGenerating: isGenerating,
+            isTimelineScrolling: isTimelineScrolling,
             colorScheme: colorScheme,
             reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency

@@ -156,18 +156,18 @@
 
 当前实现证据：
 
-- `OpenChat/Features/Chat/Views/ChatView.swift`：在聊天 shell 的 `ZStack` 底层挂载 `ChatConversationBackground(isGenerating: viewModel.isGenerating)`，背景位于 `ChatEdgeEffectViewport` 和 timeline 之后，不进入 `InputBarView`。
+- `OpenChat/Features/Chat/Views/ChatView.swift`：在聊天 shell 的 `ZStack` 底层挂载 `ChatConversationBackground(isGenerating: viewModel.isGenerating, isEnabled: isVibeBackgroundEnabled, isTimelineScrolling: isTimelineScrolling)`，背景位于 UIKit timeline 和其 edge-effect overlay 之后，不进入 `InputBarView`。
 - `OpenChat/Features/Chat/Views/ChatConversationBackground.swift`：把聊天背景入口从 chrome 杂项文件中独立出来，只负责组合 `VibeBackgroundView` 与页面 fallback 背景色。
 - `OpenChat/Features/Chat/Views/VibeBackgroundView.swift`：SwiftUI shell 只读取环境值并桥接到 `VibeBackgroundUIKitRepresentable`，不再承载动画时钟。
 - `OpenChat/Features/Chat/Views/VibeBackgroundUIKitRepresentable.swift`：用 `UIViewRepresentable` 把 SwiftUI 环境和 `VibeBackgroundUIKitView` 连接起来。
-- `OpenChat/Features/Chat/Views/VibeBackgroundUIKitView.swift`：当前活跃渲染层。它用 `CADisplayLink` 驱动 motion state，按低分辨率 Core Graphics 生成背景，再做一次 Core Image blur / saturation / brightness 合并后处理，并在 `Reduce Motion`、`Reduce Transparency` 和 `window == nil` 时降级或暂停。刷新率策略遵循 ProMotion 的可变刷新模型，但不会追 120Hz：`preferredFrameRateRange` 按 phase 封顶到 idle/completing 24fps、waiting 30fps、streaming 60fps，并保留同一 phase 内部 draw budget；动画推进使用 `targetTimestamp` 计算 delta，避免把背景时钟锁死在某个固定设备刷新档位。离屏渲染尺寸去掉额外 overscan，只在最终绘制到屏幕时保留视觉 overscan。
+- `OpenChat/Features/Chat/Views/VibeBackgroundUIKitView.swift`：当前活跃渲染层。它用 `CADisplayLink` 驱动 motion state，按低分辨率 Core Graphics 生成背景，再做一次 Core Image blur / saturation / brightness 合并后处理，并在 `Reduce Motion`、`Reduce Transparency`、`window == nil` 或 timeline 正在滚动时降级或暂停。刷新率策略遵循 ProMotion 的可变刷新模型，但不会追 120Hz：`preferredFrameRateRange` 按 phase 封顶到 idle/completing 24fps、waiting 30fps、streaming 60fps，并保留同一 phase 内部 draw budget；动画推进使用 `targetTimestamp` 计算 delta，避免把背景时钟锁死在某个固定设备刷新档位。离屏渲染尺寸去掉额外 overscan，只在最终绘制到屏幕时保留视觉 overscan。timeline 滚动状态来自 `ChatTimelineViewController.onScrollingChanged`：真实拖拽、鼠标/触控板滚动和 DEBUG autoscroll 都会暂停 display link，程序化跳底/prepend offset restoration 被短暂 suppress，避免自动滚动误触发滚动冻结。
 - `OpenChat/Features/Chat/Views/VibeBackgroundDriver.swift`：保存跨 phase 的连续 motion state，避免 streaming/waiting/completing 切换时重置 flow、bandT 或粒子状态，从而减少 streaming 期间的抽搐感。streaming 粒子发射率和上限被限制，避免长回复期间背景动画和消息增量渲染长期争抢主线程。
 - `OpenChat/Features/Chat/Views/VibeBackgroundUIKitPalette.swift`、`VibeBackgroundParticle.swift`：UIKit 路径使用的 palette 和粒子模型。
 - `OpenChat/Features/Chat/Views/VibeBackgroundPalette.swift`、`VibeBackgroundPhase.swift`、`VibeBackgroundBlob.swift`、`VibeBackgroundShade.swift`：保留旧的 SwiftUI demo 资产和参数定义，供对照和后续收敛使用，但不再是当前渲染入口。
 
 后续实现内容 watcher 或外观开关时，需要同步更新：
 
-- `arch/modules/chat/views.md`：说明 `ChatView` 背景层的位置，以及它和 `ChatEdgeEffects`、`InputBarView` 的边界。
+- `arch/modules/chat/views.md`：说明 `ChatView` 背景层的位置，以及它和 UIKit timeline edge-effect overlay、`InputBarView` 的边界。
 - `arch/modules/chat/evidence.md`：补充已实现文件、可访问性处理、性能验证和 UI 截图测试。
 - 外观设置文档：如果加入开关或强度档位，需要同步 `arch/modules/settings/appearance.md`。
 

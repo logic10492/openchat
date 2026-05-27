@@ -16,6 +16,7 @@ final class VibeBackgroundUIKitView: UIView {
     private var appliedFrameRatePolicy: VibeBackgroundFrameRatePolicy?
     private var sequenceTask: Task<Void, Never>?
     private var isGenerating = false
+    private var isTimelineScrolling = false
     private var reduceMotion = false
     private var reduceTransparency = false
     private var colorScheme: ColorScheme = .dark
@@ -55,6 +56,7 @@ final class VibeBackgroundUIKitView: UIView {
 
     func configure(
         isGenerating: Bool,
+        isTimelineScrolling: Bool,
         colorScheme: ColorScheme,
         reduceMotion: Bool,
         reduceTransparency: Bool
@@ -66,6 +68,15 @@ final class VibeBackgroundUIKitView: UIView {
         self.colorScheme = colorScheme
         self.reduceMotion = reduceMotion
         self.reduceTransparency = reduceTransparency
+
+        if self.isTimelineScrolling != isTimelineScrolling {
+            self.isTimelineScrolling = isTimelineScrolling
+            if isTimelineScrolling {
+                stopDisplayLink()
+            } else {
+                startDisplayLinkIfNeeded()
+            }
+        }
 
         if didChangeTheme || didChangeAccessibility {
             cachedBaseImage = nil
@@ -154,7 +165,7 @@ final class VibeBackgroundUIKitView: UIView {
     }
 
     private func startDisplayLinkIfNeeded() {
-        guard displayLinkBox.displayLink == nil, !reduceMotion else { return }
+        guard displayLinkBox.displayLink == nil, !reduceMotion, !isTimelineScrolling else { return }
         let link = CADisplayLink(target: self, selector: #selector(displayLinkDidTick(_:)))
         updateFrameRatePolicy(for: link)
         link.add(to: .main, forMode: .common)
