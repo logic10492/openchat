@@ -9,6 +9,7 @@ struct MessageDisplayItem: Identifiable {
     var content: String           // 可变：流式输出时逐步更新
     var contentBlocks: [TextContentBlock] // 渲染分块，降低超长流式输出的单次更新范围
     var contentRenderRevision: Int        // 流式内容修订号，驱动滚动跟随与 diff
+    var renderedMarkdown: AttributedString? // 流式尾条的后台预解析 Markdown
     var reasoningRenderRevision: Int      // 思考内容修订号，避免长 reasoning 进入 diff 热路径
     let isCompressed: Bool
     let originalContent: String?  // 压缩消息的原始内容
@@ -22,14 +23,15 @@ struct MessageDisplayItem: Identifiable {
 
 ### 2.1 分块流式渲染
 
-流式 SSE 事件仍然逐 chunk 进入 UI，保证用户看到实时输出；但 assistant 正文不再作为单个大文本整体重算：
+流式 SSE 事件仍然逐 chunk 接收，保证用户看到实时输出；但 chunk 拼接、显示分块和 Markdown 预解析不再由主线程逐 token 承担：
 
-- `ChatViewModel+Support` 使用 `StreamingRenderBuffer` 在普通生成和 Stage 多角色生成两条路径合并高频 delta；默认约 50ms 或累计 520 字符刷新一次，结束和错误路径都会强制 flush，降低超长回复期间 `messages[index]` 修改和 SwiftUI diff 频率，同时保证失败前已收到但尚未到刷新阈值的 partial delta 不丢失
-- `MessageDisplayItem.appendContentDelta(...)` 同步维护完整 `content` 与 `contentBlocks`
-- `MessageDisplayItem.appendReasoningContentDelta(...)` 单独维护 `reasoningRenderRevision`；`MessageDisplayItem` 的 equality/hash 使用 revision 而不是完整 reasoning 字符串，避免长 reasoning 在每次流式刷新时做大字符串比较
+- `ChatViewModel+Support` 在普通生成和 Stage 多角色生成两条路径使用 `StreamingResponseAccumulator` actor 接收 `StreamDelta`；actor 在后台维护完整 content、reasoning、usage、pending delta、`contentBlocks` 和 `renderedMarkdown`
+- actor 默认约 50ms 或累计 520 字符产出一次 `StreamingRenderSnapshot`；结束和错误路径都会强制 flush，降低超长回复期间 `messages[index]` 修改和 timeline diff 频率，同时保证失败前已收到但尚未到刷新阈值的 partial delta 不丢失
+- 主线程只应用已节流的 `StreamingRenderSnapshot` 到当前 assistant `MessageDisplayItem`，最终持久化和 stats 从 `StreamingFinalSnapshot` 读取，不再从 UI `messages` 反查最终字符串
+- `MessageDisplayItem.applyStreamingSnapshot(...)` 一次性替换完整 `content`、`contentBlocks`、`renderedMarkdown`、reasoning 和 revision
+- `MessageDisplayItem` 的 equality/hash 使用 revision 而不是完整 content / reasoning 字符串，避免长字符串在每次流式刷新时做大比较
 - `TextContentBlock` 优先按自然换行切块，超长无换行文本按固定上限兜底切块
-- `MessageBubbleView` 传入 `contentBlocks`，由 `MarkdownTextView` 分块渲染，避免每个 SSE chunk 都让整条长回复重新参与 Markdown / Text 构建
-- `MessageBubbleView` 对值语义输入使用 `.equatable()`，旧消息在流式尾条更新时跳过无变化的子树重算
+- UIKit timeline 的 `ChatMessageCell` 和 `ChatTimelineHeightMeasurer` 优先使用 `MessageDisplayItem.renderedMarkdown` 生成 `NSAttributedString` 与高度测量；如果没有预渲染结果才回退到主线程 Markdown parse
 - `contentRenderRevision` / `reasoningRenderRevision` 只表达流式修订，不把完整 content 或 reasoning content 放入 Hashable diff 热路径
 
 ### 2.2 Markdown 延迟刷新与缓存

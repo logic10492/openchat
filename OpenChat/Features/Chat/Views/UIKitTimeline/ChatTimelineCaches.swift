@@ -17,7 +17,8 @@ final class ChatTimelineTextCache {
         revision: Int,
         role: String,
         color: UIColor,
-        font: UIFont
+        font: UIFont,
+        renderedMarkdown: AttributedString? = nil
     ) -> NSAttributedString {
         let key = [
             messageID,
@@ -30,7 +31,12 @@ final class ChatTimelineTextCache {
             return cached
         }
 
-        let attributed = makeAttributedText(text: text, color: color, font: font)
+        let attributed: NSAttributedString
+        if let renderedMarkdown {
+            attributed = normalize(NSAttributedString(renderedMarkdown), color: color, font: font)
+        } else {
+            attributed = makeAttributedText(text: text, color: color, font: font)
+        }
         cache.setObject(attributed, forKey: key)
         return attributed
     }
@@ -43,7 +49,11 @@ final class ChatTimelineTextCache {
             return NSAttributedString(string: text, attributes: [.foregroundColor: color, .font: font])
         }
 
-        let mutable = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
+        return normalize(NSAttributedString(parsed), color: color, font: font)
+    }
+
+    private func normalize(_ text: NSAttributedString, color: UIColor, font: UIFont) -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: text)
         let range = NSRange(location: 0, length: mutable.length)
         mutable.addAttributes(
             [

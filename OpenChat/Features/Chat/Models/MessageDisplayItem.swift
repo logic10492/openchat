@@ -6,6 +6,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
     var content: String
     var contentBlocks: [TextContentBlock]
     var contentRenderRevision: Int
+    var renderedMarkdown: AttributedString?
     var reasoningContent: String?
     var reasoningRenderRevision: Int
     var tokenCount: Int?
@@ -25,6 +26,7 @@ struct MessageDisplayItem: Identifiable, Hashable {
         content = record.content
         contentBlocks = TextContentBlock.makeDisplayBlocks(from: record.content)
         contentRenderRevision = record.content.hashValue
+        renderedMarkdown = nil
         reasoningContent = record.reasoningContent
         reasoningRenderRevision = record.reasoningContent?.hashValue ?? 0
         tokenCount = record.tokenCount
@@ -50,6 +52,16 @@ struct MessageDisplayItem: Identifiable, Hashable {
         guard !delta.isEmpty else { return }
         reasoningContent = (reasoningContent ?? "") + delta
         reasoningRenderRevision &+= 1
+    }
+
+    mutating func applyStreamingSnapshot(_ snapshot: StreamingRenderSnapshot) {
+        guard snapshot.messageID == id else { return }
+        content = snapshot.content
+        contentBlocks = snapshot.contentBlocks
+        contentRenderRevision = snapshot.contentRenderRevision
+        renderedMarkdown = snapshot.renderedMarkdown
+        reasoningContent = snapshot.reasoningContent
+        reasoningRenderRevision = snapshot.reasoningRenderRevision
     }
 
     var streamingRenderRevision: Int {

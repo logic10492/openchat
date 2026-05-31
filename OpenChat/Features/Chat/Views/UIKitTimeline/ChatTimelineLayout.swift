@@ -117,7 +117,8 @@ enum ChatTimelineHeightMeasurer {
             revision: item.contentRenderRevision,
             role: item.role,
             color: bodyColor,
-            font: bodyFont
+            font: bodyFont,
+            renderedMarkdown: item.renderedMarkdown
         )
         arrangedHeights.append(measuredAttributedTextHeight(attributed, width: textWidth))
 

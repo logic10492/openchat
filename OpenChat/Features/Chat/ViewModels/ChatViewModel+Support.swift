@@ -288,9 +288,12 @@ extension ChatViewModel {
         let capturedTokenUsage = assembly.tokenUsage
         streamTask = Task { [weak self] in
             guard let self else { return }
-            var lastUsage: StreamUsage?
             let streamStart = ContinuousClock.now
-            var renderBuffer = StreamingRenderBuffer()
+            let accumulator = StreamingResponseAccumulator(
+                messageID: assistantRecord.id,
+                initialContentRenderRevision: messages.first(where: { $0.id == assistantRecord.id })?.contentRenderRevision ?? 0,
+                initialReasoningRenderRevision: messages.first(where: { $0.id == assistantRecord.id })?.reasoningRenderRevision ?? 0
+            )
             defer {
                 isGenerating = false
                 streamTask = nil
@@ -298,38 +301,33 @@ extension ChatViewModel {
             do {
                 for try await delta in apiClient.streamMessage(
                     messages: assembly.messages,
-                    endpoint: endpoint,
-                    parameters: currentParameters
-                ) {
-                    renderBuffer.append(content: delta.content, reasoningContent: delta.reasoningContent)
-                    if let batch = renderBuffer.flushIfNeeded() {
-                        appendStreamingBatch(batch, messageID: assistantRecord.id)
-                    }
-                    if let usage = delta.usage {
-                        lastUsage = usage
+                        endpoint: endpoint,
+                        parameters: currentParameters
+                    ) {
+                    if let snapshot = await accumulator.append(delta) {
+                        applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
                     }
                     if delta.finishReason != nil {
                         break
                     }
                 }
-                if let batch = renderBuffer.flushIfNeeded(force: true) {
-                    appendStreamingBatch(batch, messageID: assistantRecord.id)
+                if let snapshot = await accumulator.flush(force: true) {
+                    applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
                 }
+                let final = await accumulator.finalSnapshot()
 
-                let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
-                let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
                 let completedRecords = try await persistCompletedAssistantMessages(
                     assistantRecord: assistantRecord,
-                    content: finalContent,
-                    reasoningContent: finalReasoning,
+                    content: final.content,
+                    reasoningContent: final.reasoningContent,
                     stageTurnPlan: stageTurnPlan
                 )
 
                 // Compute streaming stats
                 let elapsed = ContinuousClock.now - streamStart
                 let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-                let outputTokens = lastUsage?.completionTokens ?? TokenCounter.count(finalContent)
-                let inputTokens = lastUsage?.promptTokens ?? capturedTokenUsage.totalUsed
+                let outputTokens = final.usage?.completionTokens ?? TokenCounter.count(final.content)
+                let inputTokens = final.usage?.promptTokens ?? capturedTokenUsage.totalUsed
                 let tps = elapsedSeconds > 0 ? Double(outputTokens) / elapsedSeconds : 0
                 let remaining = capturedTokenUsage.totalBudget - inputTokens - outputTokens
                 let remainingPercent = capturedTokenUsage.totalBudget > 0
@@ -339,7 +337,7 @@ extension ChatViewModel {
                 let stats = StreamingStats(
                     inputTokens: inputTokens,
                     outputTokens: outputTokens,
-                    reasoningTokens: lastUsage?.reasoningTokens ?? 0,
+                    reasoningTokens: final.usage?.reasoningTokens ?? 0,
                     tokensPerSecond: tps,
                     contextRemainingPercent: remainingPercent,
                     totalBudget: capturedTokenUsage.totalBudget
@@ -353,10 +351,11 @@ extension ChatViewModel {
                     conversation = refreshed
                 }
             } catch {
-                if let batch = renderBuffer.flushIfNeeded(force: true) {
-                    appendStreamingBatch(batch, messageID: assistantRecord.id)
+                if let snapshot = await accumulator.flush(force: true) {
+                    applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
                 }
-                try? await persistOrRemovePartialAssistant(assistantRecord)
+                let final = await accumulator.finalSnapshot()
+                try? await persistOrRemovePartialAssistant(assistantRecord, final: final)
                 appState.present(error: error.localizedDescription)
             }
         }
@@ -377,14 +376,11 @@ extension ChatViewModel {
         return try APIEndpointConfig(from: endpoint, model: model, apiKey: storedKey ?? endpoint.apiKey)
     }
 
-    private func appendStreamingBatch(_ batch: StreamingRenderBatch, messageID: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-        if !batch.content.isEmpty {
-            messages[index].appendContentDelta(batch.content)
-        }
-        if !batch.reasoningContent.isEmpty {
-            messages[index].appendReasoningContentDelta(batch.reasoningContent)
-        }
+    private func applyStreamingSnapshot(_ snapshot: StreamingRenderSnapshot, messageID: String) {
+        guard snapshot.messageID == messageID,
+              let index = messages.firstIndex(where: { $0.id == messageID })
+        else { return }
+        messages[index].applyStreamingSnapshot(snapshot)
     }
 
     private func setAssistantStats(_ stats: StreamingStats, messageID: String) {
@@ -644,45 +640,44 @@ extension ChatViewModel {
         assembly: AssemblyResult,
         endpoint: APIEndpointConfig
     ) async throws -> StreamedAssistantResult {
-        var lastUsage: StreamUsage?
         let streamStart = ContinuousClock.now
-        var renderBuffer = StreamingRenderBuffer()
+        let accumulator = StreamingResponseAccumulator(
+            messageID: assistantRecord.id,
+            initialContentRenderRevision: messages.first(where: { $0.id == assistantRecord.id })?.contentRenderRevision ?? 0,
+            initialReasoningRenderRevision: messages.first(where: { $0.id == assistantRecord.id })?.reasoningRenderRevision ?? 0
+        )
         do {
             for try await delta in apiClient.streamMessage(
                 messages: assembly.messages,
                 endpoint: endpoint,
                 parameters: currentParameters
             ) {
-                renderBuffer.append(content: delta.content, reasoningContent: delta.reasoningContent)
-                if let batch = renderBuffer.flushIfNeeded() {
-                    appendStreamingBatch(batch, messageID: assistantRecord.id)
-                }
-                if let usage = delta.usage {
-                    lastUsage = usage
+                if let snapshot = await accumulator.append(delta) {
+                    applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
                 }
                 if delta.finishReason != nil {
                     break
                 }
             }
-            if let batch = renderBuffer.flushIfNeeded(force: true) {
-                appendStreamingBatch(batch, messageID: assistantRecord.id)
+            if let snapshot = await accumulator.flush(force: true) {
+                applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
             }
 
-            let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
-            let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
+            let final = await accumulator.finalSnapshot()
             let elapsed = ContinuousClock.now - streamStart
             let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
             return StreamedAssistantResult(
-                content: finalContent,
-                reasoningContent: finalReasoning,
-                usage: lastUsage,
+                content: final.content,
+                reasoningContent: final.reasoningContent,
+                usage: final.usage,
                 elapsedSeconds: elapsedSeconds
             )
         } catch {
-            if let batch = renderBuffer.flushIfNeeded(force: true) {
-                appendStreamingBatch(batch, messageID: assistantRecord.id)
+            if let snapshot = await accumulator.flush(force: true) {
+                applyStreamingSnapshot(snapshot, messageID: assistantRecord.id)
             }
-            try? await persistOrRemovePartialAssistant(assistantRecord)
+            let final = await accumulator.finalSnapshot()
+            try? await persistOrRemovePartialAssistant(assistantRecord, final: final)
             throw error
         }
     }
@@ -871,6 +866,22 @@ extension ChatViewModel {
     private func persistOrRemovePartialAssistant(_ assistantRecord: MessageRecord) async throws {
         let finalContent = messages.first(where: { $0.id == assistantRecord.id })?.content ?? ""
         let finalReasoning = messages.first(where: { $0.id == assistantRecord.id })?.reasoningContent
+        try await persistOrRemovePartialAssistant(
+            assistantRecord,
+            final: StreamingFinalSnapshot(
+                content: finalContent,
+                reasoningContent: finalReasoning,
+                usage: nil
+            )
+        )
+    }
+
+    private func persistOrRemovePartialAssistant(
+        _ assistantRecord: MessageRecord,
+        final: StreamingFinalSnapshot
+    ) async throws {
+        let finalContent = final.content
+        let finalReasoning = final.reasoningContent
         guard !finalContent.isEmpty || !(finalReasoning?.isEmpty ?? true) else {
             removeAssistantPlaceholder(id: assistantRecord.id)
             return

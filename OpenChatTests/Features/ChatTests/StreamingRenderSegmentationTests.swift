@@ -132,4 +132,58 @@ struct StreamingRenderSegmentationTests {
         #expect(sizeBatch?.content == "01234567890123456789")
         #expect(sizeBatch?.reasoningContent == "r")
     }
+
+    @Test func test_streamingResponseAccumulator_buildsSnapshotOffMainFlushBoundary() async {
+        let start = Date(timeIntervalSince1970: 1_800_000_100)
+        let accumulator = StreamingResponseAccumulator(
+            messageID: "assistant-stream",
+            initialContentRenderRevision: 10,
+            initialReasoningRenderRevision: 20,
+            minimumFlushInterval: 0.05,
+            maximumBufferedCharacters: 30,
+            now: start
+        )
+
+        let early = await accumulator.append(
+            StreamDelta(content: "Hello", finishReason: nil),
+            now: start.addingTimeInterval(0.02)
+        )
+        #expect(early == nil)
+
+        let snapshot = await accumulator.append(
+            StreamDelta(content: ", **world**", reasoningContent: "thinking", finishReason: nil),
+            now: start.addingTimeInterval(0.06)
+        )
+
+        #expect(snapshot?.messageID == "assistant-stream")
+        #expect(snapshot?.content == "Hello, **world**")
+        #expect(snapshot?.contentBlocks.map(\.text).joined() == "Hello, **world**")
+        #expect(snapshot?.contentRenderRevision == 12)
+        #expect(snapshot?.reasoningContent == "thinking")
+        #expect(snapshot?.reasoningRenderRevision == 21)
+        #expect(snapshot?.renderedMarkdown != nil)
+    }
+
+    @Test func test_streamingResponseAccumulator_keepsUsageOnlyDeltaForFinalStats() async {
+        let accumulator = StreamingResponseAccumulator(
+            messageID: "assistant-usage",
+            initialContentRenderRevision: 0,
+            initialReasoningRenderRevision: 0
+        )
+
+        let snapshot = await accumulator.append(
+            StreamDelta(
+                content: "",
+                finishReason: nil,
+                usage: StreamUsage(promptTokens: 11, completionTokens: 7, totalTokens: 18, reasoningTokens: 2)
+            )
+        )
+        let final = await accumulator.finalSnapshot()
+
+        #expect(snapshot == nil)
+        #expect(final.content.isEmpty)
+        #expect(final.usage?.promptTokens == 11)
+        #expect(final.usage?.completionTokens == 7)
+        #expect(final.usage?.reasoningTokens == 2)
+    }
 }

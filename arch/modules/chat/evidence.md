@@ -12,13 +12,14 @@
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel.swift` — 状态管理
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — 流式统计收集、记忆提取、BackgroundManager / PromptAssembler 组装链路
   - `OpenChat/Features/Chat/Models/StreamingStats.swift` — 统计数据模型
-  - `OpenChat/Features/Chat/Models/StreamingRenderBuffer.swift` — 合并高频 SSE delta，降低长流式回复期间的 UI invalidation 频率
-  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、contentRenderRevision、reasoningRenderRevision）
+  - `OpenChat/Features/Chat/Models/StreamingRenderBuffer.swift` — `StreamingResponseAccumulator` actor、`StreamingRenderSnapshot` 与 legacy batch buffer：合并高频 SSE delta，并把流式尾条的字符串拼接、分块和 Markdown 预解析移出主线程
+  - `OpenChat/Features/Chat/Models/MessageDisplayItem.swift` — DTO（含 streamingStats、contentBlocks、renderedMarkdown、contentRenderRevision、reasoningRenderRevision）
   - `OpenChat/Core/Database/DatabaseManager+Conversations.swift` — 会话消息读取、最近窗口读取和 before-sort-order 向上分页读取
   - `OpenChat/Shared/Components/MarkdownTextView.swift` — 分块文本渲染、Markdown 延迟刷新与缓存
   - `OpenChat/Features/Chat/Views/UIKitTimeline/` — UIKit collection timeline core，用于替换超长会话里的 SwiftUI `ScrollView + LazyVStack` 热路径
   - `OpenChatUITests/MessageBubbleContextMenuUITests.swift` — 长按气泡菜单预览背景回归验证
   - `OpenChatUITests/ChatVibePerformanceUITests.swift` — 长会话 + 氛围背景滑动/生成性能 fixture 与指标采集
+  - `scripts/trace_long_stream_device.py` — 真机真实站点长流式 Time Profiler 采集脚本；默认 attach 已安装 `fukujusou.openchat.com` 进程，不安装、不卸载、不清数据，并把 `.trace`、TOC、manifest 和采集备注写入 `/private/tmp`
   - `OpenChat/ContentView.swift`
   - `OpenChat/Core/Background/BackgroundManager.swift`、`BackgroundWorker.swift`、`BackgroundPacket.swift`、`BackgroundAssembler.swift`
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — packet-aware preview / assemble overload
@@ -27,7 +28,7 @@
   - 每条 AI 回复下方统计展示（输入/输出 token、TPS、上下文余量 %）
   - 全局设置中「详细统计」开关（关闭时仅在余量 < 20% 显示警告）
   - 流式 API 层支持 `stream_options: {include_usage: true}`，携带 usage 数据
-  - 超长流式输出 UI：SSE delta 先由 `StreamingRenderBuffer` 按约 50ms / 520 字符合并后再更新 assistant 展示项，结束和错误路径都会强制 flush，避免失败前已收到但尚未到刷新阈值的 partial delta 丢失；assistant 正文按 block 分段渲染；reasoning 使用独立 revision 参与 diff 与滚动跟随，不把完整长字符串放入 equality/hash 热路径；Markdown parse 按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
+  - 超长流式输出 UI：SSE delta 先由 `StreamingResponseAccumulator` actor 按约 50ms / 520 字符合并，在后台维护完整正文、reasoning、usage、`TextContentBlock` 分块和预解析 `AttributedString`，再把 `StreamingRenderSnapshot` 提交到主线程更新 assistant 展示项；结束和错误路径都会强制 flush，避免失败前已收到但尚未到刷新阈值的 partial delta 丢失；最终持久化和 stats 使用 `StreamingFinalSnapshot`，不再从 UI `messages` 反查最终字符串；UIKit timeline 的 cell 文本和高度测量优先使用预解析 Markdown；reasoning 使用独立 revision 参与 diff 与滚动跟随，不把完整长字符串放入 equality/hash 热路径；Markdown SwiftUI fallback 仍按长度 30-100ms lazy 刷新并缓存；上滑/按住暂停滚动跟随，触摸停止 0.5s 后恢复
   - 超长历史窗口化：`ChatViewModel.loadMessages()` 只加载最近 120 条，向上滚动时通过 `loadEarlierMessagesIfNeeded()` 每页追加 80 条更早消息；`hasEarlierMessages` 用 `pageSize + 1` sentinel row 判定，只展示窗口大小内的记录，避免刚好 120/80 条时误认为还有更早历史；`DatabaseManager.fetchRecentMessages` / `fetchMessages(beforeSortOrder:)` 均按 sortOrder 返回升序展示窗口，避免 100K+ 上下文历史一次性进入 timeline 热路径；`editMessage(...)` / `deleteMessage(...)` 在 DB mutation 后只局部替换、移除或截断当前可见 window，不再调用 `loadMessages()` 回填旧消息；Prompt/context 仍由 `databaseManager.fetchMessages(conversationId:)` + `ContextManager.prepareHistory(...)` 读取 DB/Core 历史，不依赖 UI window
   - UIKit timeline core：`ChatMessageTimelineView` 只保留 SwiftUI bridge，消息列表由 `ChatTimelineViewController` 的 `UICollectionView` 承担；`ChatTimelineDataSource` 维护 stable item id，并在 id 顺序不变时用 `reconfigureItems` 处理流式尾条/content-only 局部更新，apply 后 invalidate layout 以覆盖 streaming row 增高；`ChatTimelineViewController` 在 diffable snapshot apply completion 后执行非 prepend 跳底/流式跟随，prepend 则恢复旧 content offset，避免 data source 尚未提交时滚动到新 indexPath；`ChatTimelineLayout` 负责 layout 和 bubble metrics，流式滚动跟随以 50ms 合并任务节流；真实拖拽、鼠标/触控板滚动和 DEBUG autoscroll 通过 `onScrollingChanged` 暂停 vibe background display link，idle 恢复任务约 50ms 节流；`ChatTimelineItemBuilder` 无更多历史时不生成隐藏 load-earlier item，避免顶部空行；`ChatTimelineTextCache` / `ChatTimelineHeightCache` 按 messageID/revision/width/style 缓存文本和高度，`ChatMessageCell` 使用 viewport-relative 宽度约束保持 flat bubble 视觉；DEBUG-only `--ui-testing-chat-performance-autoscroll` probe 在 10K fixture 下输出 `loaded_timeline_items=122`，证明 UI hot path 没有随总历史线性加载
   - `MemoryExtractionIndicator` 内联显示记忆提取中、已提取和失败状态
@@ -45,7 +46,7 @@
   - `APIClientTests`
   - `PromptAssemblerTests`
   - `TruncationStrategyTests`
-  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略、reasoning revision、`StreamingRenderBuffer` 合并策略）
+  - `StreamingRenderSegmentationTests`（流式文本分块、跨 chunk 换行切分、超长无换行兜底切分、Markdown 刷新延迟策略、reasoning revision、`StreamingRenderBuffer` 合并策略、`StreamingResponseAccumulator` snapshot / usage 保留）
   - `MessageWindowPaginationTests`（最近窗口、before-sort-order 向上分页、zero-limit 空页）
   - `ChatViewModelPromptAssemblyTests.test_loadMessages_exposesRecentWindowAndSentinelHasEarlierState`（刚好 120 条没有更多历史、121 条只展示 1...120 并可 prepend sortOrder 0）
   - `ChatViewModelPromptAssemblyTests.test_promptHistoryUsesDatabaseBeyondVisibleTimelineWindow`（150 条 DB 历史只暴露 120 条 timeline window 后，发送请求仍包含窗口外早期历史）
@@ -55,3 +56,4 @@
 - 长按气泡菜单预览背景已通过 `OpenChatUITests/MessageBubbleContextMenuUITests.test_userBubbleContextMenuPreviewKeepsBubbleBackground` 验证：`--ui-testing-chat-context-menu` fixture 生成稳定 user/assistant 消息，XCUITest 长按用户气泡，确认菜单出现，并通过截图像素检查确认 user 气泡预览区域保留 `Color.accentColor` 背景。
 - `OpenChatTests/Features/ChatTests/VibeBackgroundDriverTests.swift` 验证 phase 切换时 `flow` 和 `bandT` 保持连续，且 reduce motion 会清空粒子状态。
 - `OpenChatUITests/ChatVibePerformanceUITests.swift` 使用 `--ui-testing-chat-performance` 生成可配置长会话历史和 120 个 SSE chunk 的可重复场景；`--ui-testing-chat-performance-count` 默认 1,000、上限 10,000。用例以 `XCTCPUMetric`、`XCTMemoryMetric`、`XCTClockMetric`、`XCTOSSignpostMetric.scrollingAndDecelerationMetric` 采集氛围背景开启时的长会话滑动和生成指标，并覆盖 1,000 / 3,000 / 10,000 条历史。`ChatTimelineViewController` 的 DEBUG-only autoscroll probe 作为补充，用于无 UI test runner 的连续滚动和窗口化证明。2026-05-26/27 的 before/after、UIKit timeline、截图和 autoscroll 数字记录在 `arch/modules/chat/performance-report-2026-05-26.md`。
+- `scripts/trace_long_stream_device.py` 与 `arch/modules/chat/device-tracing.md` 固化真实站点长流式卡顿的真机 trace 流程。该流程以 `xctrace record --template 'Time Profiler' --attach <OpenChat PID>` 采样，先用 `devicectl device info apps/processes` 做只读预检查，默认不 launch、不 terminate、不 install、不 uninstall，适合保留用户真机中已经配置好的真实端点和会话状态。

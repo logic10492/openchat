@@ -85,7 +85,8 @@ final class ChatMessageCell: UICollectionViewCell {
             revision: item.contentRenderRevision,
             role: item.role,
             color: textColor,
-            font: font
+            font: font,
+            renderedMarkdown: item.renderedMarkdown
         )
         messageLabel.textColor = textColor
         messageLabel.font = font
