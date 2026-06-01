@@ -17,6 +17,7 @@ final class ChatTimelineViewController: UIViewController {
     private var isReportingScrolling = false
     private var suppressScrollReportingUntil: CFTimeInterval = 0
     private var lastScrollIdleScheduleTime: CFTimeInterval = 0
+    private var lastCollectionBoundsSize: CGSize = .zero
     #if DEBUG
     private var performanceAutoScrollProbe: ChatTimelineAutoScrollProbe?
     #endif
@@ -47,6 +48,7 @@ final class ChatTimelineViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        invalidateLayoutAfterBoundsChangeIfNeeded()
         guard !didPerformInitialScroll else { return }
         scrollToBottom(animated: false)
         didPerformInitialScroll = true
@@ -90,6 +92,27 @@ final class ChatTimelineViewController: UIViewController {
         if #available(iOS 26.0, *) {
             collectionView.topEdgeEffect.style = .soft
             collectionView.bottomEdgeEffect.style = .soft
+        }
+    }
+
+    private func invalidateLayoutAfterBoundsChangeIfNeeded() {
+        let size = collectionView.bounds.size
+        guard size.width > 0, size.height > 0 else { return }
+        guard abs(size.width - lastCollectionBoundsSize.width) >= 0.5
+            || abs(size.height - lastCollectionBoundsSize.height) >= 0.5
+        else {
+            return
+        }
+
+        let hadKnownSize = lastCollectionBoundsSize != .zero
+        let wasPinnedToBottom = isPinnedToBottom
+        lastCollectionBoundsSize = size
+        collectionView.collectionViewLayout.invalidateLayout()
+        collectionView.visibleCells.forEach { $0.setNeedsLayout() }
+        if hadKnownSize, wasPinnedToBottom {
+            DispatchQueue.main.async { [weak self] in
+                self?.scrollToBottom(animated: false)
+            }
         }
     }
 
@@ -284,6 +307,14 @@ final class ChatTimelineViewController: UIViewController {
 
     private var shouldReportObservedScroll: Bool {
         CACurrentMediaTime() >= suppressScrollReportingUntil
+    }
+
+    private var isPinnedToBottom: Bool {
+        let maxOffsetY = max(
+            -collectionView.adjustedContentInset.top,
+            collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom
+        )
+        return maxOffsetY - collectionView.contentOffset.y <= 24
     }
 }
 

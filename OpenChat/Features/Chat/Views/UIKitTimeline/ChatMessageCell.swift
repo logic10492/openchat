@@ -121,7 +121,7 @@ final class ChatMessageCell: UICollectionViewCell {
 
     override func layoutSubviews() {
         if let row {
-            let width = max(contentView.bounds.width, UIScreen.main.bounds.width)
+            let width = max(contentView.bounds.width, bounds.width, 1)
             applyLayoutMetrics(ChatTimelineLayout.bubbleMetrics(for: row, containerWidth: width))
         }
         super.layoutSubviews()

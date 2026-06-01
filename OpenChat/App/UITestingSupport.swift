@@ -10,6 +10,7 @@ enum UITestingSupport {
     static let performanceAutoScrollLaunchArgument = "--ui-testing-chat-performance-autoscroll"
     static let performanceAutoExitLaunchArgument = "--ui-testing-chat-performance-autoexit"
     static let vibeWaitingDelayLaunchArgument = "--ui-testing-vibe-waiting-delay"
+    static let startUnselectedLaunchArgument = "--ui-testing-start-unselected"
 
     static var isEnabled: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -29,6 +30,10 @@ enum UITestingSupport {
 
     private static var usesPerformanceFixture: Bool {
         ProcessInfo.processInfo.arguments.contains(performanceLaunchArgument)
+    }
+
+    private static var startsUnselected: Bool {
+        ProcessInfo.processInfo.arguments.contains(startUnselectedLaunchArgument)
     }
 
     private static var performanceFixtureMessageCount: Int {
@@ -65,7 +70,9 @@ enum UITestingSupport {
             apiKeyStore: InMemoryAPIKeyStore()
         )
         let appState = AppState()
-        appState.selectedConversationID = if usesPrefillFixture {
+        appState.selectedConversationID = if startsUnselected {
+            nil
+        } else if usesPrefillFixture {
             Seed.prefillConversationId
         } else if usesPerformanceFixture {
             Seed.performanceConversationId

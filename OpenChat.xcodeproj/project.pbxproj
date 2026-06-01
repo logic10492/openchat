@@ -237,6 +237,7 @@
 		CBB8A64F8A9D82F961889DFC /* CompressionSummarizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 106697F6158870B6DAD8D952 /* CompressionSummarizerTests.swift */; };
 		CFC0E750D23DCA43D986B028 /* SSEStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E51C81FBC7B3147F5CD54D /* SSEStreamParser.swift */; };
 		D0EFF782711EDCCEF6A329D7 /* ChatVibePerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7EFC15B7E7F113BFA97E28B /* ChatVibePerformanceUITests.swift */; };
+		D38B3B80415C0F26E98852EA /* IPadChatTimelineLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47A8F1E80A343F89B2C65E1 /* IPadChatTimelineLayoutUITests.swift */; };
 		D3CA41557B4EFFA4F4B762AE /* ModelParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F628A51B6B6ED87CAB34DD3F /* ModelParameters.swift */; };
 		D3E84496BCBBCC00F4D94D4C /* CompressionStrategy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2EEE4A94E03B2C2B17D844 /* CompressionStrategy.swift */; };
 		D4F2041E9088633C2717F527 /* KeywordMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C906BD0463B69C54021920F4 /* KeywordMatcherTests.swift */; };
@@ -483,6 +484,7 @@
 		A5B2416BC00A4D45A3A0CA77 /* PreparedHistoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PreparedHistoryTests.swift; sourceTree = "<group>"; };
 		A6B2A9ADC3ED2A8E4289FCBA /* PromptSegment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptSegment.swift; sourceTree = "<group>"; };
 		A7EFC15B7E7F113BFA97E28B /* ChatVibePerformanceUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatVibePerformanceUITests.swift; sourceTree = "<group>"; };
+		D47A8F1E80A343F89B2C65E1 /* IPadChatTimelineLayoutUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IPadChatTimelineLayoutUITests.swift; sourceTree = "<group>"; };
 		A84001602F934FC0A9B2053D /* AgentTask.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentTask.swift; sourceTree = "<group>"; };
 		AB320B2A162DBA663A2EB224 /* ThinkingFeatureTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThinkingFeatureTests.swift; sourceTree = "<group>"; };
 		ABA443EEA207C7EE1E3F7296 /* ChatInputBarHostView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChatInputBarHostView.swift; sourceTree = "<group>"; };
@@ -1057,6 +1059,7 @@
 			isa = PBXGroup;
 			children = (
 				A7EFC15B7E7F113BFA97E28B /* ChatVibePerformanceUITests.swift */,
+				D47A8F1E80A343F89B2C65E1 /* IPadChatTimelineLayoutUITests.swift */,
 				5B7B434E82C5DD8969A3F974 /* MessageBubbleContextMenuUITests.swift */,
 				CE6EEE43DFF94EBEA8B4FD19 /* PrefillModeUITests.swift */,
 				6EB5CC2D8C2153C10220A6D6 /* StageUITests.swift */,
@@ -1704,6 +1707,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0EFF782711EDCCEF6A329D7 /* ChatVibePerformanceUITests.swift in Sources */,
+				D38B3B80415C0F26E98852EA /* IPadChatTimelineLayoutUITests.swift in Sources */,
 				B313D42A0C82ABCF3D2ADE50 /* MessageBubbleContextMenuUITests.swift in Sources */,
 				C2E35728732D7459BB5BD120 /* PrefillModeUITests.swift in Sources */,
 				7D7F1B12CC5BEFAB9B5F6395 /* StageUITests.swift in Sources */,
