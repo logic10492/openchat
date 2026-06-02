@@ -130,6 +130,45 @@ struct CharacterCardRecord: Codable, FetchableRecord, PersistableRecord {
 
 ---
 
+### 2b. character_skill_bundle — 角色 Skill Bundle 绑定
+
+一个角色卡最多绑定一个 Skill Bundle。聊天生成前按 `characterCardId` 读取记录，再由 `CharacterSkillBundleMaterializer` 从 Application Support 中读取完整 `content/SKILL.md` 并注入 prompt；Background runtime 也可通过 `SkillReferenceSearchTool` 对同一 bundle 的 `content/references/**/*.md` 做本地只读检索。2026-06-02 已提供 Skill ZIP 导入入口：角色导入 Sheet 可选择 `.zip`，导入器从唯一 `SKILL.md` 创建角色卡并写入本表 metadata。
+
+| 列名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | TEXT | PK, NOT NULL | UUID 字符串 |
+| characterCardId | TEXT | NOT NULL, UNIQUE, FK → character_card.id | 绑定角色卡；一个角色卡最多一个 bundle |
+| sourceKind | TEXT | NOT NULL | 来源类型，当前预留 `zip` 等 metadata |
+| sourceFileName | TEXT | | 原始来源文件名 |
+| sourceArchiveSha256 | TEXT | NOT NULL | 来源归档 hash |
+| bundleRelativePath | TEXT | NOT NULL | Application Support/SkillBundles 下的相对目录 |
+| skillMarkdownRelativePath | TEXT | NOT NULL, DEFAULT 'SKILL.md' | bundle content 目录下的 SKILL.md 相对路径 |
+| skillMarkdownSha256 | TEXT | NOT NULL | SKILL.md hash |
+| skillName | TEXT | NOT NULL | skill frontmatter name 快照 |
+| skillDescription | TEXT | NOT NULL | skill frontmatter description 快照 |
+| skillShortDescription | TEXT | | 可选短描述 |
+| frontmatterJSON | TEXT | NOT NULL | frontmatter 快照 JSON |
+| agentsOpenAIYamlJSON | TEXT | | `agents/openai.yaml` 快照 JSON（若有） |
+| fileManifestJSON | TEXT | NOT NULL | bundle 文件清单 JSON |
+| materializationMode | TEXT | NOT NULL, DEFAULT 'fullSkillMarkdown' | 当前仅支持完整 SKILL.md 注入 |
+| createdAt | TEXT | NOT NULL | ISO 8601 |
+| updatedAt | TEXT | NOT NULL | ISO 8601 |
+
+**外键**：`characterCardId` → `character_card(id)` ON DELETE CASCADE
+
+**实现证据**：
+- `OpenChat/Core/Database/Migrations.swift` 追加 `v19_create_character_skill_bundle`，只追加新表和 `idx_character_skill_bundle_characterCardId`。
+- `OpenChat/Core/Database/Records/CharacterSkillBundleRecord.swift` 定义 GRDB Record。
+- `OpenChat/Core/Database/DatabaseManager+CharacterSkillBundles.swift` 提供按 `characterCardId` fetch/save/delete。
+- `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift`、`SkillBundleMaterializer.swift` 和 `SkillReferenceSearchTool.swift` 负责从 bundle 目录写入 / 读取完整 `SKILL.md`，并对 `references/**/*.md` 做本地只读检索。
+- `OpenChat/Core/SkillBundles/ZipArchiveReader.swift` 与 `OpenChat/Features/CharacterCard/Models/CharacterSkillBundleImportFormat.swift` 负责 Skill ZIP 解包、frontmatter 解析、bundle content 写入和角色卡 / metadata 创建。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 v19 schema、FK cascade 和 unique `characterCardId`。
+- `OpenChatTests/Core/SkillBundleTests/CharacterSkillBundleMaterializerTests.swift` 覆盖已有 bundle materialization。
+- `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift` 覆盖已有 bundle references 检索。
+- `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 deflate ZIP 解包、路径穿越拒绝，以及 Skill ZIP 导入后创建角色卡、绑定 metadata、materialize 完整 `SKILL.md` 和 references 检索。
+
+---
+
 ### 3. world_book — 世界书
 
 | 列名 | 类型 | 约束 | 说明 |
@@ -617,6 +656,7 @@ struct MemoryEntryLinkRecord: Codable, FetchableRecord, PersistableRecord {
 api_endpoint 1 ──── 0..* endpoint_model
 api_endpoint 1 ──── 0..* conversation
 character_card 1 ──── 0..* conversation
+character_card 1 ──── 0..1 character_skill_bundle
 world_book 1 ──── 0..* character_card
 world_book 1 ──── 0..* world_book_entry
 character_card 1 ──── 0..* memory_entry
@@ -636,6 +676,7 @@ character_card 1 ──── 0..* stage_participant
 - 一个 `conversation` 可选绑定一个 `character_card`、一个 `api_endpoint`
 - `conversation.modelName` 为字符串引用（非 FK），记录该对话使用的模型名称
 - 一个 `character_card` 可选归属于一个 `world_book`（世界书通过角色卡间接关联到对话）
+- 一个 `character_card` 可选绑定一个 `character_skill_bundle`（完整 SKILL.md 运行时材料）
 - 一个 `world_book` 包含多个 `world_book_entry`
 - 一个 `character_card` 关联多条 `memory_entry`（跨对话记忆）
 - 一条 `memory_entry` 可通过 `memory_entry_link` 指向其他 memory，保留 reflect observation 的 based-on 来源
@@ -652,6 +693,7 @@ character_card 1 ──── 0..* stage_participant
 - 删除 `api_endpoint` 时，关联 `conversation_compression_checkpoint` 的 `endpointId` 置 NULL
 - 删除 `world_book` 时级联删除其所有 `world_book_entry`
 - 删除 `character_card` 时级联删除其所有 `memory_entry`
+- 删除 `character_card` 时级联删除其 `character_skill_bundle` metadata；bundle 目录清理由后续导入/删除 service 承担，不能只依赖 FK cascade
 - 删除 `character_card` 时级联删除对应 `stage_participant`
 - 删除 `memory_entry` 时级联删除以它为 from/to endpoint 的 `memory_entry_link`
 - 删除 `character_card` / `api_endpoint` 时，关联 `conversation` 的外键置 NULL
@@ -1085,6 +1127,37 @@ migrator.registerMigration("v18_create_stage_tables") { db in
 - `OpenChat/Core/Database/Records/MessageRecord.swift` 追加 `stageId`、`speakerKind`、`speakerId`、`speakerName` 和 `speakerKindValue`。
 - `OpenChat/Core/Database/DatabaseManager+Stage.swift` 提供 `fetchStageContext`、`createStage`、`setStageDirectorMode`、participant add/remove 和 `saveStageInstruction`。
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 stage tables、message speaker columns 和 conversation cascade。
+
+### v19_create_character_skill_bundle
+
+新增 `character_skill_bundle` companion table，用于记录角色卡绑定的 Skill Bundle metadata。该迁移只追加新表和索引，不修改 v1-v18；2026-06-02 的 Skill ZIP 导入功能复用该表，不追加新 migration。
+
+```swift
+migrator.registerMigration("v19_create_character_skill_bundle") { db in
+    try db.create(table: Historical.characterSkillBundleTable) { t in
+        t.column("id", .text).notNull().primaryKey()
+        t.column("characterCardId", .text).notNull().unique()
+            .references(Historical.characterCardTable, onDelete: .cascade)
+        t.column("sourceKind", .text).notNull()
+        t.column("sourceArchiveSha256", .text).notNull()
+        t.column("bundleRelativePath", .text).notNull()
+        t.column("skillMarkdownRelativePath", .text).notNull().defaults(to: "SKILL.md")
+        t.column("skillMarkdownSha256", .text).notNull()
+        t.column("skillName", .text).notNull()
+        t.column("skillDescription", .text).notNull()
+        t.column("frontmatterJSON", .text).notNull()
+        t.column("fileManifestJSON", .text).notNull()
+        t.column("materializationMode", .text).notNull().defaults(to: "fullSkillMarkdown")
+        t.column("createdAt", .datetime).notNull()
+        t.column("updatedAt", .datetime).notNull()
+    }
+}
+```
+
+实现证据：
+
+- `OpenChat/Core/Database/Migrations.swift` 追加 migration-local `Historical.characterSkillBundleTable` 和 `v19_create_character_skill_bundle`。
+- `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖表结构、`characterCardId` unique 和角色卡删除 cascade。
 
 ---
 

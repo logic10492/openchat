@@ -107,6 +107,82 @@ struct MigrationTests {
         #expect(instructionCount == 0)
     }
 
+    @Test func test_v19_creates_character_skill_bundle_table() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let tableNames = try await manager.read { db in
+            try Row.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
+                .compactMap { $0["name"] as String? }
+        }
+        let columns = try await manager.read { db in
+            try db.columns(in: "character_skill_bundle").map(\.name)
+        }
+
+        #expect(tableNames.contains("character_skill_bundle"))
+        #expect(columns.contains("id"))
+        #expect(columns.contains("characterCardId"))
+        #expect(columns.contains("sourceKind"))
+        #expect(columns.contains("sourceArchiveSha256"))
+        #expect(columns.contains("bundleRelativePath"))
+        #expect(columns.contains("skillMarkdownRelativePath"))
+        #expect(columns.contains("skillMarkdownSha256"))
+        #expect(columns.contains("skillName"))
+        #expect(columns.contains("skillDescription"))
+        #expect(columns.contains("frontmatterJSON"))
+        #expect(columns.contains("fileManifestJSON"))
+        #expect(columns.contains("materializationMode"))
+    }
+
+    @Test func test_v19_character_skill_bundle_cascades_with_character_card() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard(id: "skill-bundle-card")
+        let bundle = TestHelpers.makeCharacterSkillBundle(
+            id: "skill-bundle-record",
+            characterCardId: card.id
+        )
+
+        try await manager.write { db in
+            try card.insert(db)
+            try bundle.insert(db)
+            try CharacterCardRecord.deleteOne(db, key: card.id)
+        }
+
+        let count = try await manager.read { db in
+            try CharacterSkillBundleRecord.fetchCount(db)
+        }
+        #expect(count == 0)
+    }
+
+    @Test func test_v19_character_skill_bundle_allows_one_bundle_per_character() async throws {
+        let manager = try TestHelpers.makeDatabaseManager()
+        let card = TestHelpers.makeCharacterCard(id: "skill-bundle-unique-card")
+        let first = TestHelpers.makeCharacterSkillBundle(
+            id: "skill-bundle-first",
+            characterCardId: card.id,
+            bundleRelativePath: "first"
+        )
+        let second = TestHelpers.makeCharacterSkillBundle(
+            id: "skill-bundle-second",
+            characterCardId: card.id,
+            bundleRelativePath: "second"
+        )
+
+        try await manager.write { db in
+            try card.insert(db)
+            try first.insert(db)
+        }
+
+        var didThrow = false
+        do {
+            try await manager.write { db in
+                try second.insert(db)
+            }
+        } catch {
+            didThrow = true
+        }
+
+        #expect(didThrow)
+    }
+
     @Test func test_foreign_key_cascade_removes_world_book_entries() async throws {
         let manager = try TestHelpers.makeDatabaseManager()
         let worldBook = TestHelpers.makeWorldBook()

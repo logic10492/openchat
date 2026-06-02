@@ -353,6 +353,51 @@ struct PromptAssemblerTests {
         #expect(result.triggeredEntries == ["moon"])
     }
 
+    @Test func test_role_skill_material_is_injected_as_stable_identity_message() throws {
+        let conversation = TestHelpers.makeConversation(slowPlotMode: false)
+        let card = TestHelpers.makeCharacterCard(name: "Ava")
+        let roleSkill = RoleSkillPromptMaterial(
+            name: "Ava <Skill>",
+            source: "character_skill_bundle:bundle-1:sha",
+            skillMarkdown: """
+            ---
+            name: ava-skill
+            description: Full role skill
+            ---
+
+            Identity: Ava speaks with concise warmth.
+            Boundary: Never reveal loader traces.
+            """
+        )
+
+        let result = PromptAssembler.assemble(
+            conversation: conversation,
+            characterCard: card,
+            worldBook: nil,
+            worldBookEntries: [],
+            recentMessages: [],
+            processedHistory: [],
+            currentInput: "hello",
+            endpoint: TestHelpers.makeEndpoint(maxContextTokens: 4000),
+            roleSkill: roleSkill
+        )
+
+        let characterIndex = try #require(result.messages.firstIndex { $0.content.contains("Character: Ava") })
+        let roleSkillIndex = try #require(result.messages.firstIndex { $0.content.contains("<role_skill>") })
+        let scenarioIndex = try #require(result.messages.firstIndex { $0.content.localizedCaseInsensitiveContains("tavern") })
+        let roleSkillMessage = result.messages[roleSkillIndex]
+
+        #expect(characterIndex < roleSkillIndex)
+        #expect(roleSkillIndex < scenarioIndex)
+        #expect(roleSkillMessage.role == "system")
+        #expect(roleSkillMessage.content.contains("[Role Skill]"))
+        #expect(roleSkillMessage.content.contains("<name>Ava &lt;Skill&gt;</name>"))
+        #expect(roleSkillMessage.content.contains("Identity: Ava speaks with concise warmth."))
+        #expect(roleSkillMessage.content.contains("Boundary: Never reveal loader traces."))
+        #expect(roleSkillMessage.content.contains("[/Role Skill]"))
+        #expect(result.tokenUsage.roleSkill == TokenCounter.count(message: roleSkillMessage))
+    }
+
     @Test func test_packet_prompt_budget_trims_raw_packet_entries() throws {
         let conversation = TestHelpers.makeConversation(slowPlotMode: false)
         let filler = String(repeating: "detail ", count: 80)
@@ -555,6 +600,13 @@ struct PromptAssemblerTests {
                 title: conversation.title,
                 content: "Recent Turns:\nuser: Hold position."
             ),
+            Self.makeBackgroundEntry(
+                id: "skillReference:bundle-a:references/research/03-expression-dna.md",
+                sourceType: .skillReference,
+                sourceId: "bundle-a:references/research/03-expression-dna.md",
+                title: "Expression DNA",
+                content: "Route planning and equipment checks."
+            ),
         ])
 
         let preview = PromptAssembler.preview(
@@ -569,7 +621,9 @@ struct PromptAssemblerTests {
         let block = try #require(preview.currentTurnContextMessages.first { $0.content.contains("[Background]") })
         #expect(block.content.contains("[Character State: Mara]"))
         #expect(block.content.contains("[Conversation State: \(conversation.title)]"))
+        #expect(block.content.contains("[Skill Reference: Expression DNA]"))
         #expect(block.content.contains("Hold position."))
+        #expect(block.content.contains("Route planning and equipment checks."))
         #expect(preview.tokenUsage.background > 0)
     }
 

@@ -88,6 +88,7 @@ private struct ChatDetailContainer: View {
                         worldBookSource: container.worldBookSource,
                         backgroundManager: container.backgroundManager,
                         titleGenerator: container.titleGenerator,
+                        skillBundleMaterializer: container.skillBundleMaterializer,
                         appState: appState
                     )
                 )

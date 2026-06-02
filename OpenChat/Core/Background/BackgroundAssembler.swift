@@ -12,7 +12,11 @@ struct BackgroundPromptItem: Sendable, Equatable {
 struct BackgroundAssembler: Sendable {
     static func stateItems(from packet: BackgroundPacket) -> [BackgroundPromptItem] {
         packet.entries
-            .filter { $0.sourceType == .characterState || $0.sourceType == .conversationState }
+            .filter {
+                $0.sourceType == .characterState ||
+                    $0.sourceType == .conversationState ||
+                    $0.sourceType == .skillReference
+            }
             .sorted(by: sortEntries)
             .map { entry in
                 BackgroundPromptItem(
@@ -77,6 +81,8 @@ struct BackgroundAssembler: Sendable {
             label = "Memory"
         case .worldBook:
             label = "World Book"
+        case .skillReference:
+            label = "Skill Reference"
         }
         return "[\(label): \(item.label)]\n\(item.content)"
     }

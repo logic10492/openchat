@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "483E698D4408CF957E24668C"
+               BlueprintIdentifier = "9D9401E8DC610E5441BFFD5A"
                BuildableName = "OpenChat.app"
                BlueprintName = "OpenChat"
                ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -28,7 +28,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7D6ACCF465DFC8C6D8440540"
+               BlueprintIdentifier = "F5F2EE1B04FF05AC851AF0BA"
                BuildableName = "OpenChatTests.xctest"
                BlueprintName = "OpenChatTests"
                ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -44,7 +44,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "483E698D4408CF957E24668C"
+            BlueprintIdentifier = "9D9401E8DC610E5441BFFD5A"
             BuildableName = "OpenChat.app"
             BlueprintName = "OpenChat"
             ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -55,7 +55,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7D6ACCF465DFC8C6D8440540"
+               BlueprintIdentifier = "F5F2EE1B04FF05AC851AF0BA"
                BuildableName = "OpenChatTests.xctest"
                BlueprintName = "OpenChatTests"
                ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -65,7 +65,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "438C65656D73305AA8ED3698"
+               BlueprintIdentifier = "FB85A909B32928FF23968537"
                BuildableName = "OpenChatUITests.xctest"
                BlueprintName = "OpenChatUITests"
                ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -87,7 +87,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "483E698D4408CF957E24668C"
+            BlueprintIdentifier = "9D9401E8DC610E5441BFFD5A"
             BuildableName = "OpenChat.app"
             BlueprintName = "OpenChat"
             ReferencedContainer = "container:OpenChat.xcodeproj">
@@ -104,7 +104,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "483E698D4408CF957E24668C"
+            BlueprintIdentifier = "9D9401E8DC610E5441BFFD5A"
             BuildableName = "OpenChat.app"
             BlueprintName = "OpenChat"
             ReferencedContainer = "container:OpenChat.xcodeproj">

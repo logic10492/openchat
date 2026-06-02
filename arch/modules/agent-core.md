@@ -72,6 +72,8 @@ Background Worker / Prompt Switch Phase 5/6 closeout 已证明 deterministic wor
 - 不让 BackgroundWorker、Director 或 reflect executor 直接生成最终角色台词。
 - 不用 AgentCore 替代 `APIClient`、`PromptAssembler`、`ContextManager` 或数据库层。
 
+说明：`SkillReferenceSearchTool` 属于 `BackgroundSourceTool` 的应用侧只读预检索 source，读取本地 skill bundle references 后进入 `BackgroundPacket`；它不是由模型在普通角色回复中自由发起的 Chat Completions / Responses tool call。
+
 ## 3. AgentCore 暴露面
 
 AgentCore 应暴露 6 类稳定 contract。业务模块可以分阶段实现 consumer，但 contract 本身要按后续 Director、BackgroundWorker、LibMan、reflect / state updater 的共同需求设计。

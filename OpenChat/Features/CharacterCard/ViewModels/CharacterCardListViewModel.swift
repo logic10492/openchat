@@ -6,6 +6,7 @@ import Observation
 final class CharacterCardListViewModel {
     private let databaseManager: DatabaseManager
     private let appState: AppState
+    private let skillBundleStore: CharacterSkillBundleStore?
 
     private(set) var cards: [CharacterCardRecord] = []
     var searchText = ""
@@ -13,10 +14,12 @@ final class CharacterCardListViewModel {
 
     init(
         databaseManager: DatabaseManager,
-        appState: AppState
+        appState: AppState,
+        skillBundleStore: CharacterSkillBundleStore? = nil
     ) {
         self.databaseManager = databaseManager
         self.appState = appState
+        self.skillBundleStore = skillBundleStore
     }
 
     var filteredCards: [CharacterCardRecord] {
@@ -44,8 +47,16 @@ final class CharacterCardListViewModel {
 
     func deleteCard(_ card: CharacterCardRecord) async {
         do {
+            let bundle = try await databaseManager.fetchCharacterSkillBundle(characterCardId: card.id)
             try await databaseManager.deleteCharacterCard(id: card.id)
             cards.removeAll { $0.id == card.id }
+            if let bundle, let skillBundleStore {
+                do {
+                    try skillBundleStore.deleteBundle(bundle)
+                } catch {
+                    appState.present(error: error.localizedDescription)
+                }
+            }
         } catch {
             appState.present(error: error.localizedDescription)
         }
@@ -53,8 +64,9 @@ final class CharacterCardListViewModel {
 
     func duplicateCard(_ card: CharacterCardRecord) async {
         let now = Date()
+        let duplicateId = UUID().uuidString
         let duplicate = CharacterCardRecord(
-            id: UUID().uuidString,
+            id: duplicateId,
             name: "\(card.name) Copy",
             avatar: card.avatar,
             personality: card.personality,
@@ -72,10 +84,25 @@ final class CharacterCardListViewModel {
             updatedAt: now
         )
 
+        var copiedBundle: CharacterSkillBundleRecord?
         do {
-            try await databaseManager.saveCharacterCard(duplicate)
+            if let sourceBundle = try await databaseManager.fetchCharacterSkillBundle(characterCardId: card.id),
+               let skillBundleStore {
+                let duplicateBundle = try skillBundleStore.duplicateBundle(
+                    sourceBundle,
+                    characterCardId: duplicateId,
+                    now: now
+                )
+                copiedBundle = duplicateBundle
+                try await databaseManager.saveCharacterCard(duplicate, skillBundle: duplicateBundle)
+            } else {
+                try await databaseManager.saveCharacterCard(duplicate)
+            }
             cards.insert(duplicate, at: 0)
         } catch {
+            if let copiedBundle, let skillBundleStore {
+                try? skillBundleStore.deleteBundle(copiedBundle)
+            }
             appState.present(error: error.localizedDescription)
         }
     }
@@ -106,6 +133,40 @@ final class CharacterCardListViewModel {
             cards.insert(record, at: 0)
             return record
         } catch {
+            appState.present(error: error.localizedDescription)
+            throw error
+        }
+    }
+
+    func importFile(data: Data, sourceFileName: String?) async throws -> CharacterCardRecord {
+        if CharacterSkillBundleImportFormat.isZipImport(data: data, sourceFileName: sourceFileName) {
+            return try await importSkillBundleArchive(data: data, sourceFileName: sourceFileName)
+        }
+
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw CharacterCardImportError.invalidJSON
+        }
+        let parsedCard = try CharacterCardImportFormat.parse(text: text)
+        return try await importCard(parsedCard)
+    }
+
+    func importSkillBundleArchive(data: Data, sourceFileName: String?) async throws -> CharacterCardRecord {
+        guard let skillBundleStore else {
+            throw CharacterSkillBundleImportError.skillBundleStoreUnavailable
+        }
+
+        let prepared = try CharacterSkillBundleImportFormat.prepareImport(
+            archiveData: data,
+            sourceFileName: sourceFileName,
+            store: skillBundleStore
+        )
+
+        do {
+            try await databaseManager.saveCharacterCard(prepared.card, skillBundle: prepared.bundle)
+            cards.insert(prepared.card, at: 0)
+            return prepared.card
+        } catch {
+            try? skillBundleStore.deleteBundle(prepared.bundle)
             appState.present(error: error.localizedDescription)
             throw error
         }

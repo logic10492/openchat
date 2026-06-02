@@ -19,6 +19,7 @@ enum Migrations {
         static let worldBookEntryEmbeddingMetaTable = "world_book_entry_embedding_meta"
         static let endpointModelTable = "endpoint_model"
         static let compressionCheckpointTable = "conversation_compression_checkpoint"
+        static let characterSkillBundleTable = "character_skill_bundle"
         static let embeddingDimension = 384
 
         static let apiModeChatCompletions = "chatCompletions"
@@ -374,6 +375,33 @@ enum Migrations {
                 index: "idx_message_stageId",
                 on: Historical.messageTable,
                 columns: ["stageId", "sortOrder"]
+            )
+        }
+        migrator.registerMigration("v19_create_character_skill_bundle") { db in
+            try db.create(table: Historical.characterSkillBundleTable) { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("characterCardId", .text).notNull().unique()
+                    .references(Historical.characterCardTable, onDelete: .cascade)
+                t.column("sourceKind", .text).notNull()
+                t.column("sourceFileName", .text)
+                t.column("sourceArchiveSha256", .text).notNull()
+                t.column("bundleRelativePath", .text).notNull()
+                t.column("skillMarkdownRelativePath", .text).notNull().defaults(to: "SKILL.md")
+                t.column("skillMarkdownSha256", .text).notNull()
+                t.column("skillName", .text).notNull()
+                t.column("skillDescription", .text).notNull()
+                t.column("skillShortDescription", .text)
+                t.column("frontmatterJSON", .text).notNull()
+                t.column("agentsOpenAIYamlJSON", .text)
+                t.column("fileManifestJSON", .text).notNull()
+                t.column("materializationMode", .text).notNull().defaults(to: "fullSkillMarkdown")
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_character_skill_bundle_characterCardId",
+                on: Historical.characterSkillBundleTable,
+                columns: ["characterCardId"]
             )
         }
         return migrator

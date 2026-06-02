@@ -124,6 +124,7 @@ private struct EditableMessage: Identifiable {
                 worldBookSource: DependencyContainer.preview().worldBookSource,
                 backgroundManager: DependencyContainer.preview().backgroundManager,
                 titleGenerator: DependencyContainer.preview().titleGenerator,
+                skillBundleMaterializer: DependencyContainer.preview().skillBundleMaterializer,
                 appState: AppState()
             )
         )

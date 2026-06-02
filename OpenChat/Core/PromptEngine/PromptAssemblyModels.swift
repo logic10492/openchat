@@ -16,10 +16,17 @@ struct AssemblyResult: Sendable {
     let triggeredEntries: [String]
 }
 
+struct RoleSkillPromptMaterial: Sendable, Equatable {
+    let name: String
+    let source: String
+    let skillMarkdown: String
+}
+
 struct TokenUsageReport: Sendable {
     let totalBudget: Int
     let systemPrompt: Int
     let characterDescription: Int
+    let roleSkill: Int
     let scenario: Int
     let slowPlotDirective: Int
     let timeContext: Int

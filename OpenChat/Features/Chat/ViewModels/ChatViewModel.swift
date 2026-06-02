@@ -16,6 +16,7 @@ final class ChatViewModel {
     let titleGenerator: TitleGenerator
     let apiKeyStore: any APIKeyStore
     let appState: AppState
+    let skillBundleMaterializer: (any CharacterSkillBundleMaterializing)?
     @ObservationIgnored
     let directorExecutor: any DirectorExecuting
     @ObservationIgnored
@@ -123,6 +124,7 @@ final class ChatViewModel {
         backgroundManager: BackgroundManager? = nil,
         titleGenerator: TitleGenerator,
         apiKeyStore: any APIKeyStore = KeychainAPIKeyStore(),
+        skillBundleMaterializer: (any CharacterSkillBundleMaterializing)? = nil,
         directorExecutor: any DirectorExecuting = DeterministicDirectorExecutor(),
         directorAgentExecutor: any AgentExecutor = LLMAgentExecutor(),
         appState: AppState
@@ -138,6 +140,7 @@ final class ChatViewModel {
         self.backgroundManager = backgroundManager
         self.titleGenerator = titleGenerator
         self.apiKeyStore = apiKeyStore
+        self.skillBundleMaterializer = skillBundleMaterializer
         self.directorExecutor = directorExecutor
         self.directorAgentExecutor = directorAgentExecutor
         self.appState = appState

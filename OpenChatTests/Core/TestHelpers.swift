@@ -103,6 +103,37 @@ enum TestHelpers {
         )
     }
 
+    static func makeCharacterSkillBundle(
+        id: String = UUID().uuidString,
+        characterCardId: String,
+        bundleRelativePath: String = "bundle-1",
+        skillMarkdownRelativePath: String = "SKILL.md",
+        skillName: String = "Ava Skill",
+        skillDescription: String = "A full skill markdown role definition.",
+        skillMarkdownSha256: String = "skill-sha",
+        sourceArchiveSha256: String = "archive-sha"
+    ) -> CharacterSkillBundleRecord {
+        CharacterSkillBundleRecord(
+            id: id,
+            characterCardId: characterCardId,
+            sourceKind: "zip",
+            sourceFileName: "skill.zip",
+            sourceArchiveSha256: sourceArchiveSha256,
+            bundleRelativePath: bundleRelativePath,
+            skillMarkdownRelativePath: skillMarkdownRelativePath,
+            skillMarkdownSha256: skillMarkdownSha256,
+            skillName: skillName,
+            skillDescription: skillDescription,
+            skillShortDescription: nil,
+            frontmatterJSON: #"{"scalars":{"name":"Ava Skill","description":"A full skill markdown role definition."},"nested":{}}"#,
+            agentsOpenAIYamlJSON: nil,
+            fileManifestJSON: #"[]"#,
+            materializationMode: "fullSkillMarkdown",
+            createdAt: TestDateFactory.now(),
+            updatedAt: TestDateFactory.now()
+        )
+    }
+
     static func makeWorldBook(
         id: String = UUID().uuidString,
         name: String = "Lorebook",

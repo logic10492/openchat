@@ -250,6 +250,128 @@ struct ChatViewModelPromptAssemblyTests {
         #expect(request.messages.contains { $0.role == "user" && $0.content.contains("Continue after the windowed timeline.") })
     }
 
+    @Test func test_sendMessage_injects_bound_role_skill_markdown_into_request() async throws {
+        let database = try TestHelpers.makeDatabaseManager()
+        let now = Date()
+        let endpoint = APIEndpointRecord(
+            id: "role-skill-endpoint",
+            name: "Role Skill Endpoint",
+            baseURL: "http://localhost:8080/v1",
+            apiKey: "test-key",
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now
+        )
+        let model = EndpointModelRecord(
+            id: "role-skill-model",
+            endpointId: endpoint.id,
+            modelId: "role-skill-model",
+            maxContextTokens: 24_000,
+            apiMode: APIMode.chatCompletions.rawValue,
+            providerDialect: APIProviderDialect.openAICompatible.rawValue,
+            isDefault: true,
+            isManual: true,
+            createdAt: now
+        )
+        let card = TestHelpers.makeCharacterCard(
+            id: "role-skill-card",
+            name: "Ava",
+            systemPrompt: "Use the attached role skill as the authoritative behavior guide.",
+            scenario: nil,
+            exampleDialogs: []
+        )
+        var conversation = TestHelpers.makeConversation(id: "role-skill-conversation", slowPlotMode: false)
+        conversation.apiEndpointId = endpoint.id
+        conversation.modelName = model.modelId
+        conversation.characterCardId = card.id
+        conversation.isTitleGenerated = true
+
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "OpenChatRoleSkillRequestTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let store = CharacterSkillBundleStore(rootDirectory: rootDirectory)
+        let bundle = TestHelpers.makeCharacterSkillBundle(
+            id: "role-skill-bundle",
+            characterCardId: card.id,
+            bundleRelativePath: "role-skill-bundle",
+            skillMarkdownSha256: "role-skill-sha"
+        )
+        let skillMarkdown = """
+        ---
+        name: ava-skill
+        description: Full runtime skill
+        ---
+
+        Identity: Ava keeps replies short and warm.
+        """
+        let contentDirectory = store.contentDirectory(bundleRelativePath: bundle.bundleRelativePath)
+        try FileManager.default.createDirectory(at: contentDirectory, withIntermediateDirectories: true)
+        try skillMarkdown.write(
+            to: contentDirectory.appending(path: bundle.skillMarkdownRelativePath),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        try await database.saveEndpoint(endpoint)
+        try await database.saveEndpointModel(model)
+        try await database.saveCharacterCard(card, skillBundle: bundle)
+        try await database.saveConversation(conversation)
+
+        let capture = RequestCapture()
+        let session = MockURLProtocol.makeSession { request in
+            let body = try request.openChatTestBodyData()
+            capture.store(try JSONDecoder().decode(APIRequest.self, from: body))
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/event-stream"]
+            )!
+            let payload = """
+            data: {"id":"1","choices":[{"index":0,"delta":{"content":"Skill-aware response"},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """
+            return (response, Data(payload.utf8))
+        }
+        let apiClient = APIClient(session: session)
+        let viewModel = ChatViewModel(
+            conversation: conversation,
+            databaseManager: database,
+            apiClient: apiClient,
+            contextManager: ContextManager(databaseManager: database, apiClient: apiClient),
+            memoryManager: MemoryManager(
+                databaseManager: database,
+                embeddingService: ChatFailingEmbeddingProvider(),
+                vectorStore: ChatEmptyVectorStore(),
+                apiClient: apiClient
+            ),
+            titleGenerator: TitleGenerator(apiClient: apiClient),
+            skillBundleMaterializer: CharacterSkillBundleMaterializer(
+                databaseManager: database,
+                store: store
+            ),
+            appState: AppState()
+        )
+
+        viewModel.inputText = "Say hello."
+        await viewModel.sendMessage()
+
+        for _ in 0..<100 {
+            if viewModel.streamTask == nil, !viewModel.isGenerating {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let request = try #require(capture.load())
+        let requestText = request.messages.map(\.content).joined(separator: "\n")
+        #expect(requestText.contains("<role_skill>"))
+        #expect(requestText.contains("<source>character_skill_bundle:role-skill-bundle:role-skill-sha</source>"))
+        #expect(requestText.contains("Identity: Ava keeps replies short and warm."))
+        #expect(requestText.contains("[/Role Skill]"))
+    }
+
     @Test func test_deleteMessage_removesVisibleTimelineItemWithoutReloadingWindow() async throws {
         let database = try TestHelpers.makeDatabaseManager()
         let conversation = TestHelpers.makeConversation(id: "timeline-window-delete")

@@ -50,7 +50,8 @@ struct SidebarView: View {
                 CharacterCardListView(
                     viewModel: CharacterCardListViewModel(
                         databaseManager: container.databaseManager,
-                        appState: appState
+                        appState: appState,
+                        skillBundleStore: container.skillBundleStore
                     )
                 )
             }

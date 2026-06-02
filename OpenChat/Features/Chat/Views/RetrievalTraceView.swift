@@ -90,6 +90,8 @@ private extension BackgroundSourceType {
             String(localized: "Character State")
         case .conversationState:
             String(localized: "Conversation State")
+        case .skillReference:
+            String(localized: "Skill Reference")
         case .worldBook:
             String(localized: "World Book")
         case .memory:

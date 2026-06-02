@@ -1,6 +1,6 @@
 # Background 架构
 
-> 状态：已实现 Phase 4A-4D source tool contract、Memory/WorldBook adapters、Phase 5 deterministic BackgroundWorker / BackgroundPacket / diagnostics、Phase 6 BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch，并已追加 CharacterState / ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
+> 状态：已实现 Phase 4A-4D source tool contract、Memory/WorldBook adapters、Phase 5 deterministic BackgroundWorker / BackgroundPacket / diagnostics、Phase 6 BackgroundManager / BackgroundAssembler / Chat-Prompt compatible switch，并已追加 CharacterState / ConversationState sources、SkillReference source、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
 
 ## 1. 模块定位
 
@@ -41,6 +41,10 @@ Core/WorldBook/
   WorldBookBackgroundSource
   WorldBookEmbeddingIndexer
 
+Core/SkillBundles/
+  SkillReferenceSearchTool
+  SkillReferenceBackgroundSource
+
 Core/Background/
   CharacterStateBackgroundSource
   ConversationStateBackgroundSource
@@ -60,6 +64,8 @@ AgentCore foundation
 ```
 
 `MemoryRecallTool` / `WorldBookRecallTool` 是内部 read-only source tool：它们包装当前已经存在的 recall result，不向普通角色开放 tool call，不触发用户可见输出，不写数据库。
+
+`SkillReferenceSearchTool` 是角色 skill bundle 的内部 read-only source tool：它只读取当前角色绑定 bundle 的 `content/references/**/*.md`，按本轮输入做轻量关键词检索并输出 `.skillReference` candidates；不联网、不写数据库、不生成 assistant message。它用于满足 Shiroko 这类 skill 的“事实问题先查资料”本地资料检索需求，但不是 Chat Completions / Responses 的模型 tool-call loop。
 
 2026-05-17 Phase 4A-4D 当前实现证据：
 
@@ -92,12 +98,23 @@ AgentCore foundation
 - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`：由 `StageTurnPlan` 构造 `StageBackgroundContext` 后传入 `BackgroundRequest`。
 - `OpenChatTests/Core/BackgroundTests/BackgroundSourceTests.swift`、`PromptAssemblerTests.swift`、`ChatViewModelPromptAssemblyTests.swift` 覆盖 Stage -> Background filter、state source 和 request-shape。
 
+2026-06-02 SkillReference source 当前实现证据：
+
+- `OpenChat/Core/SkillBundles/SkillReferenceSearchTool.swift`：定义 `SkillReferenceSearchToolInput` / result / trace DTO，`SkillReferenceSearchTool` 符合 `BackgroundSourceTool`，只读 `character_skill_bundle` metadata 与 bundle `content/references/**/*.md`；`SkillReferenceBackgroundSource` 将 result 映射为 `.skillReference` candidates。
+- `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift`：新增 references markdown 枚举与读取，保持 bundle/content 相对路径校验并跳过符号链接。
+- `OpenChat/Core/Background/BackgroundSourceTool.swift`：`BackgroundSourceType` 新增 `.skillReference`，`BackgroundRequest` 新增 `skillReferenceLimit`。
+- `OpenChat/Core/Background/BackgroundPolicy.swift` / `BackgroundWorker.swift`：`.skillReference` 进入 per-source limit、source weight、diagnostics summary 和 deterministic 排序。
+- `OpenChat/Core/Background/BackgroundAssembler.swift`：`.skillReference` 作为 `[Skill Reference: ...]` 兼容背景项进入 current-turn context。
+- `OpenChat/App/DependencyContainer.swift`：生产 `BackgroundManager` 装配 `SkillReferenceBackgroundSource(tool: SkillReferenceSearchTool(...))`。
+- `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift` 覆盖绑定 bundle references 检索、无绑定空结果和 candidate metadata 映射。
+
 ## 2. 当前实现与目标差异
 
 | 领域 | 当前源码 | Background 目标 |
 |---|---|---|
 | WorldBook | `WorldBookRecallTool` / `WorldBookBackgroundSource` 包装 `WorldBookSource.recallEntries(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[World Book Entries]` | 后续可迁移为统一 `[Background]` block |
 | Memory | `MemoryRecallTool` / `MemoryBackgroundSource` 包装 `MemoryManager.recallMemories(...)` result，`BackgroundWorker` 统一选择，`BackgroundAssembler` 生成兼容 `[Memories]` | 后续可迁移为统一 `[Background]` block |
+| Skill references | `SkillReferenceSearchTool` / `SkillReferenceBackgroundSource` 读取角色绑定 bundle 的 local references markdown，生成兼容 `[Skill Reference]` state item | 后续可接显式 skill tool manifest 或 Codex-style loader |
 | 角色卡 | Stable Identity 直接进入 prompt；`CharacterStateBackgroundSource` 额外产生 character-state candidate | 稳定身份仍保持独立；后续可压缩 / 差分注入 character-state |
 | Conversation state | `ConversationStateBackgroundSource` 生成 recent turn / stage state candidate | 后续可引入持久 conversation-state tracker |
 | Prompt | BackgroundAssembler 生成兼容 `[World Book Entries]` / `[Memories]` blocks | 后续可迁移为统一 `[Background]` block |

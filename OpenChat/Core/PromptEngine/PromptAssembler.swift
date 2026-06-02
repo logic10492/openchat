@@ -10,7 +10,8 @@ struct PromptAssembler {
         recentMessages: [MessageRecord],
         stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> PromptAssemblyPreview {
         let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
         let contextText = makeContextText(recentMessages: recentMessages, currentInput: currentInput)
@@ -28,7 +29,8 @@ struct PromptAssembler {
             stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint,
-            totalBudget: totalBudget
+            totalBudget: totalBudget,
+            roleSkill: roleSkill
         )
     }
 
@@ -40,7 +42,8 @@ struct PromptAssembler {
         memories: [MemoryEntryRecord] = [],
         stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> PromptAssemblyPreview {
         let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
         let selectedWorldBookEntries = selectWorldBookEntries(
@@ -57,7 +60,8 @@ struct PromptAssembler {
             stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
             endpoint: endpoint,
-            totalBudget: totalBudget
+            totalBudget: totalBudget,
+            roleSkill: roleSkill
         )
     }
 
@@ -69,7 +73,8 @@ struct PromptAssembler {
         stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
         endpoint: APIEndpointConfig,
-        totalBudget: Int
+        totalBudget: Int,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> PromptAssemblyPreview {
         let systemPrompt = makeSystemPrompt(characterCard: characterCard)
         let characterDescription = buildCharacterDescription(characterCard)
@@ -101,6 +106,7 @@ struct PromptAssembler {
             systemPrompt: systemPrompt,
             stageTurnPlan: stageTurnPlan,
             characterDescription: characterDescription,
+            roleSkill: roleSkill,
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
             exampleDialogs: exampleDialogs,
@@ -119,7 +125,8 @@ struct PromptAssembler {
         backgroundPacket: BackgroundPacket,
         stageTurnPlan: StageTurnPlan?,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> PromptAssemblyPreview {
         let totalBudget = max(Int((Double(endpoint.maxContextTokens) * 0.4).rounded(.down)), 1)
         let systemPrompt = makeSystemPrompt(characterCard: characterCard)
@@ -132,6 +139,7 @@ struct PromptAssembler {
             systemPrompt: systemPrompt,
             stageTurnPlan: stageTurnPlan,
             characterDescription: characterDescription,
+            roleSkill: roleSkill,
             scenario: scenario,
             slowPlotMode: conversation.slowPlotMode,
             exampleDialogs: exampleDialogs,
@@ -149,7 +157,8 @@ struct PromptAssembler {
         characterCard: CharacterCardRecord?,
         backgroundPacket: BackgroundPacket,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> PromptAssemblyPreview {
         preview(
             conversation: conversation,
@@ -157,7 +166,8 @@ struct PromptAssembler {
             backgroundPacket: backgroundPacket,
             stageTurnPlan: nil,
             currentInput: currentInput,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         )
     }
 
@@ -165,6 +175,7 @@ struct PromptAssembler {
         systemPrompt: String,
         stageTurnPlan: StageTurnPlan? = nil,
         characterDescription: String?,
+        roleSkill: RoleSkillPromptMaterial? = nil,
         scenario: String?,
         slowPlotMode: Bool,
         exampleDialogs: [ChatMessage],
@@ -179,6 +190,7 @@ struct PromptAssembler {
         let systemMessage = ChatMessage(role: "system", content: systemPrompt)
         let participantMessage = stageTurnPlan?.participantPrompt.map { ChatMessage(role: "system", content: $0) }
         let characterMessage = characterDescription.map { ChatMessage(role: "system", content: $0) }
+        let roleSkillMessage = roleSkill.map { ChatMessage(role: "system", content: makeRoleSkillMessageContent($0)) }
         let scenarioMessage = scenario.map { ChatMessage(role: "system", content: $0) }
         let slowPlotMessage: ChatMessage? = slowPlotMode
             ? ChatMessage(role: "system", content: AppConstants.slowPlotModePrompt)
@@ -188,6 +200,7 @@ struct PromptAssembler {
             systemMessage,
             participantMessage,
             characterMessage,
+            roleSkillMessage,
             scenarioMessage,
             slowPlotMessage,
         ].compactMap { $0 }
@@ -242,6 +255,7 @@ struct PromptAssembler {
             totalBudget: totalBudget,
             systemPrompt: TokenCounter.count(message: systemMessage),
             characterDescription: characterMessage.map { TokenCounter.count(message: $0) } ?? 0,
+            roleSkill: roleSkillMessage.map { TokenCounter.count(message: $0) } ?? 0,
             scenario: scenarioMessage.map { TokenCounter.count(message: $0) } ?? 0,
             slowPlotDirective: slowPlotMessage.map { TokenCounter.count(message: $0) } ?? 0,
             timeContext: TokenCounter.count(timeContext),
@@ -276,7 +290,8 @@ struct PromptAssembler {
         processedHistory: [MessageRecord],
         stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> AssemblyResult {
         let context = preview(
             conversation: conversation,
@@ -287,7 +302,8 @@ struct PromptAssembler {
             recentMessages: recentMessages,
             stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         )
         return assemble(processedHistory: processedHistory, context: context)
     }
@@ -301,7 +317,8 @@ struct PromptAssembler {
         processedHistory: [MessageRecord],
         stageTurnPlan: StageTurnPlan? = nil,
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> AssemblyResult {
         let context = previewWithPreselectedWorldBookEntries(
             conversation: conversation,
@@ -311,7 +328,8 @@ struct PromptAssembler {
             memories: memories,
             stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         )
         return assemble(processedHistory: processedHistory, context: context)
     }
@@ -323,7 +341,8 @@ struct PromptAssembler {
         stageTurnPlan: StageTurnPlan?,
         processedHistory: [MessageRecord],
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> AssemblyResult {
         let context = preview(
             conversation: conversation,
@@ -331,7 +350,8 @@ struct PromptAssembler {
             backgroundPacket: backgroundPacket,
             stageTurnPlan: stageTurnPlan,
             currentInput: currentInput,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         )
         return assemble(processedHistory: processedHistory, context: context)
     }
@@ -342,7 +362,8 @@ struct PromptAssembler {
         backgroundPacket: BackgroundPacket,
         processedHistory: [MessageRecord],
         currentInput: String,
-        endpoint: APIEndpointConfig
+        endpoint: APIEndpointConfig,
+        roleSkill: RoleSkillPromptMaterial? = nil
     ) -> AssemblyResult {
         assemble(
             conversation: conversation,
@@ -351,7 +372,8 @@ struct PromptAssembler {
             stageTurnPlan: nil,
             processedHistory: processedHistory,
             currentInput: currentInput,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         )
     }
 
@@ -370,6 +392,7 @@ struct PromptAssembler {
             totalBudget: context.tokenUsage.totalBudget,
             systemPrompt: context.tokenUsage.systemPrompt,
             characterDescription: context.tokenUsage.characterDescription,
+            roleSkill: context.tokenUsage.roleSkill,
             scenario: context.tokenUsage.scenario,
             slowPlotDirective: context.tokenUsage.slowPlotDirective,
             timeContext: context.tokenUsage.timeContext,
@@ -426,6 +449,18 @@ struct PromptAssembler {
         BackgroundAssembler.makeMemoryMessageContent(item)
     }
 
+    static func makeRoleSkillMessageContent(_ material: RoleSkillPromptMaterial) -> String {
+        """
+        [Role Skill]
+        <role_skill>
+        <name>\(xmlEscaped(material.name))</name>
+        <source>\(xmlEscaped(material.source))</source>
+        \(material.skillMarkdown)
+        </role_skill>
+        [/Role Skill]
+        """
+    }
+
     static func makeStateMessageContent(_ item: BackgroundPromptItem) -> String {
         BackgroundAssembler.makeStateMessageContent(item)
     }
@@ -477,6 +512,15 @@ struct PromptAssembler {
         let trimmedName = characterCard?.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let characterName = (trimmedName?.isEmpty ?? true) ? "the character" : (trimmedName ?? "the character")
         return "You are \(characterName), engaging in a roleplay conversation. Stay in character at all times. Respond naturally as \(characterName) would."
+    }
+
+    private static func xmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
     }
 
     private static func makeScenario(conversation: ConversationRecord, characterCard: CharacterCardRecord?) -> String? {

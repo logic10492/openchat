@@ -241,10 +241,12 @@ struct BackgroundWorker: Sendable {
             return 0
         case .conversationState:
             return 1
-        case .worldBook:
+        case .skillReference:
             return 2
-        case .memory:
+        case .worldBook:
             return 3
+        case .memory:
+            return 4
         }
     }
 
@@ -288,6 +290,6 @@ private struct ScoredCandidate: Sendable {
 
 private extension BackgroundSourceType {
     static var allCasesForBackground: [BackgroundSourceType] {
-        [.characterState, .conversationState, .worldBook, .memory]
+        [.characterState, .conversationState, .skillReference, .worldBook, .memory]
     }
 }

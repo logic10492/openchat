@@ -30,14 +30,15 @@
 | --: | ------------------------- | ---------------- | --------------------------------- | ------------------------------------------------------------------------------ | --- | -------------------------------------------------------------- |
 |   0 | Stable Identity           | system           | base system prompt                | `characterCard.systemPrompt`，未设置时使用默认模板                                        | 固定段 | 始终在最前                                                          |
 |   1 | Stable Identity           | system           | character description             | `personality` / `appearance` / `physique` / `speechStyle` / `backstory` 非空字段拼接 | 固定段 | 空字段跳过                                                          |
-|   2 | Stable Identity           | system           | scenario                          | `conversation.customScenario ?? characterCard.scenario`                        | 固定段 | 两者都为空则跳过                                                       |
-|   3 | Stable Identity           | system           | slowPlot directive                | `conversation.slowPlotMode == true`                                            | 条件段 | beta；默认开启                                                      |
-|   4 | Stable Conversation State | system           | compressed context                | `ContextManager` compression checkpoint summary                                | 动态段 | 无 checkpoint summary 时跳过                                       |
-|   5 | Stable Conversation State | user / assistant | checkpoint 后会话历史                  | `ContextManager` 返回的 checkpoint 后 `processedHistory`                           | 动态段 | 不包含本轮当前输入                                                      |
-|   6 | Current-Turn Context      | system           | example dialogs block             | `characterCard.exampleDialogs`                                                 | 可选段 | 以带标签的 system block 注入，不再作为原始 user/assistant 示例消息注入             |
-|   7 | Current-Turn Context      | system           | world book entries block          | `BackgroundPacket.entries` 中 `.worldBook` selected entries；旧 overload 可消费 preselected world book entries | 动态段 | Phase 6 保持 `[World Book Entries]` 兼容格式；semantic-only 条目不再二次 keyword 过滤 |
-|   8 | Current-Turn Context      | system           | memories block                    | `BackgroundPacket.entries` 中 `.memory` selected entries；旧 overload 可消费 direct memories | 动态段 | 按 packet rank / 检索结果顺序和 token 预算裁剪；不按 `importance` 重排 |
-|   9 | Current Turn              | user             | current user input + time context | `currentInput` + `PromptAssembler.makeTimeContext()`                           | 固定段 | 同一条 user message 内先放用户输入，再放 `[Time] <ISO8601> [/Time]`         |
+|   2 | Stable Identity           | system           | role skill block                  | `RoleSkillPromptMaterial`，由 Chat runtime 从 `character_skill_bundle` 读取完整 `SKILL.md` | 条件段 | 以 `[Role Skill] <role_skill> ... </role_skill>` 注入；本阶段不做 section 检索 |
+|   3 | Stable Identity           | system           | scenario                          | `conversation.customScenario ?? characterCard.scenario`                        | 固定段 | 两者都为空则跳过                                                       |
+|   4 | Stable Identity           | system           | slowPlot directive                | `conversation.slowPlotMode == true`                                            | 条件段 | beta；默认开启                                                      |
+|   5 | Stable Conversation State | system           | compressed context                | `ContextManager` compression checkpoint summary                                | 动态段 | 无 checkpoint summary 时跳过                                       |
+|   6 | Stable Conversation State | user / assistant | checkpoint 后会话历史                  | `ContextManager` 返回的 checkpoint 后 `processedHistory`                           | 动态段 | 不包含本轮当前输入                                                      |
+|   7 | Current-Turn Context      | system           | example dialogs block             | `characterCard.exampleDialogs`                                                 | 可选段 | 以带标签的 system block 注入，不再作为原始 user/assistant 示例消息注入             |
+|   8 | Current-Turn Context      | system           | world book entries block          | `BackgroundPacket.entries` 中 `.worldBook` selected entries；旧 overload 可消费 preselected world book entries | 动态段 | Phase 6 保持 `[World Book Entries]` 兼容格式；semantic-only 条目不再二次 keyword 过滤 |
+|   9 | Current-Turn Context      | system           | memories block                    | `BackgroundPacket.entries` 中 `.memory` selected entries；旧 overload 可消费 direct memories | 动态段 | 按 packet rank / 检索结果顺序和 token 预算裁剪；不按 `importance` 重排 |
+|  10 | Current Turn              | user             | current user input + time context | `currentInput` + `PromptAssembler.makeTimeContext()`                           | 固定段 | 同一条 user message 内先放用户输入，再放 `[Time] <ISO8601> [/Time]`         |
 
 旧的 `WorldBookEntryPosition.after_system` / `.before_history` 字段保留为既有数据兼容字段，不再决定最终 prompt 位置。所有当前轮命中的世界书内容最终统一落入 Current-Turn Context 的 world book block。
 
@@ -67,6 +68,22 @@ Backstory: {{backstory}}
 ```
 
 空字段跳过对应行。
+
+### Role Skill block 规则
+
+当当前角色卡存在 `character_skill_bundle` 绑定时，`ChatViewModel+Support` 通过 `CharacterSkillBundleMaterializer` 读取完整 `content/SKILL.md`，并把它作为 `RoleSkillPromptMaterial` 传入 `PromptAssembler`。`PromptAssembler` 不访问数据库或文件，只把该材料拼成一条 Stable Identity system message：
+
+```xml
+[Role Skill]
+<role_skill>
+<name>{{skillName}}</name>
+<source>character_skill_bundle:{{bundleId}}:{{skillMarkdownSha256}}</source>
+...完整 SKILL.md...
+</role_skill>
+[/Role Skill]
+```
+
+该实现采用 opencode-style full skill materialization：完整 `SKILL.md` 固定作为 Stable Identity 注入，不做 Codex-style section loader 或 loader traces。本阶段不提供 Skill ZIP 导入 / v2 角色卡创建 UI。若 bundle 内存在 `content/references/**/*.md`，Chat runtime 会通过 Background 的 `.skillReference` source 做本地只读检索，选中片段作为 current-turn background 注入；这不是模型可自由调用的公网 tool-call loop。
 
 ### 示例对话 block 规则
 
@@ -218,6 +235,7 @@ struct TokenUsageReport: Sendable {
     let totalBudget: Int
     let systemPrompt: Int
     let characterDescription: Int
+    let roleSkill: Int
     let scenario: Int
     let slowPlotDirective: Int
     let timeContext: Int
@@ -313,6 +331,9 @@ function preview(conversation, characterCard, backgroundPacket, history, input, 
         if !desc.isEmpty:
             characterMessage = ChatMessage(role: "system", content: desc)
 
+    if let roleSkill:
+        roleSkillMessage = ChatMessage(role: "system", content: makeRoleSkillMessageContent(roleSkill))
+
     scenario = conversation.customScenario ?? characterCard?.scenario
     if let s = scenario, !s.isEmpty:
         scenarioMessage = ChatMessage(role: "system", content: s)
@@ -323,6 +344,7 @@ function preview(conversation, characterCard, backgroundPacket, history, input, 
     stableIdentityMessages =
         [systemMessage]
         + optional(characterMessage)
+        + optional(roleSkillMessage)
         + optional(scenarioMessage)
         + optional(slowPlotMessage)
 
@@ -383,12 +405,13 @@ function assemble(..., processedHistory, input):
 
 1. 若 `sendMessage()` 本轮会持久化用户消息，先保存 user record，再读取 DB 中当前会话消息。
 2. `makePromptHistoryMessages(...)` 从历史候选中移除本轮 user record；重新生成/编辑等不持久化入口会按最后一条同内容 user 消息做兜底过滤。
-3. `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 对当前 world book 做 bounded lazy rebuild；失败记录 warning，不阻断当前回复。该 side effect 仍归 ChatViewModel，不归 BackgroundWorker 或 source adapter。
-4. `BackgroundManager.prepare(...)` 调用 Memory / WorldBook source adapters，失败时记录 diagnostics warning；worldBook source failure 会用旧 keyword fallback 生成 `.worldBook` candidates。
-5. `BackgroundWorker` 对 `BackgroundCandidate` 做 deterministic selection，输出 `BackgroundPacket`；不联网、不写 DB、不调用 LLM、不生成 assistant message。
-6. `PromptAssembler.preview(... backgroundPacket:)` 使用 packet-selected worldBook / memory entries 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
-7. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 只处理过滤后的历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
-8. `PromptAssembler.assemble(... backgroundPacket: ... processedHistory: ...)` 再次使用同一 `BackgroundPacket`，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
+3. 若当前角色卡存在 `character_skill_bundle`，`CharacterSkillBundleMaterializer` 从 bundle 目录读取完整 `SKILL.md` 并生成 `RoleSkillPromptMaterial`；没有绑定时返回 `nil`。
+4. `WorldBookEmbeddingIndexer.rebuildMissingOrStale(worldBookId:limit:)` 对当前 world book 做 bounded lazy rebuild；失败记录 warning，不阻断当前回复。该 side effect 仍归 ChatViewModel，不归 BackgroundWorker 或 source adapter。
+5. `BackgroundManager.prepare(...)` 调用 Memory / WorldBook source adapters，失败时记录 diagnostics warning；worldBook source failure 会用旧 keyword fallback 生成 `.worldBook` candidates。
+6. `BackgroundWorker` 对 `BackgroundCandidate` 做 deterministic selection，输出 `BackgroundPacket`；不联网、不写 DB、不调用 LLM、不生成 assistant message。
+7. `PromptAssembler.preview(... backgroundPacket:)` 使用 role skill material、packet-selected worldBook / memory entries 计算 Current-Turn Context、Current Turn、`fixedTokens` 和初始 token usage。
+8. `ContextManager.prepareHistory(messages:conversation:endpoint:fixedTokens:)` 只处理过滤后的历史；truncation 返回尾部历史，compression 返回 `[Previously]` checkpoint summary + checkpoint 后历史。
+9. `PromptAssembler.assemble(... backgroundPacket: ... processedHistory: ...)` 再次使用同一 role skill material 和 `BackgroundPacket`，拼接 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`，并更新最终 `TokenUsageReport`。
 
 ## 7. 与其他模块的交互
 
@@ -396,9 +419,10 @@ function assemble(..., processedHistory, input):
 |---|---|
 | `Core/Database` | 读取 CharacterCardRecord、WorldBookEntryRecord、MemoryEntryRecord、ConversationRecord |
 | `Core/ContextManager` | PromptAssembler.preview 先计算 Stable Identity、Current-Turn Context、Current Turn 与 fixedTokens；ContextManager 据此处理历史消息（剔除/压缩）；PromptAssembler.assemble 接收 processedHistory |
-| `Core/Background` | BackgroundManager / BackgroundWorker 输出 `BackgroundPacket`；BackgroundAssembler 生成兼容 worldBook / memory prompt items |
+| `Core/Background` | BackgroundManager / BackgroundWorker 输出 `BackgroundPacket`；BackgroundAssembler 生成兼容 state / skillReference / worldBook / memory prompt items |
 | `Core/Memory` | MemoryRecallTool / MemoryBackgroundSource 产出 `.memory` candidates；旧 direct overload 仍可消费 direct memories |
 | `Core/WorldBook` | WorldBookRecallTool / WorldBookBackgroundSource 产出 `.worldBook` candidates；worldBook source failure 时 manager 保留 keyword fallback |
+| `Core/SkillBundles` | SkillReferenceSearchTool / SkillReferenceBackgroundSource 产出 `.skillReference` candidates；Role skill materializer 读取完整 SKILL.md |
 | `Features/Chat` | ChatViewModel 在发送消息时调用 `BackgroundManager.prepare(...)`，再调用 packet-aware `PromptAssembler.preview(...)` / `assemble(...)` |
 | `Shared/Extensions` | `String.approximatedTokenCount` 委托 `TokenCounter.count(_:)`，供其他层复用同一估算 |
 
@@ -413,17 +437,20 @@ function assemble(..., processedHistory, input):
 7. **可选段可裁剪**：当 token 紧张时，示例对话优先被裁剪，因为其作用是引导风格而非提供关键信息
 8. **慢速剧情推进模式（beta）**：作为条件固定段注入，默认开启，会话级可关闭。提示词内容固定存储于 AppConstants，不可用户编辑。isRequired=false 但 priority=.max（开启时不被裁剪）
 
-## 当前实现证据（更新于 2026-05-17）
+## 当前实现证据（更新于 2026-06-02）
 
 - 代码位置：
   - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — `PromptAssemblyPreview` 输出 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`。
-  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(... backgroundPacket:)` / `assemble(... backgroundPacket:)` 是当前 Chat 主链路入口；旧 `preview(...)` / `assemble(...)` 和 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 保留作兼容 / rollback；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
-  - `OpenChat/Core/Background/BackgroundAssembler.swift` — 将 packet entries 转为兼容 worldBook / memory prompt items，diagnostics / score / omission 不进入 prompt content。
+  - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(... backgroundPacket:roleSkill:)` / `assemble(... backgroundPacket:roleSkill:)` 是当前 Chat 主链路入口；旧 `preview(...)` / `assemble(...)` 和 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 保留作兼容 / rollback；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
+  - `OpenChat/Core/SkillBundles/SkillBundleMaterializer.swift` — 从 `character_skill_bundle` metadata 和 bundle storage 读取完整 `SKILL.md`，生成 `RoleSkillPromptMaterial`。
+  - `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift` — 解析 Application Support 下的 bundle/content 路径，读取 SKILL.md，并枚举 / 读取 `content/references/**/*.md`。
+  - `OpenChat/Core/SkillBundles/SkillReferenceSearchTool.swift` — 本地只读 `skill_reference_search` 第一版：按当前输入检索当前角色绑定 bundle 的 references markdown，输出 `.skillReference` candidates。
+  - `OpenChat/Core/Background/BackgroundAssembler.swift` — 将 packet entries 转为兼容 state / skillReference / worldBook / memory prompt items，diagnostics / score / omission 不进入 prompt content。
   - `OpenChat/Core/Background/BackgroundManager.swift` — 组合 source adapters 与 worker；worldBook source failure 保留 keyword fallback candidates。
   - `OpenChat/Core/WorldBook/WorldBookSource.swift` — keyword candidates + semantic KNN 融合，semantic unavailable fallback 到 keyword-only。
   - `OpenChat/Core/WorldBook/WorldBookRecallModels.swift` — recall trace / reason / omission DTO。
   - `OpenChat/Core/PromptEngine/PromptSegment.swift` — 使用 `.exampleDialogsBlock(String)` 与 `.currentTurn(String)` 表达目标语义；time context 不再是独立 segment。
-  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `bounded worldBook rebuild -> BackgroundManager.prepare -> PromptAssembler.preview(backgroundPacket:) -> prepareHistory -> PromptAssembler.assemble(backgroundPacket:)`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
+  - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `role skill materialization -> bounded worldBook rebuild -> BackgroundManager.prepare -> PromptAssembler.preview(backgroundPacket:roleSkill:) -> prepareHistory -> PromptAssembler.assemble(backgroundPacket:roleSkill:)`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
@@ -432,15 +459,18 @@ function assemble(..., processedHistory, input):
   - `OpenChat/Core/Database/Migrations.swift` — v7_add_slow_plot_mode 迁移
   - `OpenChat/Core/ContextManager/PreparedHistory.swift` — compression checkpoint 通过 `[Previously]` system message 进入 Stable Conversation State。
 - 已验证测试：
-  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、preview 四层输出、labeled example/world book/memory blocks、packet compatible block、packet budget trim、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
+  - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、role skill block 注入、preview 四层输出、labeled example/world book/memory blocks、packet compatible block、packet budget trim、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
+  - `OpenChatTests/Core/SkillBundleTests/CharacterSkillBundleMaterializerTests.swift`（覆盖已有 `character_skill_bundle` 绑定读取完整 SKILL.md，以及无绑定返回 nil）
+  - `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift`（覆盖绑定 bundle references 检索、无绑定空结果和 `.skillReference` candidate metadata 映射）
   - `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`（覆盖 keyword-only、semantic-only、keyword+semantic duplicate merge、disabled world/entry、semantic failure fallback）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
-  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、request body 使用 `BackgroundPacket` selected entries、semantic world book entry 进入 `[World Book Entries]` block、worldBook semantic failure keyword fallback、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
+  - `OpenChatTests/Features/ChatTests/ChatViewModelPromptAssemblyTests.swift`（覆盖真实发送链路中当前输入只发送一次、API request 四层顺序、已有角色 skill bundle 的完整 SKILL.md 注入、request body 使用 `BackgroundPacket` selected entries、semantic world book entry 进入 `[World Book Entries]` block、worldBook semantic failure keyword fallback、memory fallback 注入、checkpoint invalidation、compression mode 持久化）
   - `OpenChatTests/Core/ContextManagerTests/CompressionCheckpointReuseTests.swift`
 - 当前实现描述：
-  - Chat 主链路的背景候选由 `BackgroundManager` 协调 Memory / WorldBook source adapters；`recentMessages` 应排除本轮当前输入。
-  - `PromptAssembler` 不访问数据库、不调用 embedding/KNN；它只消费调用方传入的 `BackgroundPacket` 或旧 direct 条目，生成 block 并按预算裁剪。
+  - Chat 主链路的背景候选由 `BackgroundManager` 协调 SkillReference / Memory / WorldBook source adapters；`recentMessages` 应排除本轮当前输入。
+  - `PromptAssembler` 不访问数据库、不调用 embedding/KNN、不读取 bundle 文件；它只消费调用方传入的 `RoleSkillPromptMaterial`、`BackgroundPacket` 或旧 direct 条目，生成 block 并按预算裁剪。
+  - Role skill 采用完整 `SKILL.md` 注入；references 只通过 `.skillReference` background source 做本地只读片段检索；当前没有 Skill ZIP 导入或 v2 角色卡创建 UI。
   - 示例对话以 `[Example Dialogs]` labeled system block 注入，位于 Stable Conversation State 之后。
   - 世界书条目统一进入 `[World Book Entries]` block，不再按 `after_system` / `before_history` 拆分最终位置。
   - 记忆条目统一进入 `[Memories]` block，位于 world book block 之后。

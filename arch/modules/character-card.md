@@ -8,7 +8,8 @@
 - 角色卡的 CRUD（创建、查看、编辑、删除）
 - 角色卡列表浏览与搜索筛选
 - 角色卡详情预览
-- 角色卡导入/导出（JSON 格式，兼容主流格式）
+- 角色卡导入/导出（OpenChat JSON 格式）
+- Skill ZIP 导入：从包含 `SKILL.md` 的压缩包创建角色卡并绑定 `character_skill_bundle`
 - 角色卡与会话的绑定
 
 ## 2. 文件清单与职责
@@ -21,8 +22,9 @@
 | `CharacterCardListViewModel.swift` | 列表数据加载、搜索、排序、删除 |
 | `CharacterCardEditorViewModel.swift` | 编辑/创建的表单状态管理、校验、保存 |
 | `CharacterCardField.swift` | 编辑器字段定义与校验规则 |
-| `CharacterCardImportFormat.swift` | OpenChat JSON / SillyTavern V2 角色卡导入解析与字段映射 |
-| `CharacterCardImportView.swift` | 粘贴 JSON 导入界面、解析预览与导入错误展示 |
+| `CharacterCardImportFormat.swift` | OpenChat JSON 角色卡导入解析与字段映射 |
+| `CharacterSkillBundleImportFormat.swift` | Skill ZIP 导入解析：定位 `SKILL.md`、解析 frontmatter / `agents/openai.yaml`，创建角色卡和 bundle metadata |
+| `CharacterCardImportView.swift` | 文件选择 / 粘贴 JSON 导入界面、解析预览与导入错误展示 |
 
 ## 3. 数据结构
 
@@ -218,24 +220,25 @@ final class CharacterCardEditorViewModel {
 
 ### 6.2 导入兼容
 
-- 优先识别 OpenChat 自身格式
-- 兼容 SillyTavern V2 Character Card 格式（`spec: "chara_card_v2"`）：
-  - 映射 `description` → `personality`
-  - 映射 `first_mes` → 首条示例对话
-  - 映射 `mes_example` → `exampleDialogs`
-  - 映射 `personality` → `personality`（追加）
-  - 映射 `scenario` → `scenario`
-- 当前实现提供粘贴 JSON 导入；通过 `Share Sheet` 或 `Files.app` 打开 `.json` 文件仍属后续计划
+- 仅识别 OpenChat 自身格式（`type: "openchat_character_card"`）
+- 旧 SillyTavern V2 Character Card 格式（`spec: "chara_card_v2"`）不再兼容，导入时返回 unsupported format
+- 当前实现提供粘贴 JSON 导入，以及通过文件选择导入 `.json` / `.zip`
+- `.zip` 导入要求包内存在唯一 `SKILL.md`；常见的 `skill-name/SKILL.md` 顶层目录会被剥离后写入 `Application Support/OpenChat/SkillBundles/<uuid>/content`
+- Skill ZIP 支持 stored / deflate 条目，拒绝 Zip64、加密条目、路径穿越、重复路径和超限展开体积
+- 导入 Skill ZIP 时根据 `SKILL.md` frontmatter / 可选 `agents/openai.yaml` 创建最小角色卡，并写入 `character_skill_bundle`；Chat runtime 继续通过 `CharacterSkillBundleMaterializer` 注入完整 `SKILL.md`，Background runtime 通过 `SkillReferenceSearchTool` 检索 `references/**/*.md`
 
 ### 6.3 导入/导出入口
 
-- 列表页工具栏：导入按钮（选择文件 / 粘贴 JSON）
+- 列表页工具栏：导入按钮（选择 ZIP / JSON 文件，或粘贴 JSON）
 - 详情页导出按钮 → ShareSheet / 保存到文件仍属后续计划
 
 > **实现证据**:
-> - `CharacterCardImportFormat.swift` 解析 `type: "openchat_character_card"` 与 `spec: "chara_card_v2"`，并规范化标签、空白字段和示例对话。
-> - `CharacterCardImportView.swift` 支持粘贴 JSON、预览名称/标签/解析警告，并通过列表页 ViewModel 持久化。
-> - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 OpenChat 格式、SillyTavern V2 字段映射、原始示例行警告、缺名错误以及 ViewModel 持久化。
+> - `CharacterCardImportFormat.swift` 解析 `type: "openchat_character_card"`，并规范化标签、空白字段和示例对话；`spec: "chara_card_v2"` 会作为 unsupported format 拒绝。
+> - `CharacterCardImportView.swift` 支持选择 `.zip` / `.json` 文件或粘贴 JSON；文件导入通过 security-scoped URL 读取后交给列表页 ViewModel。
+> - `CharacterCardListViewModel.importFile(data:sourceFileName:)` 按文件内容 / 扩展名分流 JSON 与 Skill ZIP；`importSkillBundleArchive` 持久化角色卡和 bundle metadata，DB 失败会清理已写入 bundle 目录。
+> - `ZipArchiveReader.swift` 支持 stored / deflate ZIP 条目，并拒绝危险路径、加密、Zip64、重复路径和过大展开。
+> - `CharacterSkillBundleImportFormat.swift` 解析 Skill ZIP，剥离顶层目录，写入 bundle content，生成 `CharacterCardRecord` 与 `CharacterSkillBundleRecord`。
+> - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 OpenChat 格式、拒绝旧 SillyTavern V2 格式、缺名错误、JSON 持久化、deflate ZIP 解包、路径穿越拒绝、Skill ZIP 创建角色卡 / bundle / runtime material / references 检索。
 > - `character_cards/shiroko-terror-openchat.json` 提供可直接粘贴导入的“砂狼白子*恐怖”示例角色卡。
 
 ## 7. 与其他模块的交互
@@ -244,6 +247,6 @@ final class CharacterCardEditorViewModel {
 |---|---|
 | `Conversation` | 创建会话时选择角色卡 → `conversation.characterCardId`（世界书通过角色卡间接关联） |
 | `WorldBook` | 角色卡通过 `worldBookId` 归属于世界书，世界书详情页可查看归属角色 |
-| `PromptEngine` | 拼装时读取角色卡字段注入 system prompt、角色描述、场景、示例对话 |
+| `PromptEngine` | 拼装时读取角色卡字段注入 system prompt、角色描述、场景、示例对话；若 Core 层存在 `character_skill_bundle` 绑定，Chat runtime 额外传入完整 `SKILL.md` role skill material，并可将 references 检索结果作为 `[Skill Reference]` 背景材料 |
 | `Chat` | ChatView 顶部显示当前角色卡头像+名称，点击可查看/切换 |
 | `Memory` | 角色卡关联的跨对话记忆条目，角色详情页提供记忆列表入口 |

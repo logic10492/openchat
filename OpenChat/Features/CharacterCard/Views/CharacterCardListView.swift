@@ -71,9 +71,15 @@ struct CharacterCardListView: View {
             )
         }
         .sheet(isPresented: $isShowingImport, onDismiss: reloadCards) {
-            CharacterCardImportView { parsedCard in
-                _ = try await viewModel.importCard(parsedCard)
-            }
+            CharacterCardImportView(
+                onImportText: { text in
+                    let parsedCard = try CharacterCardImportFormat.parse(text: text)
+                    _ = try await viewModel.importCard(parsedCard)
+                },
+                onImportFile: { data, sourceFileName in
+                    _ = try await viewModel.importFile(data: data, sourceFileName: sourceFileName)
+                }
+            )
         }
         .sheet(item: $selectedCard, onDismiss: reloadCards) { card in
             CharacterCardDetailView(
@@ -145,7 +151,8 @@ struct CharacterCardListView: View {
         CharacterCardListView(
             viewModel: CharacterCardListViewModel(
                 databaseManager: DependencyContainer.preview().databaseManager,
-                appState: AppState()
+                appState: AppState(),
+                skillBundleStore: DependencyContainer.preview().skillBundleStore
             )
         )
     }

@@ -450,6 +450,7 @@ struct BackgroundSourceTests {
         #expect(BackgroundSourceType.worldBook.rawValue == "worldBook")
         #expect(BackgroundSourceType.characterState.rawValue == "characterState")
         #expect(BackgroundSourceType.conversationState.rawValue == "conversationState")
+        #expect(BackgroundSourceType.skillReference.rawValue == "skillReference")
         #expect(diagnostics.sourceType == .memory)
         #expect(diagnostics.durationMilliseconds == nil)
         #expect(diagnostics.fallback == MemoryRecallFallback.noSemanticHit.rawValue)

@@ -5,6 +5,7 @@ enum BackgroundSourceType: String, Codable, Sendable, CaseIterable, Hashable {
     case worldBook
     case characterState
     case conversationState
+    case skillReference
 }
 
 protocol BackgroundSourceTool: Sendable {
@@ -34,6 +35,7 @@ struct BackgroundRequest: Sendable {
     let tokenBudget: Int
     let memoryLimit: Int
     let worldBookLimit: Int
+    let skillReferenceLimit: Int
 
     init(
         conversation: ConversationRecord,
@@ -45,7 +47,8 @@ struct BackgroundRequest: Sendable {
         currentInput: String,
         tokenBudget: Int,
         memoryLimit: Int = 10,
-        worldBookLimit: Int = 10
+        worldBookLimit: Int = 10,
+        skillReferenceLimit: Int = 3
     ) {
         self.conversation = conversation
         self.characterCard = characterCard
@@ -57,6 +60,7 @@ struct BackgroundRequest: Sendable {
         self.tokenBudget = tokenBudget
         self.memoryLimit = memoryLimit
         self.worldBookLimit = worldBookLimit
+        self.skillReferenceLimit = skillReferenceLimit
     }
 }
 

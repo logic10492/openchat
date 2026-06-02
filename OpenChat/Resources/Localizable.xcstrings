@@ -298,6 +298,17 @@
         }
       }
     },
+    "Choose ZIP or JSON File" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 ZIP 或 JSON 文件"
+          }
+        }
+      }
+    },
     "Character reply" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1158,17 +1169,6 @@
         }
       }
     },
-    "Message examples were imported as raw text." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例对话中有内容已按原始文本导入。"
-          }
-        }
-      }
-    },
     "Missing keywords, title used as fallback." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1435,13 +1435,13 @@
         }
       }
     },
-    "OpenChat and SillyTavern V2 character cards are supported." : {
+    "Only JSON character cards and Skill ZIP bundles can be imported." : {
       "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "支持 OpenChat 与 SillyTavern V2 角色卡。"
+            "value" : "只能导入 JSON 角色卡或 Skill ZIP 包。"
           }
         }
       }
@@ -1597,6 +1597,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可以导入"
+          }
+        }
+      }
+    },
+    "Skill ZIP bundle contains multiple SKILL.md files." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill ZIP 包含多个 SKILL.md 文件。"
+          }
+        }
+      }
+    },
+    "Skill ZIP bundle must contain a SKILL.md file." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill ZIP 必须包含一个 SKILL.md 文件。"
+          }
+        }
+      }
+    },
+    "Skill ZIP bundles and OpenChat JSON files are supported." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "支持 Skill ZIP 包和 OpenChat JSON 文件。"
+          }
+        }
+      }
+    },
+    "Skill ZIP storage is unavailable." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skill ZIP 存储不可用。"
           }
         }
       }

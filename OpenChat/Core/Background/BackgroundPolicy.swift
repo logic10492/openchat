@@ -31,12 +31,14 @@ struct BackgroundPolicy: Sendable, Equatable {
             perSourceLimits: [
                 .characterState: 1,
                 .conversationState: 1,
+                .skillReference: 3,
                 .worldBook: 10,
                 .memory: 10,
             ],
             sourceWeights: [
                 .characterState: 0.12,
                 .conversationState: 0.08,
+                .skillReference: 0.1,
                 .worldBook: 0.05,
                 .memory: 0.1,
             ],
@@ -61,10 +63,12 @@ struct BackgroundPolicy: Sendable, Equatable {
             "worldBookLimit": String(limit(for: .worldBook)),
             "characterStateLimit": String(limit(for: .characterState)),
             "conversationStateLimit": String(limit(for: .conversationState)),
+            "skillReferenceLimit": String(limit(for: .skillReference)),
             "memoryWeight": String(weight(for: .memory)),
             "worldBookWeight": String(weight(for: .worldBook)),
             "characterStateWeight": String(weight(for: .characterState)),
             "conversationStateWeight": String(weight(for: .conversationState)),
+            "skillReferenceWeight": String(weight(for: .skillReference)),
             "duplicationPenalty": String(duplicationPenalty),
             "lowConfidenceThreshold": String(lowConfidenceThreshold),
         ]

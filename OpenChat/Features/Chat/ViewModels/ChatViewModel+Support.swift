@@ -85,6 +85,7 @@ extension ChatViewModel {
         }
 
         let characterCard = try await databaseManager.fetchCharacterCard(id: resolvedCharacterCardId)
+        let roleSkill = try await skillBundleMaterializer?.materialize(characterCardId: characterCard?.id)
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
 
@@ -159,7 +160,8 @@ extension ChatViewModel {
                 backgroundPacket: backgroundPacket,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             )
             let history = try await contextManager.prepareHistory(
                 messages: promptHistoryMessages,
@@ -174,7 +176,8 @@ extension ChatViewModel {
                 stageTurnPlan: stageTurnPlan,
                 processedHistory: history,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             )
         } else {
             backgroundDiagnostics = nil
@@ -207,7 +210,8 @@ extension ChatViewModel {
                     memories: memories,
                     stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
-                    endpoint: endpoint
+                    endpoint: endpoint,
+                    roleSkill: roleSkill
                 )
             } else {
                 preview = PromptAssembler.preview(
@@ -219,7 +223,8 @@ extension ChatViewModel {
                     recentMessages: promptHistoryMessages,
                     stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
-                    endpoint: endpoint
+                    endpoint: endpoint,
+                    roleSkill: roleSkill
                 )
             }
 
@@ -239,7 +244,8 @@ extension ChatViewModel {
                     processedHistory: history,
                     stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
-                    endpoint: endpoint
+                    endpoint: endpoint,
+                    roleSkill: roleSkill
                 )
             } else {
                 assembly = PromptAssembler.assemble(
@@ -252,7 +258,8 @@ extension ChatViewModel {
                     processedHistory: history,
                     stageTurnPlan: stageTurnPlan,
                     currentInput: prompt,
-                    endpoint: endpoint
+                    endpoint: endpoint,
+                    roleSkill: roleSkill
                 )
             }
         }
@@ -489,6 +496,7 @@ extension ChatViewModel {
         let worldBook = try await databaseManager.fetchWorldBook(id: characterCard?.worldBookId)
         let worldBookEntries = try await databaseManager.fetchWorldBookEntries(worldBookId: worldBook?.id)
         let recentMessages = promptHistoryMessages + stageContinuationRecords
+        let roleSkill = try await skillBundleMaterializer?.materialize(characterCardId: characterCard?.id)
         let stageContinuationTokens = stageContinuationRecords.reduce(0) { total, record in
             total + TokenCounter.count(
                 message: record.stageHistoryChatMessage(activeSpeakerId: stageTurnPlan?.participant?.id)
@@ -520,7 +528,8 @@ extension ChatViewModel {
                 backgroundPacket: backgroundPacket,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             )
             let history = try await contextManager.prepareHistory(
                 messages: promptHistoryMessages,
@@ -535,7 +544,8 @@ extension ChatViewModel {
                 stageTurnPlan: stageTurnPlan,
                 processedHistory: history,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             ).appendingStageContinuation(
                 records: stageContinuationRecords,
                 activeSpeakerId: stageTurnPlan?.participant?.id
@@ -573,7 +583,8 @@ extension ChatViewModel {
                 memories: memories,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             )
         } else {
             preview = PromptAssembler.preview(
@@ -585,7 +596,8 @@ extension ChatViewModel {
                 recentMessages: recentMessages,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             )
         }
 
@@ -605,7 +617,8 @@ extension ChatViewModel {
                 processedHistory: history,
                 stageTurnPlan: stageTurnPlan,
                 currentInput: prompt,
-                endpoint: endpoint
+                endpoint: endpoint,
+                roleSkill: roleSkill
             ).appendingStageContinuation(
                 records: stageContinuationRecords,
                 activeSpeakerId: stageTurnPlan?.participant?.id
@@ -621,7 +634,8 @@ extension ChatViewModel {
             processedHistory: history,
             stageTurnPlan: stageTurnPlan,
             currentInput: prompt,
-            endpoint: endpoint
+            endpoint: endpoint,
+            roleSkill: roleSkill
         ).appendingStageContinuation(
             records: stageContinuationRecords,
             activeSpeakerId: stageTurnPlan?.participant?.id
@@ -1011,6 +1025,7 @@ private extension AssemblyResult {
             totalBudget: tokenUsage.totalBudget,
             systemPrompt: tokenUsage.systemPrompt,
             characterDescription: tokenUsage.characterDescription,
+            roleSkill: tokenUsage.roleSkill,
             scenario: tokenUsage.scenario,
             slowPlotDirective: tokenUsage.slowPlotDirective,
             timeContext: tokenUsage.timeContext,

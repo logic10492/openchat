@@ -1,6 +1,6 @@
 # BackgroundSource 统一候选来源
 
-> 状态：Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地；2026-05-17 Phase 5/6 已由 `BackgroundWorker` / `BackgroundManager` 消费这些 candidates 并切入 Chat/Prompt 兼容链路。2026-05-20 已追加 `CharacterStateBackgroundSource`、`ConversationStateBackgroundSource` 和 Stage context filter。
+> 状态：Memory / WorldBook read-only recall tools 与 `MemoryBackgroundSource` / `WorldBookBackgroundSource` adapters 已在 2026-05-17 Phase 4A-4D 落地；2026-05-17 Phase 5/6 已由 `BackgroundWorker` / `BackgroundManager` 消费这些 candidates 并切入 Chat/Prompt 兼容链路。2026-05-20 已追加 `CharacterStateBackgroundSource`、`ConversationStateBackgroundSource` 和 Stage context filter。2026-06-02 已追加 `SkillReferenceSearchTool` / `SkillReferenceBackgroundSource`，用于角色 skill bundle 的本地 references 检索。
 
 ## 1. Source 类型
 
@@ -10,10 +10,11 @@ enum BackgroundSourceType: String, Codable, Sendable {
     case worldBook
     case characterState
     case conversationState
+    case skillReference
 }
 ```
 
-当前源码包含 `.memory` / `.worldBook` / `.characterState` / `.conversationState`。Character / ConversationState 第一版是 deterministic read-only source，不写库、不调用 LLM、不替代长期 Memory 或 compression checkpoint。
+当前源码包含 `.memory` / `.worldBook` / `.characterState` / `.conversationState` / `.skillReference`。Character / ConversationState 第一版是 deterministic read-only source，不写库、不调用 LLM、不替代长期 Memory 或 compression checkpoint。SkillReference 第一版只读角色绑定 bundle 的 local references markdown，不联网、不写库、不替代完整 `SKILL.md` identity 注入。
 
 ## 1.1 Source tool 前置边界
 
@@ -23,6 +24,7 @@ enum BackgroundSourceType: String, Codable, Sendable {
 |---|---|---|---|
 | `MemoryRecallTool` | `MemoryManager.recallMemories(...)` | `MemoryRecallResult` / trace | 不复制 rank fusion、不写 DB、不拼 prompt |
 | `WorldBookRecallTool` | `WorldBookSource.recallEntries(...)` | `WorldBookRecallResult` / trace | 不复制 keyword+semantic fusion、不触发索引 rebuild、不拼 prompt |
+| `SkillReferenceSearchTool` | `character_skill_bundle` + `content/references/**/*.md` | `SkillReferenceSearchResult` / trace | 不联网、不写 DB、不读取 bundle 外路径、不拼 prompt |
 
 这些 tool 不是普通角色工具，不进入角色回复的 tool call，也不向用户暴露。它们只作为 BackgroundSource adapter 的输入边界，让 `BackgroundWorker` 消费统一候选，而不是直接依赖 Memory / WorldBook 的内部实现。
 
@@ -32,6 +34,7 @@ enum BackgroundSourceType: String, Codable, Sendable {
 - `OpenChat/Core/WorldBook/WorldBookRecallTool.swift` 已实现并进入 target；`WorldBookRecallToolTests` 覆盖 keyword-only、semantic-only、hybrid、disabled、semanticUnavailable、staleEmbedding、limit/duplicate omission 透传和无 indexer/rebuild dependency。
 - `OpenChat/Core/Background/MemoryBackgroundSource.swift` / `WorldBookBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖 candidate id prefix、顺序、metadata、request 边界、Stage context query enrichment 和不按 token budget 裁剪。
 - `OpenChat/Core/Background/CharacterStateBackgroundSource.swift` / `ConversationStateBackgroundSource.swift` 已实现并进入 target；`BackgroundSourceTests` 覆盖角色卡派生状态、recent turn / stage state candidate 和 source type raw value。
+- `OpenChat/Core/SkillBundles/SkillReferenceSearchTool.swift` 已实现并进入 target；`SkillReferenceSearchToolTests` 覆盖绑定 bundle references 检索、无绑定空结果和 candidate metadata 映射。
 - `OpenChat/Core/Background/BackgroundWorker.swift` / `BackgroundManager.swift` 已消费这两个 source adapters；`BackgroundManagerTests` 覆盖 source merge 与 worldBook source failure keyword fallback。
 
 ## 2. MemoryBackgroundSource
@@ -137,6 +140,23 @@ Phase C 实现证据：
 - 这也不是 compression checkpoint。
 - 它是本轮对话中需要稳定保留的短期 state；当前不做 LLM synthesis、不写 conversation-state 表。
 
+## 5.5 SkillReferenceBackgroundSource
+
+来源：`character_skill_bundle` metadata + bundle `content/references/**/*.md`。
+
+职责：
+
+- 当角色绑定 skill bundle 且 bundle 内存在 local references markdown 时，用当前输入做轻量关键词检索。
+- 返回 `BackgroundCandidate(sourceType: .skillReference)`，由 BackgroundWorker 控制每轮最多注入数量。
+- 作为 current-turn background 注入 `[Skill Reference: ...]`，帮助 Shiroko 这类 skill 满足“事实问题先查资料”的本地资料需求。
+
+边界：
+
+- 不是公网 web search，不调用 Exa。
+- 不是模型自由 tool call；Chat runtime 在请求模型前预检索。
+- 不读取 bundle `content/` 外的路径，跳过符号链接。
+- 不替代完整 `SKILL.md` role skill block；两者可同时存在。
+
 ## 6. Candidate metadata
 
 建议统一 metadata key：
@@ -151,3 +171,5 @@ Phase C 实现证据：
 | `importance` | memory importance |
 | `fallback` | 是否来自 fallback |
 | `sourceUpdatedAt` | 来源更新时间 |
+| `relativePath` | skill reference 在 bundle content 下的相对路径 |
+| `matchedTerms` | skill reference 检索命中的 query terms |

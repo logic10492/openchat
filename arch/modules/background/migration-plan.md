@@ -1,6 +1,6 @@
 # Background 迁移计划
 
-> 状态：已实现到 Phase 6 compatible switch，并已追加 CharacterState / ConversationState sources、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
+> 状态：已实现到 Phase 6 compatible switch，并已追加 CharacterState / ConversationState sources、SkillReference source、Stage context filter、LibMan offline draft runtime 和 idle reflect draft worker。统一 `[Background]` block、Exa ToolBroker、LibMan apply UI、自动 synthesis 写入和 duplicate/conflict review 尚未实现。
 
 ## Phase 0：文档和边界
 
@@ -139,6 +139,27 @@
 - bounded worldBook rebuild 仍保留在 ChatViewModel pre-source stage；`BackgroundWorker` 与 `WorldBookBackgroundSource` 不触发 rebuild。
 - worldBook source failure 的兼容 keyword fallback 在 manager 中生成 `.worldBook` fallback candidates，避免切换后静默丢失世界书背景。
 - `ChatViewModelPromptAssemblyTests` 覆盖 request body 使用 packet selected entries、current input 不重复、semantic-only worldBook entry 仍进入兼容 block、semantic failure keyword fallback 仍生效。
+
+## Phase 6.5：Skill references source（已完成）
+
+目标：
+
+- 为角色 skill bundle 提供第一版本地只读工具实现，不进入公网 web search。
+- 从当前角色绑定 bundle 的 `content/references/**/*.md` 做轻量关键词检索。
+- 输出 `.skillReference` candidates，经 `BackgroundWorker` 统一排序 / 限流 / diagnostics 后作为 `[Skill Reference]` 背景材料进入 prompt。
+- 继续保持普通角色回复不是 AgentCore runtime；该 source 是应用预检索工具，不是模型可自由调用的 Chat Completions / Responses tool loop。
+
+验证：
+
+- 有绑定 bundle 时可搜索 references markdown，保留 relativePath、matchedTerms、score、trace metadata。
+- 无绑定 bundle 或空查询时返回空结果，不抛错。
+- `BackgroundAssembler` 能把 `.skillReference` entry 注入当前轮背景 block。
+
+当前状态：
+
+- `OpenChat/Core/SkillBundles/SkillReferenceSearchTool.swift`、`SkillReferenceBackgroundSource` 已进入 target。
+- `OpenChat/App/DependencyContainer.swift` 已将 `SkillReferenceBackgroundSource` 加入生产 `BackgroundManager`。
+- `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift` 和 `PromptAssemblerTests` 覆盖 tool、source candidate mapping 和 prompt block。
 
 ## Phase 7：LibMan
 
