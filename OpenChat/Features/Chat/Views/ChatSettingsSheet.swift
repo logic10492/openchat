@@ -169,15 +169,9 @@ struct ChatSettingsSheet: View {
         Toggle(String(localized: "Enable Thinking"), isOn: thinkingEnabledBinding)
 
         if viewModel.thinkingEnabled {
-            if viewModel.selectedProviderDialect == .deepSeekV4 {
-                Picker(String(localized: "Reasoning Effort"), selection: reasoningEffortBinding) {
-                    ForEach(ReasoningEffort.allCases) { effort in
-                        Text(effort.displayName).tag(effort)
-                    }
-                }
-            } else {
-                Stepper(value: thinkingBudgetBinding, in: 1024...65_536, step: 1024) {
-                    Text("\(String(localized: "Thinking Budget")): \(viewModel.thinkingBudget)")
+            Picker(String(localized: "Reasoning Effort"), selection: reasoningEffortBinding) {
+                ForEach(reasoningEffortOptions) { effort in
+                    Text(effort.displayName).tag(effort)
                 }
             }
         }
@@ -268,14 +262,15 @@ struct ChatSettingsSheet: View {
         return $viewModel.thinkingEnabled
     }
 
-    private var thinkingBudgetBinding: Binding<Int> {
-        @Bindable var viewModel = viewModel
-        return $viewModel.thinkingBudget
-    }
-
     private var reasoningEffortBinding: Binding<ReasoningEffort> {
         @Bindable var viewModel = viewModel
         return $viewModel.reasoningEffort
+    }
+
+    private var reasoningEffortOptions: [ReasoningEffort] {
+        viewModel.selectedProviderDialect == .deepSeekV4
+            ? ReasoningEffort.deepSeekV4Cases
+            : ReasoningEffort.openAICompatibleCases
     }
 
     private var directorModeBinding: Binding<DirectorMode> {

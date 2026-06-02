@@ -24,7 +24,7 @@
 | `APIMode.swift` | API 模式枚举：`chatCompletions` / `responses` |
 | `APIProviderDialect.swift` | 模型级供应商请求方言：`openAICompatible` / `deepSeekV4`，以及 DeepSeek V4 默认上下文与 reasoning effort |
 | `APIEndpointConfig.swift` | 端点配置值对象（含 `apiMode` 与 `providerDialect`，从 `APIEndpointRecord` + `EndpointModelRecord` 转换） |
-| `ModelParameters.swift` | 模型采样参数、thinking budget、DeepSeek V4 `reasoningEffort` |
+| `ModelParameters.swift` | 模型采样参数、thinking enabled 状态、OpenAI-compatible / DeepSeek V4 `reasoningEffort` |
 | `ChatMessage.swift` | Chat 消息结构体，支持响应侧 `reasoning_content`，请求侧默认剥离 reasoning 内容 |
 | `APIRequest.swift` | Chat Completion 请求体构建 |
 | `APIResponse.swift` | Chat Completion 响应模型：完整响应 + 流式 Delta |
@@ -160,7 +160,8 @@ struct ModelParameters {
     var frequencyPenalty: Double = 0.0
     var presencePenalty: Double = 0.0
     var stop: [String]? = nil
-    var thinkingBudget: Int? = nil
+    var thinkingEnabled: Bool = false
+    var thinkingBudget: Int? = nil // legacy decode only; not used as OpenAI reasoning strength
     var reasoningEffort: ReasoningEffort = .high
 }
 
@@ -335,9 +336,9 @@ Accept: text/event-stream           // 仅流式请求
 - 必要字段：`model`、`messages`
 - 常用采样字段：`temperature`、`top_p`、`frequency_penalty`、`presence_penalty`、`stop`
 - 流式字段：`stream`；流式时自动带 `stream_options: { "include_usage": true }`
-- token 上限：
+- token / reasoning 上限：
   - 标准模式使用 `max_tokens`
-  - `openAICompatible` 方言的 thinking/reasoning 模式使用 `max_completion_tokens`，其值包含可见输出 token 和 reasoning token 预算
+  - `openAICompatible` 方言的 thinking/reasoning 模式使用 `reasoning_effort` 传递思考强度；`max_completion_tokens` 只保留为 completion 上限，不再由 `thinkingBudget` 叠加推导 reasoning 预算
   - `deepSeekV4` 方言使用 `max_tokens` + `thinking` / `reasoning_effort`，见 6.2
 - 响应解析：
   - 非流式读取 `choices[].message.content` 和 `usage`
@@ -365,9 +366,10 @@ DeepSeek V4 使用 OpenAI-compatible Chat Completions 路由，但请求体不�
 - DeepSeek V4 返回的 `reasoning_content` 作为角色思考链保存和展示。当前 OpenChat 没有 Tool Calls 执行器，因此正常角色对话历史不会回传历史 `reasoning_content`；未来接入工具调用时，发生 tool call 的 assistant 消息必须完整回传 `reasoning_content`、`tool_calls` 与后续 `role: tool` 消息。
 
 实现证据：
-- `OpenChat/Core/Networking/APIProviderDialect.swift`：DeepSeek V4 方言推断、1,000,000 默认上下文、`ReasoningEffort.high/max`。
-- `OpenChat/Core/Networking/APIRequest.swift`：DeepSeek V4 下编码 `thinking` / `reasoning_effort`，thinking enabled 时使用 `max_tokens` 并剥离无效采样参数。
+- `OpenChat/Core/Networking/APIProviderDialect.swift`：DeepSeek V4 方言推断、1,000,000 默认上下文、OpenAI-compatible 与 DeepSeek V4 分离的 `ReasoningEffort` 选项和值映射。
+- `OpenChat/Core/Networking/APIRequest.swift`：DeepSeek V4 下编码 `thinking` / `reasoning_effort`，thinking enabled 时使用 `max_tokens` 并剥离无效采样参数；OpenAI-compatible thinking enabled 时编码顶层 `reasoning_effort`。
 - `OpenChat/Core/Networking/ChatMessage.swift`、`OpenChat/Core/Networking/APIRequest.swift`、`OpenChat/Core/Networking/ResponsesAPIRequest.swift`：`reasoning_content` 可解码，但普通请求历史默认经 `requestMessage()` 剥离。
+- `OpenChat/Core/Networking/ResponsesAPIRequest.swift`：Responses API thinking enabled 时只发送 `reasoning.effort`，不发送 `reasoning.max_tokens`。
 - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift`、`OpenChat/Features/Chat/Views/MessageBubbleView.swift`：流式 reasoning delta 累积到 `MessageRecord.reasoningContent` 并以“角色思考”展示。
 
 ### 6.3 Responses API
@@ -382,7 +384,7 @@ DeepSeek V4 使用 OpenAI-compatible Chat Completions 路由，但请求体不�
 - system 消息合并为顶层 `instructions`
 - 非 system 消息放入 `input`
 - `store` 固定为 `false`
-- `thinkingBudget` 映射为 `reasoning.max_tokens`
+- thinking enabled 时映射为 `reasoning: { "effort": ... }`；不发送旧的 `reasoning.max_tokens`
 - 非流式响应从 `output[].content[]` 中聚合 `output_text`
 - 流式响应处理以下 typed events：
   - `response.output_text.delta`
@@ -390,6 +392,8 @@ DeepSeek V4 使用 OpenAI-compatible Chat Completions 路由，但请求体不�
   - `response.completed`
 - `response.failed`
 - `response.incomplete`
+
+OpenAI reasoning 参数实现基于 2026-06-01 核对的官方文档：Responses API 推荐使用 `reasoning: { "effort": "low" | ... }`；Chat Completions 仍支持顶层 `reasoning_effort`；`gpt-5.5` 的 `reasoning.effort` 支持 `none`、`low`、`medium`、`high`、`xhigh`。
 
 Request-shape 约束：
 
@@ -440,21 +444,21 @@ Request-shape 约束：
 | `Core/Database` | `APIEndpointRecord`（用于 `APIEndpointConfig` 初始化） |
 | 被依赖方 | `Features/Chat/ChatViewModel`、`Core/ContextManager/CompressionStrategy` |
 
-## 实现证据（2026-04-29 核对）
+## 实现证据（2026-06-01 更新）
 
 - 代码位置：
   - `OpenChat/Core/Networking/APIClient.swift` — 根据 apiMode 分发到 Chat Completions / Responses 实现，并以 `endpoint.baseURL` 追加相对路径 `models`、`chat/completions`、`responses`
   - `OpenChat/Core/Networking/SSEStreamParser.swift` — 支持 `event:` 类型行
   - `OpenChat/Core/Networking/APIMode.swift` — API 模式枚举
   - `OpenChat/Core/Networking/APIProviderDialect.swift` — 供应商方言、DeepSeek V4 推断、默认上下文与 `ReasoningEffort`
-  - `OpenChat/Core/Networking/APIRequest.swift` — Chat Completions 请求体（`max_tokens` / `max_completion_tokens`、DeepSeek V4 `thinking` / `reasoning_effort`、`stream_options.include_usage`）
+  - `OpenChat/Core/Networking/APIRequest.swift` — Chat Completions 请求体（`max_tokens` / `max_completion_tokens`、OpenAI-compatible `reasoning_effort`、DeepSeek V4 `thinking` / `reasoning_effort`、`stream_options.include_usage`）
   - `OpenChat/Core/Networking/APIResponse.swift` — Chat Completions 响应体与流式 `reasoning_content`
   - `OpenChat/Core/Networking/ChatMessage.swift` — 响应侧 `reasoning_content` 解码，请求侧默认剥离历史 reasoning 内容
-  - `OpenChat/Core/Networking/ResponsesAPIRequest.swift` — Responses API 请求体（system → instructions 提取）
+  - `OpenChat/Core/Networking/ResponsesAPIRequest.swift` — Responses API 请求体（system → instructions 提取、`reasoning.effort`）
   - `OpenChat/Core/Networking/ResponsesAPIResponse.swift` — Responses API 响应体 + 转换
   - `OpenChat/Core/Networking/APIEndpointConfig.swift` — 含 `init(from:model:)` 从端点+模型记录构造，并携带 `providerDialect`
   - `OpenChat/Core/Networking/APIError.swift`
-- 已验证测试（2026-04-29）：
+- 已验证测试（2026-06-01）：
   - `OpenChatTests/Core/NetworkingTests/APIClientTests.swift` — Chat Completions 模式测试
   - `OpenChatTests/Core/NetworkingTests/SSEStreamParserTests.swift` — SSE 解析测试
   - `OpenChatTests/Core/NetworkingTests/ResponsesAPITests.swift` — Responses API 请求/响应/流式/参数过滤测试

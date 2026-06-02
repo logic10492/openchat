@@ -40,7 +40,9 @@ struct APIRequest: Codable, Sendable {
 
         if endpoint.providerDialect == .deepSeekV4 {
             thinking = DeepSeekThinkingConfig(type: parameters.isThinkingEnabled ? "enabled" : "disabled")
-            reasoningEffort = parameters.isThinkingEnabled ? parameters.reasoningEffort.rawValue : nil
+            reasoningEffort = parameters.isThinkingEnabled
+                ? parameters.reasoningEffort.requestValue(for: endpoint.providerDialect)
+                : nil
             maxTokens = parameters.maxTokens
             maxCompletionTokens = nil
 
@@ -57,17 +59,18 @@ struct APIRequest: Codable, Sendable {
             }
         } else {
             thinking = nil
-            reasoningEffort = nil
+            reasoningEffort = parameters.isThinkingEnabled
+                ? parameters.reasoningEffort.requestValue(for: endpoint.providerDialect)
+                : nil
             topP = parameters.topP
             frequencyPenalty = parameters.frequencyPenalty
             presencePenalty = parameters.presencePenalty
 
             if parameters.isThinkingEnabled {
-                // Reasoning models use max_completion_tokens (includes both reasoning + visible output)
+                // Reasoning effort controls hidden thinking; max_completion_tokens remains only a completion cap.
                 temperature = 1.0
                 maxTokens = nil
-                maxCompletionTokens = parameters.maxTokens.map { $0 + (parameters.thinkingBudget ?? 0) }
-                    ?? parameters.thinkingBudget
+                maxCompletionTokens = parameters.maxTokens
             } else {
                 temperature = parameters.temperature
                 maxTokens = parameters.maxTokens
@@ -91,7 +94,7 @@ struct APIRequest: Codable, Sendable {
         stop = try container.decodeIfPresent([String].self, forKey: .stop)
         thinking = try container.decodeIfPresent(DeepSeekThinkingConfig.self, forKey: .thinking)
         reasoningEffort = try container.decodeIfPresent(String.self, forKey: .reasoningEffort)
-        thinkingEnabled = thinking?.type == "enabled" || maxCompletionTokens != nil
+        thinkingEnabled = thinking?.type == "enabled" || reasoningEffort != nil || maxCompletionTokens != nil
     }
 
     func encode(to encoder: Encoder) throws {
@@ -108,7 +111,7 @@ struct APIRequest: Codable, Sendable {
         try container.encodeIfPresent(thinking, forKey: .thinking)
         try container.encodeIfPresent(reasoningEffort, forKey: .reasoningEffort)
 
-        // Reasoning models: max_completion_tokens; standard models: max_tokens
+        // Reasoning models: reasoning_effort + max_completion_tokens; standard models: max_tokens
         if maxCompletionTokens != nil {
             try container.encodeIfPresent(maxCompletionTokens, forKey: .maxCompletionTokens)
         } else {

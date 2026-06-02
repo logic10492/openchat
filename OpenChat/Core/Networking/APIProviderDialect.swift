@@ -36,15 +36,42 @@ enum APIProviderDialect: String, Codable, Sendable, CaseIterable, Identifiable {
 }
 
 enum ReasoningEffort: String, Codable, Sendable, CaseIterable, Identifiable {
+    case none
+    case minimal
+    case low
+    case medium
     case high
+    case xhigh
     case max
 
     var id: String { rawValue }
 
+    static let openAICompatibleCases: [ReasoningEffort] = [.none, .low, .medium, .high, .xhigh]
+    static let deepSeekV4Cases: [ReasoningEffort] = [.high, .max]
+
+    func requestValue(for providerDialect: APIProviderDialect) -> String {
+        switch providerDialect {
+        case .openAICompatible:
+            return self == .max ? ReasoningEffort.xhigh.rawValue : rawValue
+        case .deepSeekV4:
+            return self == .max ? ReasoningEffort.max.rawValue : ReasoningEffort.high.rawValue
+        }
+    }
+
     var displayName: String {
         switch self {
+        case .none:
+            String(localized: "None")
+        case .minimal:
+            String(localized: "Minimal")
+        case .low:
+            String(localized: "Low")
+        case .medium:
+            String(localized: "Medium")
         case .high:
             String(localized: "High")
+        case .xhigh:
+            String(localized: "X High")
         case .max:
             String(localized: "Max")
         }

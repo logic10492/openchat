@@ -45,7 +45,7 @@ struct APIRequestThinkingTests {
         #expect(json["max_completion_tokens"] == nil)
     }
 
-    @Test func test_thinking_mode_uses_max_completion_tokens() throws {
+    @Test func test_thinking_mode_uses_reasoning_effort_and_completion_cap() throws {
         let endpoint = TestHelpers.makeEndpoint()
         let params = ModelParameters(maxTokens: 2048, thinkingBudget: 4096)
         let request = APIRequest(messages: [], endpoint: endpoint, parameters: params, stream: false)
@@ -54,7 +54,8 @@ struct APIRequestThinkingTests {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         #expect(json["max_tokens"] == nil)
-        #expect(json["max_completion_tokens"] as? Int == 6144) // 2048 + 4096
+        #expect(json["max_completion_tokens"] as? Int == 2048)
+        #expect(json["reasoning_effort"] as? String == "high")
     }
 
     @Test func test_thinking_mode_sets_temperature_to_1() throws {
@@ -68,7 +69,7 @@ struct APIRequestThinkingTests {
         #expect(json["temperature"] as? Double == 1.0)
     }
 
-    @Test func test_thinking_mode_budget_only_no_maxTokens() throws {
+    @Test func test_thinking_mode_without_maxTokens_uses_effort_only() throws {
         let endpoint = TestHelpers.makeEndpoint()
         let params = ModelParameters(maxTokens: nil, thinkingBudget: 8192)
         let request = APIRequest(messages: [], endpoint: endpoint, parameters: params, stream: false)
@@ -77,7 +78,21 @@ struct APIRequestThinkingTests {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         #expect(json["max_tokens"] == nil)
-        #expect(json["max_completion_tokens"] as? Int == 8192)
+        #expect(json["max_completion_tokens"] == nil)
+        #expect(json["reasoning_effort"] as? String == "high")
+    }
+
+    @Test func test_openai_compatible_maps_legacy_max_effort_to_xhigh() throws {
+        let endpoint = TestHelpers.makeEndpoint(modelName: "gpt-5.5")
+        let params = ModelParameters(thinkingEnabled: true, reasoningEffort: .max)
+        let request = APIRequest(messages: [], endpoint: endpoint, parameters: params, stream: false)
+
+        let data = try JSONEncoder().encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(json["reasoning_effort"] as? String == "xhigh")
+        #expect(json["max_tokens"] == nil)
+        #expect(json["max_completion_tokens"] == nil)
     }
 }
 
@@ -265,8 +280,18 @@ struct ModelParametersThinkingTests {
         let original = ModelParameters(maxTokens: 1024, thinkingBudget: 4096)
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(ModelParameters.self, from: data)
+        #expect(decoded.isThinkingEnabled == true)
         #expect(decoded.thinkingBudget == 4096)
         #expect(decoded.maxTokens == 1024)
+    }
+
+    @Test func test_thinking_enabled_roundtrips_without_budget() throws {
+        let original = ModelParameters(maxTokens: 1024, thinkingEnabled: true, reasoningEffort: .xhigh)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ModelParameters.self, from: data)
+        #expect(decoded.isThinkingEnabled == true)
+        #expect(decoded.thinkingBudget == nil)
+        #expect(decoded.reasoningEffort == .xhigh)
     }
 }
 
@@ -274,9 +299,9 @@ struct ModelParametersThinkingTests {
 
 @Suite("ResponsesAPIRequest thinking")
 struct ResponsesAPIRequestThinkingTests {
-    @Test func test_reasoning_config_encoded_when_budget_set() throws {
+    @Test func test_reasoning_config_encoded_when_thinking_enabled() throws {
         let endpoint = TestHelpers.makeEndpoint(apiMode: .responses)
-        let params = ModelParameters(thinkingBudget: 8192)
+        let params = ModelParameters(thinkingEnabled: true, reasoningEffort: .xhigh)
         let request = ResponsesAPIRequest(messages: [.init(role: "user", content: "Hi")], endpoint: endpoint, parameters: params, stream: false)
 
         let data = try JSONEncoder().encode(request)
@@ -284,7 +309,8 @@ struct ResponsesAPIRequestThinkingTests {
 
         let reasoning = json["reasoning"] as? [String: Any]
         #expect(reasoning != nil)
-        #expect(reasoning?["max_tokens"] as? Int == 8192)
+        #expect(reasoning?["effort"] as? String == "xhigh")
+        #expect(reasoning?["max_tokens"] == nil)
     }
 
     @Test func test_no_reasoning_config_when_budget_nil() throws {

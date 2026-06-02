@@ -66,9 +66,9 @@ struct DeepSeekV4RequestTests {
         #expect(json["top_p"] as? Double == 0.9)
     }
 
-    @Test func test_openai_compatible_thinking_keeps_existing_max_completion_tokens_behavior() throws {
+    @Test func test_openai_compatible_thinking_uses_openai_reasoning_effort() throws {
         let endpoint = TestHelpers.makeEndpoint(
-            modelName: "gpt-4o-mini",
+            modelName: "gpt-5.5",
             providerDialect: .openAICompatible
         )
         let params = ModelParameters(maxTokens: 2048, thinkingBudget: 4096, reasoningEffort: .max)
@@ -78,8 +78,8 @@ struct DeepSeekV4RequestTests {
         let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(json["thinking"] == nil)
-        #expect(json["reasoning_effort"] == nil)
-        #expect(json["max_completion_tokens"] as? Int == 6144)
+        #expect(json["reasoning_effort"] as? String == "xhigh")
+        #expect(json["max_completion_tokens"] as? Int == 2048)
         #expect(json["max_tokens"] == nil)
     }
 }

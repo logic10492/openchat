@@ -586,7 +586,8 @@ final class ChatViewModel {
             frequencyPenalty: 0,
             presencePenalty: 0,
             stop: nil,
-            thinkingBudget: thinkingEnabled ? thinkingBudget : nil,
+            thinkingEnabled: thinkingEnabled,
+            thinkingBudget: nil,
             reasoningEffort: reasoningEffort
         )
     }
@@ -654,6 +655,7 @@ private extension ModelParameters {
             && frequencyPenalty == 0
             && presencePenalty == 0
             && (stop?.isEmpty ?? true)
+            && !thinkingEnabled
             && thinkingBudget == nil
             && reasoningEffort == .high
     }

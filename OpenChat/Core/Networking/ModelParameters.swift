@@ -10,6 +10,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
     var frequencyPenalty: Double
     var presencePenalty: Double
     var stop: [String]?
+    var thinkingEnabled: Bool
     var thinkingBudget: Int?
     var reasoningEffort: ReasoningEffort
 
@@ -20,6 +21,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
         frequencyPenalty: Double = 0.0,
         presencePenalty: Double = 0.0,
         stop: [String]? = nil,
+        thinkingEnabled: Bool? = nil,
         thinkingBudget: Int? = nil,
         reasoningEffort: ReasoningEffort = .high
     ) {
@@ -29,12 +31,14 @@ struct ModelParameters: Codable, Equatable, Sendable {
         self.frequencyPenalty = frequencyPenalty
         self.presencePenalty = presencePenalty
         self.stop = stop
+        self.thinkingEnabled = thinkingEnabled ?? (thinkingBudget != nil)
         self.thinkingBudget = thinkingBudget
         self.reasoningEffort = reasoningEffort
     }
 
     enum CodingKeys: String, CodingKey {
-        case temperature, topP, maxTokens, frequencyPenalty, presencePenalty, stop, thinkingBudget, reasoningEffort
+        case temperature, topP, maxTokens, frequencyPenalty, presencePenalty, stop
+        case thinkingEnabled, thinkingBudget, reasoningEffort
     }
 
     init(from decoder: Decoder) throws {
@@ -46,11 +50,12 @@ struct ModelParameters: Codable, Equatable, Sendable {
         presencePenalty = try container.decode(Double.self, forKey: .presencePenalty)
         stop = try container.decodeIfPresent([String].self, forKey: .stop)
         thinkingBudget = try container.decodeIfPresent(Int.self, forKey: .thinkingBudget)
+        thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? (thinkingBudget != nil)
         reasoningEffort = try container.decodeIfPresent(ReasoningEffort.self, forKey: .reasoningEffort) ?? .high
     }
 
     /// Whether thinking/reasoning mode is enabled.
-    var isThinkingEnabled: Bool { thinkingBudget != nil }
+    var isThinkingEnabled: Bool { thinkingEnabled }
 
     func forAPIMode(_ mode: APIMode) -> ModelParameters {
         switch mode {
@@ -64,6 +69,7 @@ struct ModelParameters: Codable, Equatable, Sendable {
                 frequencyPenalty: 0.0,
                 presencePenalty: 0.0,
                 stop: nil,
+                thinkingEnabled: thinkingEnabled,
                 thinkingBudget: thinkingBudget,
                 reasoningEffort: reasoningEffort
             )

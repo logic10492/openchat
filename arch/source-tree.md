@@ -85,7 +85,7 @@ OpenChat/
 │   │   ├── APIResponse.swift               # Chat Completions 响应模型（ChatCompletion / StreamDelta / reasoning_content）
 │   │   ├── ResponsesAPIRequest.swift       # Responses API 请求体构建（system → instructions 提取）
 │   │   ├── ResponsesAPIResponse.swift      # Responses API 响应模型 + 到统一类型的转换
-│   │   ├── ModelParameters.swift           # 模型采样参数（含 thinkingBudget / reasoningEffort）
+│   │   ├── ModelParameters.swift           # 模型采样参数（含 thinkingEnabled / reasoningEffort）
 │   │   ├── ChatMessage.swift               # 消息结构体（role + content + response reasoningContent）
 │   │   ├── TitleGenerator.swift            # 会话标题生成请求封装
 │   │   └── APIError.swift                  # 统一错误类型

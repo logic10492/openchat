@@ -389,6 +389,7 @@ struct ChatViewModelPromptAssemblyTests {
         let parameters = viewModel.currentParameters
 
         #expect(parameters.isThinkingEnabled == true)
+        #expect(parameters.thinkingBudget == nil)
         #expect(parameters.reasoningEffort == .max)
     }
 

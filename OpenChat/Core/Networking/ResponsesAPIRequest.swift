@@ -34,8 +34,8 @@ struct ResponsesAPIRequest: Codable, Sendable {
         topP = filtered.topP
         maxOutputTokens = filtered.maxTokens
 
-        if let budget = filtered.thinkingBudget {
-            reasoning = ReasoningConfig(effort: "medium", maxTokens: budget)
+        if filtered.isThinkingEnabled {
+            reasoning = ReasoningConfig(effort: filtered.reasoningEffort.requestValue(for: endpoint.providerDialect))
         } else {
             reasoning = nil
         }
@@ -50,10 +50,4 @@ struct ResponsesAPIRequest: Codable, Sendable {
 
 struct ReasoningConfig: Codable, Sendable {
     let effort: String
-    let maxTokens: Int
-
-    enum CodingKeys: String, CodingKey {
-        case effort
-        case maxTokens = "max_tokens"
-    }
 }

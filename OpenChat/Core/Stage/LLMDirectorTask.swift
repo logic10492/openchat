@@ -161,6 +161,7 @@ struct LLMDirectorTask: AgentTask {
         resolved.topP = min(parameters.topP, 0.9)
         resolved.maxTokens = min(parameters.maxTokens ?? 600, 600)
         resolved.stop = nil
+        resolved.thinkingEnabled = false
         resolved.thinkingBudget = nil
         return resolved
     }
