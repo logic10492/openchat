@@ -156,12 +156,11 @@ struct WorldBookEditorView: View {
                 }
             }
             .sheet(item: $editingCharacterCard, onDismiss: reloadCharacters) { card in
-                CharacterCardEditorView(
-                    viewModel: CharacterCardEditorViewModel(
-                        databaseManager: container.databaseManager,
-                        editingCard: card.id.isEmpty ? nil : card,
-                        defaultWorldBookId: viewModel.editingWorldBook?.id
-                    )
+                CharacterCardEditorRouterView(
+                    databaseManager: container.databaseManager,
+                    skillBundleStore: container.skillBundleStore,
+                    card: card,
+                    defaultWorldBookId: viewModel.editingWorldBook?.id
                 )
             }
             .sheet(item: $selectedCharacterCard, onDismiss: reloadCharacters) { card in

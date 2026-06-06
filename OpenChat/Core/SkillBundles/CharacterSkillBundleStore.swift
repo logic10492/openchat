@@ -121,6 +121,17 @@ struct CharacterSkillBundleStore: Sendable {
         }
     }
 
+    func writeSkillMarkdown(
+        _ markdown: String,
+        for record: CharacterSkillBundleRecord
+    ) throws -> CharacterSkillBundleFileManifestEntry {
+        try writeContentFile(
+            Data(markdown.utf8),
+            bundleRelativePath: record.bundleRelativePath,
+            relativePath: record.skillMarkdownRelativePath
+        )
+    }
+
     func referenceMarkdownFiles(for record: CharacterSkillBundleRecord) throws -> [CharacterSkillReferenceFile] {
         let contentRoot = try resolvedContentRoot(bundleRelativePath: record.bundleRelativePath)
         let referencesRoot = try resolvedContentDirectory(
@@ -169,6 +180,64 @@ struct CharacterSkillBundleStore: Sendable {
         } catch {
             throw CharacterSkillBundleError.fileReadFailed(url, underlying: error)
         }
+    }
+
+    func writeReferenceMarkdown(
+        _ markdown: String,
+        for record: CharacterSkillBundleRecord,
+        relativePath: String
+    ) throws -> CharacterSkillBundleFileManifestEntry {
+        let normalizedPath = try normalizedRelativePath(relativePath)
+        guard normalizedPath.hasPrefix("references/"),
+              normalizedPath.lowercased().hasSuffix(".md")
+        else {
+            throw CharacterSkillBundleError.unsafePath(relativePath)
+        }
+        return try writeContentFile(
+            Data(markdown.utf8),
+            bundleRelativePath: record.bundleRelativePath,
+            relativePath: normalizedPath
+        )
+    }
+
+    func contentFileManifestEntries(
+        for record: CharacterSkillBundleRecord
+    ) throws -> [CharacterSkillBundleFileManifestEntry] {
+        let contentRoot = try resolvedContentRoot(bundleRelativePath: record.bundleRelativePath)
+        guard FileManager.default.fileExists(atPath: contentRoot.path),
+              let enumerator = FileManager.default.enumerator(
+                at: contentRoot,
+                includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+              )
+        else {
+            return []
+        }
+
+        var manifest: [CharacterSkillBundleFileManifestEntry] = []
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true,
+                  values.isSymbolicLink != true
+            else {
+                continue
+            }
+
+            let standardizedURL = url.standardizedFileURL
+            guard standardizedURL.path.hasPrefix(contentRoot.path + "/") else {
+                throw CharacterSkillBundleError.unsafePath(url.path)
+            }
+            let relativePath = String(standardizedURL.path.dropFirst(contentRoot.path.count + 1))
+            let data = try Data(contentsOf: standardizedURL)
+            manifest.append(
+                CharacterSkillBundleFileManifestEntry(
+                    relativePath: relativePath,
+                    byteCount: data.count,
+                    sha256: SHA256Hex.hash(data: data)
+                )
+            )
+        }
+        return manifest.sorted { $0.relativePath < $1.relativePath }
     }
 
     func deleteBundle(_ record: CharacterSkillBundleRecord) throws {
@@ -256,6 +325,33 @@ struct CharacterSkillBundleStore: Sendable {
             throw CharacterSkillBundleError.unsafePath(bundleRelativePath)
         }
         return contentRoot
+    }
+
+    private func writeContentFile(
+        _ data: Data,
+        bundleRelativePath: String,
+        relativePath: String
+    ) throws -> CharacterSkillBundleFileManifestEntry {
+        let filePath = try normalizedRelativePath(relativePath)
+        let contentRoot = try resolvedContentRoot(bundleRelativePath: bundleRelativePath)
+        let destinationURL = contentRoot.appending(path: filePath).standardizedFileURL
+        guard destinationURL.path.hasPrefix(contentRoot.path + "/") else {
+            throw CharacterSkillBundleError.unsafePath(relativePath)
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: destinationURL, options: .atomic)
+            return CharacterSkillBundleFileManifestEntry(
+                relativePath: filePath,
+                byteCount: data.count,
+                sha256: SHA256Hex.hash(data: data)
+            )
+        } catch {
+            throw CharacterSkillBundleError.fileWriteFailed(destinationURL, underlying: error)
+        }
     }
 
     private func normalizedRelativePath(_ rawPath: String) throws -> String {

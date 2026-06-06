@@ -149,6 +149,7 @@ struct CharacterCardDetailView: View {
             exampleDialogs: nil,
             creatorNotes: nil,
             tags: "[\"fantasy\", \"elf\"]",
+            worldBookId: nil,
             createdAt: .now,
             updatedAt: .now
         ),

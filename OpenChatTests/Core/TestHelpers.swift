@@ -98,6 +98,7 @@ enum TestHelpers {
             exampleDialogs: TestJSONFactory.encodedString(exampleDialogs),
             creatorNotes: nil,
             tags: #"["fantasy"]"#,
+            worldBookId: nil,
             createdAt: TestDateFactory.now(),
             updatedAt: TestDateFactory.now()
         )

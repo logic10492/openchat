@@ -63,11 +63,11 @@ struct CharacterCardListView: View {
             await viewModel.loadCards()
         }
         .sheet(item: $editingCard, onDismiss: reloadCards) { card in
-            CharacterCardEditorView(
-                viewModel: CharacterCardEditorViewModel(
-                    databaseManager: container.databaseManager,
-                    editingCard: card.id.isEmpty ? nil : card
-                )
+            CharacterCardEditorRouterView(
+                databaseManager: container.databaseManager,
+                skillBundleStore: container.skillBundleStore,
+                card: card,
+                defaultWorldBookId: nil
             )
         }
         .sheet(isPresented: $isShowingImport, onDismiss: reloadCards) {

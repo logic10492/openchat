@@ -10,6 +10,7 @@
 - 角色卡详情预览
 - 角色卡导入/导出（OpenChat JSON 格式）
 - Skill ZIP 导入：从包含 `SKILL.md` 的压缩包创建角色卡并绑定 `character_skill_bundle`
+- OpenChat v2 角色卡编辑：对 Nuwa / Skill ZIP 导入生成的 skill-backed 角色卡编辑 `SKILL.md` 与 `references/**/*.md`
 - 角色卡与会话的绑定
 
 ## 2. 文件清单与职责
@@ -18,6 +19,10 @@
 |---|---|
 | `CharacterCardListView.swift` | 角色卡列表（支持 List 切换，搜索，标签筛选） |
 | `CharacterCardEditorView.swift` | 角色卡编辑器（多 section 表单） |
+| `CharacterCardEditorRouterView.swift` | 编辑入口分流：普通角色卡进入 v1 表单，绑定 `character_skill_bundle` 的角色卡进入 v2 Skill 编辑器 |
+| `CharacterSkillBundleEditorView.swift` | OpenChat v2 角色卡编辑器，编辑完整 `SKILL.md`、已有 references，并预览最终 Role Skill prompt block |
+| `CharacterSkillBundleEditorViewModel.swift` | v2 编辑器状态、校验、保存；更新 bundle 文件、metadata、角色卡摘要字段 |
+| `CharacterSkillMarkdownMetadata.swift` | 解析 `SKILL.md` frontmatter、首个标题、首段说明，供导入与编辑保存复用 |
 | `CharacterCardDetailView.swift` | 角色卡只读详情预览 |
 | `CharacterCardListViewModel.swift` | 列表数据加载、搜索、排序、删除 |
 | `CharacterCardEditorViewModel.swift` | 编辑/创建的表单状态管理、校验、保存 |
@@ -70,6 +75,24 @@
 ```
 
 编辑器中以对话气泡形式呈现，用户可逐条添加/编辑/删除/调整顺序。
+
+### 3.3 OpenChat v2 skill-backed 角色卡
+
+OpenChat v2 角色卡不是 SillyTavern V2 格式，而是当前 Nuwa / Skill ZIP 导入能力生成的 skill-backed 角色卡：
+
+```
+CharacterCardRecord（列表、搜索、兼容摘要）
+  └── character_skill_bundle（metadata）
+        └── Application Support/OpenChat/SkillBundles/<bundle>/content/
+              ├── SKILL.md              ← 角色权威行为材料
+              └── references/**/*.md    ← 本地只读/可编辑参考材料
+```
+
+- `SKILL.md` 是角色本体，聊天运行时由 `CharacterSkillBundleMaterializer` 完整注入 `[Role Skill]`。
+- `CharacterCardRecord.name/personality/systemPrompt/tags/creatorNotes` 是摘要与兼容字段，不作为 v2 编辑的权威来源。
+- 保存 `SKILL.md` 后必须同步 `skillMarkdownSha256`、`skillName`、`skillDescription`、`skillShortDescription`、`frontmatterJSON`、`fileManifestJSON` 与 `updatedAt`。
+- 保存已有 `references/**/*.md` 后必须刷新 `fileManifestJSON`，保证 references 检索和 bundle metadata 不漂移。
+- `SKILL.md` frontmatter 必须包含 `name`；缺失时编辑器保存失败且不 dismiss。
 
 ## 4. 视图设计
 
@@ -131,7 +154,30 @@
 - 保存时校验 name 非空
 - 支持 dismiss 前提示未保存变更
 
-### 4.3 CharacterCardDetailView
+### 4.3 CharacterSkillBundleEditorView
+
+```
+┌─────────────────────────────────────────┐
+│ [取消]      编辑 Role Skill      [保存] │
+│─────────────────────────────────────────│
+│ Section: Role Skill                      │
+│   Name / Description / References count  │
+│ Section: SKILL.md                        │
+│   [多行 Markdown 编辑器]                 │
+│ Section: References                      │
+│   references/research.md                 │
+│     [多行 Markdown 编辑器]               │
+│ Section: Prompt Preview                  │
+│   [Role Skill block 折叠预览]            │
+└─────────────────────────────────────────┘
+```
+
+- `CharacterCardEditorRouterView` 在编辑入口按 `character_skill_bundle` 绑定分流；普通卡仍使用 `CharacterCardEditorView`。
+- v2 编辑器以 `SKILL.md` 和已有 references markdown 为编辑对象。
+- 保存成功后更新磁盘文件、bundle metadata 与角色卡摘要字段；保存失败时错误留在 sheet 内展示。
+- MVP 暂不支持新增/删除/重命名 reference 文件；后续可在同一 ViewModel 上扩展路径管理。
+
+### 4.4 CharacterCardDetailView
 
 - 只读模式展示完整角色卡信息
 - 顶部大头像 + 名称
@@ -198,6 +244,30 @@ final class CharacterCardEditorViewModel {
 }
 ```
 
+### 5.3 CharacterSkillBundleEditorViewModel
+
+```swift
+@Observable
+final class CharacterSkillBundleEditorViewModel {
+    var skillMarkdown: String
+    var referenceDrafts: [CharacterSkillReferenceDraft]
+    var validationErrors: [String]
+
+    func load() async
+    func save() async throws -> CharacterCardRecord
+}
+```
+
+保存流程：
+
+1. 读取并校验 `SKILL.md` frontmatter，要求 `name` 非空。
+2. 通过 `CharacterSkillBundleStore.writeSkillMarkdown(...)` 写回完整 `SKILL.md`。
+3. 写回已有 `references/**/*.md`。
+4. 重新枚举 content manifest，计算文件 hash。
+5. 在一个数据库写入中保存更新后的 `CharacterCardRecord` 摘要和 `CharacterSkillBundleRecord` metadata。
+
+> **实现证据**: `CharacterSkillBundleEditorViewModelTests` 覆盖 load 读取 `SKILL.md` / references、save 更新文件和 metadata、运行时 materializer 读到新内容，以及缺 `name` frontmatter 时保存失败。
+
 ## 6. 导入/导出
 
 ### 6.1 导出格式
@@ -238,7 +308,10 @@ final class CharacterCardEditorViewModel {
 > - `CharacterCardListViewModel.importFile(data:sourceFileName:)` 按文件内容 / 扩展名分流 JSON 与 Skill ZIP；`importSkillBundleArchive` 持久化角色卡和 bundle metadata，DB 失败会清理已写入 bundle 目录。
 > - `ZipArchiveReader.swift` 支持 stored / deflate ZIP 条目，并拒绝危险路径、加密、Zip64、重复路径和过大展开。
 > - `CharacterSkillBundleImportFormat.swift` 解析 Skill ZIP，剥离顶层目录，写入 bundle content，生成 `CharacterCardRecord` 与 `CharacterSkillBundleRecord`。
+> - `CharacterCardEditorRouterView.swift` 在编辑入口按是否存在 `character_skill_bundle` 分流；`CharacterSkillBundleEditorView.swift` 提供 OpenChat v2 Skill 编辑器。
+> - `CharacterSkillBundleStore.swift` 提供 `writeSkillMarkdown`、`writeReferenceMarkdown` 与 `contentFileManifestEntries`，保存后刷新 bundle 文件 hash 与 manifest。
 > - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 OpenChat 格式、拒绝旧 SillyTavern V2 格式、缺名错误、JSON 持久化、deflate ZIP 解包、路径穿越拒绝、Skill ZIP 创建角色卡 / bundle / runtime material / references 检索。
+> - `OpenChatTests/Features/CharacterCardTests/CharacterSkillBundleEditorViewModelTests.swift` 覆盖 OpenChat v2 角色卡手工编辑保存链路。
 > - `character_cards/shiroko-terror-openchat.json` 提供可直接粘贴导入的“砂狼白子*恐怖”示例角色卡。
 
 ## 7. 与其他模块的交互

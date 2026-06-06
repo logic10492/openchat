@@ -83,7 +83,7 @@ Backstory: {{backstory}}
 [/Role Skill]
 ```
 
-该实现采用 opencode-style full skill materialization：完整 `SKILL.md` 固定作为 Stable Identity 注入，不做 Codex-style section loader 或 loader traces。本阶段不提供 Skill ZIP 导入 / v2 角色卡创建 UI。若 bundle 内存在 `content/references/**/*.md`，Chat runtime 会通过 Background 的 `.skillReference` source 做本地只读检索，选中片段作为 current-turn background 注入；这不是模型可自由调用的公网 tool-call loop。
+该实现采用 opencode-style full skill materialization：完整 `SKILL.md` 固定作为 Stable Identity 注入，不做 Codex-style section loader 或 loader traces。Skill ZIP 导入会创建绑定 `character_skill_bundle` 的 OpenChat v2 角色卡；`CharacterSkillBundleEditorView` 可手工编辑该 bundle 的 `SKILL.md` 与已有 `references/**/*.md`，保存后刷新 `skillMarkdownSha256` 和 manifest。若 bundle 内存在 `content/references/**/*.md`，Chat runtime 会通过 Background 的 `.skillReference` source 做本地只读检索，选中片段作为 current-turn background 注入；这不是模型可自由调用的公网 tool-call loop。
 
 ### 示例对话 block 规则
 
@@ -443,7 +443,7 @@ function assemble(..., processedHistory, input):
   - `OpenChat/Core/PromptEngine/PromptAssemblyModels.swift` — `PromptAssemblyPreview` 输出 `stableIdentityMessages`、`currentTurnContextMessages`、`currentTurnMessage`。
   - `OpenChat/Core/PromptEngine/PromptAssembler.swift` — `preview(... backgroundPacket:roleSkill:)` / `assemble(... backgroundPacket:roleSkill:)` 是当前 Chat 主链路入口；旧 `preview(...)` / `assemble(...)` 和 `previewWithPreselectedWorldBookEntries(...)` / `assembleWithPreselectedWorldBookEntries(...)` 保留作兼容 / rollback；最终输出 `stableIdentityMessages + processedHistory + currentTurnContextMessages + currentTurnMessage`。
   - `OpenChat/Core/SkillBundles/SkillBundleMaterializer.swift` — 从 `character_skill_bundle` metadata 和 bundle storage 读取完整 `SKILL.md`，生成 `RoleSkillPromptMaterial`。
-  - `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift` — 解析 Application Support 下的 bundle/content 路径，读取 SKILL.md，并枚举 / 读取 `content/references/**/*.md`。
+  - `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift` — 解析 Application Support 下的 bundle/content 路径，读取 / 写回 SKILL.md，枚举 / 读取 / 写回 `content/references/**/*.md`，并生成 content manifest。
   - `OpenChat/Core/SkillBundles/SkillReferenceSearchTool.swift` — 本地只读 `skill_reference_search` 第一版：按当前输入检索当前角色绑定 bundle 的 references markdown，输出 `.skillReference` candidates。
   - `OpenChat/Core/Background/BackgroundAssembler.swift` — 将 packet entries 转为兼容 state / skillReference / worldBook / memory prompt items，diagnostics / score / omission 不进入 prompt content。
   - `OpenChat/Core/Background/BackgroundManager.swift` — 组合 source adapters 与 worker；worldBook source failure 保留 keyword fallback candidates。
@@ -451,6 +451,7 @@ function assemble(..., processedHistory, input):
   - `OpenChat/Core/WorldBook/WorldBookRecallModels.swift` — recall trace / reason / omission DTO。
   - `OpenChat/Core/PromptEngine/PromptSegment.swift` — 使用 `.exampleDialogsBlock(String)` 与 `.currentTurn(String)` 表达目标语义；time context 不再是独立 segment。
   - `OpenChat/Features/Chat/ViewModels/ChatViewModel+Support.swift` — `generateResponse(...)` 串联 `role skill materialization -> bounded worldBook rebuild -> BackgroundManager.prepare -> PromptAssembler.preview(backgroundPacket:roleSkill:) -> prepareHistory -> PromptAssembler.assemble(backgroundPacket:roleSkill:)`，并通过 `makePromptHistoryMessages(...)` 过滤本轮 user record，避免当前输入在历史和末尾 user 消息中重复。
+  - `OpenChat/Features/CharacterCard/ViewModels/CharacterSkillBundleEditorViewModel.swift` — OpenChat v2 角色卡手工编辑保存链路，更新 `SKILL.md`、references、bundle metadata 与角色卡摘要。
   - `OpenChat/Core/PromptEngine/KeywordMatcher.swift`
   - `OpenChat/Core/PromptEngine/TokenCounter.swift`
   - `OpenChat/Core/PromptEngine/TokenBudget.swift`
@@ -462,6 +463,7 @@ function assemble(..., processedHistory, input):
   - `OpenChatTests/Core/PromptEngineTests/PromptAssemblerTests.swift`（含慢速模式开/关/token 预算测试；覆盖四层顺序、role skill block 注入、preview 四层输出、labeled example/world book/memory blocks、packet compatible block、packet budget trim、世界书 position 兼容、semantic candidate block 兼容、current turn 内时间上下文）
   - `OpenChatTests/Core/SkillBundleTests/CharacterSkillBundleMaterializerTests.swift`（覆盖已有 `character_skill_bundle` 绑定读取完整 SKILL.md，以及无绑定返回 nil）
   - `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift`（覆盖绑定 bundle references 检索、无绑定空结果和 `.skillReference` candidate metadata 映射）
+  - `OpenChatTests/Features/CharacterCardTests/CharacterSkillBundleEditorViewModelTests.swift`（覆盖 OpenChat v2 角色卡编辑保存后 materializer 读取新 `SKILL.md`，并刷新 metadata / manifest）
   - `OpenChatTests/Core/WorldBookTests/WorldBookSourceTests.swift`（覆盖 keyword-only、semantic-only、keyword+semantic duplicate merge、disabled world/entry、semantic failure fallback）
   - `OpenChatTests/Core/PromptEngineTests/KeywordMatcherTests.swift`
   - `OpenChatTests/Core/PromptEngineTests/TokenCounterTests.swift`
@@ -470,7 +472,7 @@ function assemble(..., processedHistory, input):
 - 当前实现描述：
   - Chat 主链路的背景候选由 `BackgroundManager` 协调 SkillReference / Memory / WorldBook source adapters；`recentMessages` 应排除本轮当前输入。
   - `PromptAssembler` 不访问数据库、不调用 embedding/KNN、不读取 bundle 文件；它只消费调用方传入的 `RoleSkillPromptMaterial`、`BackgroundPacket` 或旧 direct 条目，生成 block 并按预算裁剪。
-  - Role skill 采用完整 `SKILL.md` 注入；references 只通过 `.skillReference` background source 做本地只读片段检索；当前没有 Skill ZIP 导入或 v2 角色卡创建 UI。
+  - Role skill 采用完整 `SKILL.md` 注入；references 通过 `.skillReference` background source 做本地片段检索；Skill ZIP 导入和 OpenChat v2 Skill 编辑器均维护同一份 bundle content 与 metadata。
   - 示例对话以 `[Example Dialogs]` labeled system block 注入，位于 Stable Conversation State 之后。
   - 世界书条目统一进入 `[World Book Entries]` block，不再按 `after_system` / `before_history` 拆分最终位置。
   - 记忆条目统一进入 `[Memories]` block，位于 world book block 之后。

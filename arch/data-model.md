@@ -132,7 +132,7 @@ struct CharacterCardRecord: Codable, FetchableRecord, PersistableRecord {
 
 ### 2b. character_skill_bundle — 角色 Skill Bundle 绑定
 
-一个角色卡最多绑定一个 Skill Bundle。聊天生成前按 `characterCardId` 读取记录，再由 `CharacterSkillBundleMaterializer` 从 Application Support 中读取完整 `content/SKILL.md` 并注入 prompt；Background runtime 也可通过 `SkillReferenceSearchTool` 对同一 bundle 的 `content/references/**/*.md` 做本地只读检索。2026-06-02 已提供 Skill ZIP 导入入口：角色导入 Sheet 可选择 `.zip`，导入器从唯一 `SKILL.md` 创建角色卡并写入本表 metadata。
+一个角色卡最多绑定一个 Skill Bundle。聊天生成前按 `characterCardId` 读取记录，再由 `CharacterSkillBundleMaterializer` 从 Application Support 中读取完整 `content/SKILL.md` 并注入 prompt；Background runtime 也可通过 `SkillReferenceSearchTool` 对同一 bundle 的 `content/references/**/*.md` 做本地检索。2026-06-02 已提供 Skill ZIP 导入入口：角色导入 Sheet 可选择 `.zip`，导入器从唯一 `SKILL.md` 创建角色卡并写入本表 metadata。2026-06-03 已提供 OpenChat v2 手工编辑器：保存 `SKILL.md` / 已有 references 后刷新本表 `skillMarkdownSha256`、`skillName`、`skillDescription`、`skillShortDescription`、`frontmatterJSON`、`fileManifestJSON` 与 `updatedAt`，无需追加 migration。
 
 | 列名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
@@ -160,12 +160,14 @@ struct CharacterCardRecord: Codable, FetchableRecord, PersistableRecord {
 - `OpenChat/Core/Database/Migrations.swift` 追加 `v19_create_character_skill_bundle`，只追加新表和 `idx_character_skill_bundle_characterCardId`。
 - `OpenChat/Core/Database/Records/CharacterSkillBundleRecord.swift` 定义 GRDB Record。
 - `OpenChat/Core/Database/DatabaseManager+CharacterSkillBundles.swift` 提供按 `characterCardId` fetch/save/delete。
-- `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift`、`SkillBundleMaterializer.swift` 和 `SkillReferenceSearchTool.swift` 负责从 bundle 目录写入 / 读取完整 `SKILL.md`，并对 `references/**/*.md` 做本地只读检索。
+- `OpenChat/Core/SkillBundles/CharacterSkillBundleStore.swift`、`SkillBundleMaterializer.swift` 和 `SkillReferenceSearchTool.swift` 负责从 bundle 目录写入 / 读取完整 `SKILL.md`，并对 `references/**/*.md` 做本地检索；`CharacterSkillBundleStore.writeSkillMarkdown`、`writeReferenceMarkdown`、`contentFileManifestEntries` 支持 v2 编辑保存后的文件和 manifest 刷新。
 - `OpenChat/Core/SkillBundles/ZipArchiveReader.swift` 与 `OpenChat/Features/CharacterCard/Models/CharacterSkillBundleImportFormat.swift` 负责 Skill ZIP 解包、frontmatter 解析、bundle content 写入和角色卡 / metadata 创建。
+- `OpenChat/Features/CharacterCard/ViewModels/CharacterSkillBundleEditorViewModel.swift` 负责 OpenChat v2 编辑器保存链路，在同一 DB 写入中保存更新后的 `CharacterCardRecord` 摘要和 `CharacterSkillBundleRecord` metadata。
 - `OpenChatTests/Core/DatabaseTests/MigrationTests.swift` 覆盖 v19 schema、FK cascade 和 unique `characterCardId`。
 - `OpenChatTests/Core/SkillBundleTests/CharacterSkillBundleMaterializerTests.swift` 覆盖已有 bundle materialization。
 - `OpenChatTests/Core/SkillBundleTests/SkillReferenceSearchToolTests.swift` 覆盖已有 bundle references 检索。
 - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 deflate ZIP 解包、路径穿越拒绝，以及 Skill ZIP 导入后创建角色卡、绑定 metadata、materialize 完整 `SKILL.md` 和 references 检索。
+- `OpenChatTests/Features/CharacterCardTests/CharacterSkillBundleEditorViewModelTests.swift` 覆盖编辑器保存后 hash / metadata / manifest 刷新和 materializer 新内容读取。
 
 ---
 
