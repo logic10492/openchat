@@ -12,6 +12,8 @@ final class CharacterSkillBundleEditorViewModel {
     private(set) var isLoading = false
     private(set) var isSaving = false
     var skillMarkdown = ""
+    var worldBookId: String?
+    private(set) var availableWorldBooks: [WorldBookRecord] = []
     var referenceDrafts: [CharacterSkillReferenceDraft] = []
     var errorMessage: String?
 
@@ -25,6 +27,7 @@ final class CharacterSkillBundleEditorViewModel {
         self.skillBundleStore = skillBundleStore
         self.editingCard = editingCard
         self.editingBundle = editingBundle
+        self.worldBookId = editingCard.worldBookId
     }
 
     var skillName: String {
@@ -77,6 +80,7 @@ final class CharacterSkillBundleEditorViewModel {
             guard let bundle else {
                 throw CharacterSkillBundleEditorError.missingBundle
             }
+            availableWorldBooks = try await databaseManager.fetchWorldBooks()
             editingBundle = bundle
             skillMarkdown = try skillBundleStore.readSkillMarkdown(for: bundle)
 
@@ -161,7 +165,7 @@ final class CharacterSkillBundleEditorViewModel {
                 exampleDialogs: editingCard.exampleDialogs,
                 creatorNotes: editingCard.creatorNotes,
                 tags: editingCard.tags,
-                worldBookId: editingCard.worldBookId,
+                worldBookId: worldBookId,
                 createdAt: editingCard.createdAt,
                 updatedAt: now
             )

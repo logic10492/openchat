@@ -110,12 +110,35 @@ struct CharacterSkillBundleEditorViewModelTests {
         }
     }
 
-    private func makeFixture() async throws -> CharacterSkillBundleEditorFixture {
+    @Test func test_save_updates_character_world_book_link() async throws {
+        let fixture = try await makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.rootDirectory) }
+        let worldBook = TestHelpers.makeWorldBook(id: "skill-editor-world", name: "Abydos Field Notes")
+        try await fixture.manager.saveWorldBook(worldBook)
+        let viewModel = CharacterSkillBundleEditorViewModel(
+            databaseManager: fixture.manager,
+            skillBundleStore: fixture.store,
+            editingCard: fixture.card,
+            editingBundle: fixture.bundle
+        )
+        await viewModel.load()
+
+        #expect(viewModel.availableWorldBooks.map(\.id).contains(worldBook.id))
+        viewModel.worldBookId = worldBook.id
+
+        let savedCard = try await viewModel.save()
+
+        #expect(savedCard.worldBookId == worldBook.id)
+        #expect(try await fixture.manager.fetchCharacterCard(id: savedCard.id)?.worldBookId == worldBook.id)
+    }
+
+    private func makeFixture(worldBookId: String? = nil) async throws -> CharacterSkillBundleEditorFixture {
         let manager = try TestHelpers.makeDatabaseManager()
         let rootDirectory = FileManager.default.temporaryDirectory
             .appending(path: "OpenChatSkillBundleEditorTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         let store = CharacterSkillBundleStore(rootDirectory: rootDirectory)
-        let card = TestHelpers.makeCharacterCard(id: "skill-editor-card", name: "Shiroko Role")
+        var card = TestHelpers.makeCharacterCard(id: "skill-editor-card", name: "Shiroko Role")
+        card.worldBookId = worldBookId
         let skillMarkdown = """
         ---
         name: shiroko-perspective

@@ -20,6 +20,15 @@ struct CharacterSkillBundleEditorView: View {
                         referenceCount: viewModel.referenceDrafts.count
                     )
 
+                    Section(String(localized: "World Book")) {
+                        Picker(String(localized: "World Book"), selection: worldBookIdBinding) {
+                            Text(String(localized: "None")).tag(String?.none)
+                            ForEach(viewModel.availableWorldBooks) { book in
+                                Text(book.name).tag(Optional(book.id))
+                            }
+                        }
+                    }
+
                     Section(String(localized: "SKILL.md")) {
                         TextField(
                             String(localized: "Role skill markdown"),
@@ -76,6 +85,11 @@ struct CharacterSkillBundleEditorView: View {
     private var skillMarkdownBinding: Binding<String> {
         @Bindable var viewModel = viewModel
         return $viewModel.skillMarkdown
+    }
+
+    private var worldBookIdBinding: Binding<String?> {
+        @Bindable var viewModel = viewModel
+        return $viewModel.worldBookId
     }
 
     private func referenceMarkdownBinding(_ draft: CharacterSkillReferenceDraft) -> Binding<String> {

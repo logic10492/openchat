@@ -92,6 +92,7 @@ CharacterCardRecord（列表、搜索、兼容摘要）
 - `CharacterCardRecord.name/personality/systemPrompt/tags/creatorNotes` 是摘要与兼容字段，不作为 v2 编辑的权威来源。
 - 保存 `SKILL.md` 后必须同步 `skillMarkdownSha256`、`skillName`、`skillDescription`、`skillShortDescription`、`frontmatterJSON`、`fileManifestJSON` 与 `updatedAt`。
 - 保存已有 `references/**/*.md` 后必须刷新 `fileManifestJSON`，保证 references 检索和 bundle metadata 不漂移。
+- v2 编辑器仍通过 `CharacterCardRecord.worldBookId` 维护世界书关联；保存时和角色卡摘要、bundle metadata 同事务写入。
 - `SKILL.md` frontmatter 必须包含 `name`；缺失时编辑器保存失败且不 dismiss。
 
 ## 4. 视图设计
@@ -308,10 +309,10 @@ final class CharacterSkillBundleEditorViewModel {
 > - `CharacterCardListViewModel.importFile(data:sourceFileName:)` 按文件内容 / 扩展名分流 JSON 与 Skill ZIP；`importSkillBundleArchive` 持久化角色卡和 bundle metadata，DB 失败会清理已写入 bundle 目录。
 > - `ZipArchiveReader.swift` 支持 stored / deflate ZIP 条目，并拒绝危险路径、加密、Zip64、重复路径和过大展开。
 > - `CharacterSkillBundleImportFormat.swift` 解析 Skill ZIP，剥离顶层目录，写入 bundle content，生成 `CharacterCardRecord` 与 `CharacterSkillBundleRecord`。
-> - `CharacterCardEditorRouterView.swift` 在编辑入口按是否存在 `character_skill_bundle` 分流；`CharacterSkillBundleEditorView.swift` 提供 OpenChat v2 Skill 编辑器。
+> - `CharacterCardEditorRouterView.swift` 在编辑入口按是否存在 `character_skill_bundle` 分流；`CharacterSkillBundleEditorView.swift` 提供 OpenChat v2 Skill 编辑器，并可选择 / 清空角色卡关联的 World Book。
 > - `CharacterSkillBundleStore.swift` 提供 `writeSkillMarkdown`、`writeReferenceMarkdown` 与 `contentFileManifestEntries`，保存后刷新 bundle 文件 hash 与 manifest。
 > - `OpenChatTests/Features/CharacterCardTests/CharacterCardImportFormatTests.swift` 覆盖 OpenChat 格式、拒绝旧 SillyTavern V2 格式、缺名错误、JSON 持久化、deflate ZIP 解包、路径穿越拒绝、Skill ZIP 创建角色卡 / bundle / runtime material / references 检索。
-> - `OpenChatTests/Features/CharacterCardTests/CharacterSkillBundleEditorViewModelTests.swift` 覆盖 OpenChat v2 角色卡手工编辑保存链路。
+> - `OpenChatTests/Features/CharacterCardTests/CharacterSkillBundleEditorViewModelTests.swift` 覆盖 OpenChat v2 角色卡手工编辑保存链路，以及 v2 编辑器保存 `worldBookId` 关联。
 > - `character_cards/shiroko-terror-openchat.json` 提供可直接粘贴导入的“砂狼白子*恐怖”示例角色卡。
 
 ## 7. 与其他模块的交互
